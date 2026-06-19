@@ -127,22 +127,42 @@ def _check_condition(required_when: str, all_parsed_names: set[str]) -> bool:
 def _detect_absences(
     absence_rules: list[Misconfiguration],
     all_parsed_names: set[str],
+    directives: list,
 ) -> list[Misconfiguration]:
     """
-    Return absence rules whose condition is met and whose directive is
-    not present anywhere in the parsed config.
+    Return absence rules whose condition is met and whose directive is absent.
 
-    Each returned rule has detected_in_scan=True and source_directive=None
-    (there is no source line — the issue is the absence of a line).
+    For rules with expected_value_prefix='': pure absence — the directive does
+    not appear anywhere in the config.
+
+    For rules with expected_value_prefix!='': multi-instance directives (e.g.
+    add_header) — the directive is present but none of its instances has a value
+    starting with expected_value_prefix.
+
+    Each returned rule has detected_in_scan=True and source_directive=None.
     """
     found: list[Misconfiguration] = []
     for rule in absence_rules:
         if not _check_condition(rule.required_when, all_parsed_names):
             continue
-        if rule.directive not in all_parsed_names:
-            rule.detected_in_scan = True
-            rule.source_directive = None
-            found.append(rule)
+        if rule.expected_value_prefix:
+            # Multi-instance: check that no matching directive instance exists.
+            # Use token membership rather than startswith because the header name
+            # may not be the first token (e.g. Apache "Header always set X-Frame-Options").
+            prefix = rule.expected_value_prefix
+            if not any(
+                d.name == rule.directive and prefix in d.value.split()
+                for d in directives
+            ):
+                rule.detected_in_scan = True
+                rule.source_directive = None
+                found.append(rule)
+        else:
+            # Pure absence: directive not present at all
+            if rule.directive not in all_parsed_names:
+                rule.detected_in_scan = True
+                rule.source_directive = None
+                found.append(rule)
     return found
 
 
@@ -285,7 +305,7 @@ def scan(input_path: str, db: Database) -> ScanResult:
     # 4b. Absence detection — directives that should be present but are missing
     all_parsed_names: set[str] = {d.name for d in directives}
     absence_rules = db.get_absence_rules(meta.name)
-    absence_issues = _detect_absences(absence_rules, all_parsed_names)
+    absence_issues = _detect_absences(absence_rules, all_parsed_names, directives)
     issues.extend(absence_issues)
     if absence_issues:
         logger.info("[scan] %d absence issues detected", len(absence_issues))

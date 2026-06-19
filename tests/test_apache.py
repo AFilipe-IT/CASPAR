@@ -24,7 +24,7 @@ from core import runtime
 from core.ccss import base_score, temporal_score
 from core.db.database import Database
 from core.models import AttackChain, Misconfiguration, TargetMetadata
-from plugins.apache_httpd.build_apache import APACHE_MISCONFIGS, build_apache_db
+from plugins.apache_httpd.build_apache import APACHE_MISCONFIGS, APACHE_ABSENCE_RULES, build_apache_db
 from plugins.apache_httpd.parser import parse_file
 from plugins.apache_httpd.rules import infer_profile
 
@@ -255,10 +255,11 @@ class TestBuild:
             db_path = f.name
         try:
             count = build_apache_db(db_path)
-            assert count == len(APACHE_MISCONFIGS)
+            expected_total = len(APACHE_MISCONFIGS) + len(APACHE_ABSENCE_RULES)
+            assert count == expected_total
             with Database(db_path) as db:
                 all_m = db.get_all_misconfigurations("apache-httpd")
-                assert len(all_m) == len(APACHE_MISCONFIGS)
+                assert len(all_m) == expected_total
                 chains = db.get_attack_chains("apache-httpd")
                 assert len(chains) > 0
         finally:
@@ -339,6 +340,9 @@ class TestApacheEndToEnd:
             MaxKeepAliveRequests 100
             KeepAliveTimeout 15
             AllowOverride None
+            Header always append Content-Security-Policy "frame-ancestors 'self'"
+            Header set Referrer-Policy "strict-origin-when-cross-origin"
+            Header set Permissions-Policy "geolocation=(), microphone=()"
         """)
 
         with Database(populated_db) as db:
