@@ -1,0 +1,58 @@
+[
+  {
+    "chain_id": "recon-to-exploit",
+    "target_name": "apache-httpd",
+    "misconfig_directives": ["ServerTokens", "ExtendedStatus", "Require"],
+    "amplification": 1.6,
+    "justification": "ServerTokens Full exposes version info, ExtendedStatus/mod_status exposes infrastructure map, missing auth allows direct exploitation. Chain: fingerprint → infrastructure recon → unauthenticated exploit.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "info-disclosure-chain",
+    "target_name": "apache-httpd",
+    "misconfig_directives": ["ServerTokens", "ServerSignature"],
+    "amplification": 1.3,
+    "justification": "Both ServerTokens and ServerSignature leaking version details compound the information disclosure risk, giving attackers precise version targeting.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "dos-amplification",
+    "target_name": "apache-httpd",
+    "misconfig_directives": ["Timeout", "KeepAliveTimeout", "MaxKeepAliveRequests"],
+    "amplification": 1.4,
+    "justification": "Permissive Timeout + KeepAliveTimeout + unbounded MaxKeepAliveRequests create compounding resource exhaustion vectors. An attacker can hold connections open and multiply the DoS impact.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "directory-traversal-chain",
+    "target_name": "apache-httpd",
+    "misconfig_directives": ["Options", "AllowOverride"],
+    "amplification": 1.5,
+    "justification": "Options FollowSymLinks or Indexes combined with AllowOverride All allows user-controlled .htaccess to escalate privileges and enable directory traversal or execution of arbitrary scripts.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "tls-downgrade-chain",
+    "target_name": "apache-httpd",
+    "misconfig_directives": ["SSLProtocol", "SSLCipherSuite"],
+    "amplification": 1.5,
+    "justification": "Weak SSLProtocol (allowing TLSv1.0/1.1) combined with weak cipher suites enables active MITM downgrade attacks (POODLE, BEAST). Each misconfiguration enables the other's exploitation.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "request-smuggling-chain",
+    "target_name": "apache-httpd",
+    "misconfig_directives": ["LimitRequestLine", "LimitRequestFields", "LimitRequestFieldSize"],
+    "amplification": 1.4,
+    "justification": "Overly permissive request size limits across line, fields, and field size create compounding HTTP request smuggling and buffer overflow risk when multiple limits are misconfigured together.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "webdav-rce-chain",
+    "target_name": "apache-httpd",
+    "misconfig_directives": ["LoadModule", "AllowOverride"],
+    "amplification": 1.7,
+    "justification": "WebDAV modules (dav_module, dav_fs_module) loaded with permissive AllowOverride enables remote file upload and execution. This chain has the highest amplification — remote code execution in one step.",
+    "cross_target": false
+  }
+]

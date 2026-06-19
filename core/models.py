@@ -1,0 +1,175 @@
+"""
+core/models.py
+--------------
+Shared data models.
+
+NOTE (Phase 1 bootstrap): uses Python stdlib dataclasses + TypedDict
+because the environment has no network access for pip.
+The public interface is intentionally designed to be a drop-in swap
+to Pydantic v2 models: field names, types, and defaults are identical.
+Migration: replace @dataclass with BaseModel, remove field() defaults
+where Pydantic infers them, and the rest of the codebase is unaffected.
+
+Naming conventions
+  - Literal types use SHORT UPPERCASE strings matching the CCSS spec.
+  - Fields filled at LLM build time are annotated  # build-time.
+  - Fields computed at runtime are annotated        # runtime.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Literal, Optional
+from uuid import uuid4
+
+# ------------------------------------------------------------------ #
+# CCSS metric value types                                              #
+# ------------------------------------------------------------------ #
+
+AVValue  = Literal["L", "A", "N"]
+AuValue  = Literal["M", "S", "N"]
+ACValue  = Literal["H", "M", "L"]
+CIAValue = Literal["N", "P", "C"]
+GELValue = Literal["N", "L", "M", "H", "ND"]
+GRLValue = Literal["U", "W", "H", "ND"]
+SeverityLabel = Literal["None", "Low", "Medium", "High", "Critical"]
+
+
+# ------------------------------------------------------------------ #
+# Plugin / target metadata                                             #
+# ------------------------------------------------------------------ #
+
+@dataclass
+class TargetMetadata:
+    name: str
+    display_name: str
+    version: str
+    benchmark_source: str
+    priority: int = 100
+
+
+# ------------------------------------------------------------------ #
+# Directive                                                            #
+# ------------------------------------------------------------------ #
+
+@dataclass
+class Directive:
+    name: str
+    value: str
+    context: str = "global"
+    source_file: str = ""
+    line_number: Optional[int] = None
+
+    def __post_init__(self):
+        self.name = str(self.name).strip()
+        self.value = str(self.value).strip()
+
+
+# ------------------------------------------------------------------ #
+# SystemProfile                                                        #
+# ------------------------------------------------------------------ #
+
+@dataclass
+class SystemProfile:
+    av: AVValue
+    au: AuValue
+    rationale_av: str = ""
+    rationale_au: str = ""
+
+
+# ------------------------------------------------------------------ #
+# Misconfiguration                                                     #
+# ------------------------------------------------------------------ #
+
+@dataclass
+class Misconfiguration:
+    target_name: str
+    directive: str
+    bad_value: str
+    ac: ACValue
+    c: CIAValue
+    i: CIAValue
+    a: CIAValue
+    good_value: str = ""
+    id: str = field(default_factory=lambda: str(uuid4()))
+    av: AVValue = "N"             # runtime
+    au: AuValue = "N"             # runtime
+    base_score: float = 0.0
+    temporal_score: float = 0.0
+    gel: GELValue = "ND"          # build-time
+    grl: GRLValue = "ND"          # build-time
+    cves: list = field(default_factory=list)
+    cce_id: str = ""
+    cis_section: str = ""
+    justification: str = ""
+    recommendation: str = ""
+    rule_type: str = "value"    # "value" (lookup) | "absence" (missing directive)
+    required_when: str = "always"  # condition: "always" | "if_directive:X"
+    detected_in_scan: bool = False   # runtime
+    source_directive: Optional[Directive] = None  # runtime
+    narrative: str = "{}"  # JSON string — rich narrative from Stage 3 LLM pipeline
+
+    def model_dump(self) -> dict:
+        """Compatibility shim — matches Pydantic's .model_dump() API."""
+        import dataclasses
+        d = dataclasses.asdict(self)
+        # source_directive contains a Directive — convert to dict already done by asdict
+        return d
+
+
+# ------------------------------------------------------------------ #
+# AttackChain                                                          #
+# ------------------------------------------------------------------ #
+
+@dataclass
+class AttackChain:
+    chain_id: str
+    target_name: str
+    misconfig_directives: list = field(default_factory=list)
+    amplification: float = 1.0
+    justification: str = ""
+    cross_target: bool = False
+    active: bool = False
+    triggered_by: list = field(default_factory=list)
+    amplified_score: float = 0.0
+
+    def model_dump(self) -> dict:
+        import dataclasses
+        return dataclasses.asdict(self)
+
+
+# ------------------------------------------------------------------ #
+# ScanResult                                                           #
+# ------------------------------------------------------------------ #
+
+@dataclass
+class ScanResult:
+    target_name: str
+    input_path: str
+    input_hash: str
+    profile: SystemProfile
+    scan_id: str = field(default_factory=lambda: str(uuid4()))
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+    issues: list = field(default_factory=list)
+    chains: list = field(default_factory=list)
+    global_base_score: float = 0.0
+    global_temporal_score: float = 0.0
+    severity: SeverityLabel = "None"
+    total_directives_scanned: int = 0
+    total_issues_found: int = 0
+    total_chains_detected: int = 0
+
+    def model_dump_json(self, indent: int = 2) -> str:
+        """Compatibility shim — matches Pydantic's .model_dump_json() API."""
+        import json
+        import dataclasses
+
+        def default(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            if dataclasses.is_dataclass(obj):
+                return dataclasses.asdict(obj)
+            return str(obj)
+
+        return json.dumps(dataclasses.asdict(self), indent=indent, default=default)
