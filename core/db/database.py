@@ -416,6 +416,29 @@ class Database:
         rows = cur.fetchall()
         return [self._row_to_misconfiguration(r) for r in rows]
 
+    def get_value_rules(
+        self,
+        target_name: str,
+        directive: str,
+    ) -> list[Misconfiguration]:
+        """
+        Return all value-rules for a (target, directive), regardless of bad_value.
+
+        Used by the runtime to match list-valued directives (e.g.
+        ``ssl_protocols SSLv3 TLSv1 TLSv1.1``) where a single config line carries
+        several bad_value tokens stored as separate rules. The exact-match
+        get_misconfigurations stays the O(1) hot path; this is the fallback the
+        runtime uses to test token-subset membership.
+        """
+        cur = self._conn.execute(
+            """
+            SELECT * FROM misconfigurations
+            WHERE target_name = ? AND directive = ? AND rule_type = 'value'
+            """,
+            (target_name, directive),
+        )
+        return [self._row_to_misconfiguration(r) for r in cur.fetchall()]
+
     def get_absence_rules(self, target_name: str) -> list[Misconfiguration]:
         """Return all absence rules for a target (rule_type = 'absence')."""
         cur = self._conn.execute(
