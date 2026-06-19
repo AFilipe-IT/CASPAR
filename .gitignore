@@ -1,0 +1,48 @@
+# Ambiente virtual
+.venv/
+venv/
+env/
+
+# Credenciais — NUNCA commitar
+.env
+*.env
+.env.local
+.env.*.local
+
+# Base de dados (gerada em runtime)
+*.db
+*.db-shm
+*.db-wal
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Build
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Relatórios gerados
+ccss-report-*.json
+ccss-report-*.sarif
+ccss_*.json
+ccss_*.sarif
+
+# Logs
+*.log
