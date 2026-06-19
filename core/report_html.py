@@ -48,6 +48,13 @@ def _strip_metric_prefix(text):
 def _e(t):
     return str(t).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
 
+def _display_value(issue):
+    """Return the display string for the bad_value field.
+    Absence issues (rule_type='absence') have bad_value='' — show a badge instead."""
+    if getattr(issue, "rule_type", "value") == "absence":
+        return '<span style="font-style:italic;color:var(--mt)">[not configured]</span>'
+    return _e(issue.bad_value)
+
 def _nl2br(t):
     return _e(t).replace("\n","<br>")
 
@@ -230,16 +237,22 @@ def generate_html(result, resolved=None):
         refs_html = " &nbsp;·&nbsp; ".join(f'<span class="muted">{r}</span>' for r in refs)
         cves_html = "".join(f'<span class="cve-tag">{_e(c)}</span>' for c in issue.cves) if issue.cves else ""
         snippet_blocks = []
-        if getattr(issue, "source_directive", None) and issue.source_directive.source_file:
+        is_absence = getattr(issue, "rule_type", "value") == "absence"
+        if is_absence:
+            snippet_blocks.append(
+                '<span class="loc-tag" style="font-style:italic">'
+                'Directive absent — no source location</span>'
+            )
+        elif getattr(issue, "source_directive", None) and issue.source_directive.source_file:
             primary_ctx = issue.source_directive.context if issue.source_directive.context != "global" else ""
             snippet_blocks.append(_render_snippet_html(
                 issue.source_directive.source_file,
                 issue.source_directive.line_number,
                 primary_ctx,
             ))
-        extra_contexts = contexts[1:] if len(contexts) > 1 else []
-        for c in extra_contexts:
-            snippet_blocks.append(f'<span class="loc-tag">{_e(c)}</span>')
+            extra_contexts = contexts[1:] if len(contexts) > 1 else []
+            for c in extra_contexts:
+                snippet_blocks.append(f'<span class="loc-tag">{_e(c)}</span>')
         locs_html = "".join(snippet_blocks)
         meta_parts = [x for x in [refs_html, cves_html] if x]
         meta_html = '<hr class="sec">' + "".join(f'<div style="margin-bottom:6px">{x}</div>' for x in meta_parts) if meta_parts else ""
@@ -252,7 +265,7 @@ def generate_html(result, resolved=None):
             f'<span class="i-score score-{cls}">{issue.temporal_score:.1f}</span>' +
             f'<div style="flex:1;max-width:180px">{_bar(issue.temporal_score)}</div>' +
             f'<span class="i-dir">{_e(issue.directive)}</span>' +
-            f'<span class="i-val">= {_e(issue.bad_value)}</span>' +
+            f'<span class="i-val">= {_display_value(issue)}</span>' +
             f'{_badge(issue.temporal_score, sev)}' +
             f'<span class="chevron" id="chev-{idx}">&#9662;</span></div>' +
             f'<div class="issue-body" id="body-{idx}">' +

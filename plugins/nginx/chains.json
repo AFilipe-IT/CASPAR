@@ -1,0 +1,26 @@
+[
+  {
+    "chain_id": "server-info-to-tls-downgrade",
+    "target_name": "nginx",
+    "misconfig_directives": ["server_tokens", "ssl_protocols"],
+    "amplification": 1.4,
+    "justification": "Step 1 (server_tokens on) discloses the exact Nginx version in every HTTP response header, allowing an attacker to identify the specific OpenSSL version in use. Step 2 (ssl_protocols with SSLv3 or TLSv1/TLSv1.1) enables deprecated protocol versions with known cryptographic weaknesses. Together, version disclosure enables the attacker to precisely target the exposed TLS implementation with protocol-specific exploits (POODLE, BEAST), converting a passive information leak into an active MitM downgrade attack. Full path: reconnaissance via Server header → identify vulnerable TLS version → protocol downgrade attack.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "dos-resource-exhaustion",
+    "target_name": "nginx",
+    "misconfig_directives": ["send_timeout", "client_max_body_size", "keepalive_timeout"],
+    "amplification": 1.5,
+    "justification": "Step 1 (send_timeout 0) removes the upper bound on how long Nginx waits for a client to receive a response, keeping worker connections open indefinitely for slow clients. Step 2 (client_max_body_size 0) removes request body size limits, allowing arbitrarily large uploads that consume memory and I/O. Step 3 (keepalive_timeout 0 or 65) compounds the attack surface: a value of 0 disables keepalive entirely, forcing a new connection per request and exhausting connection slots, while an excessive value holds connections open beyond reasonable use. Together, these three directives remove all throttling mechanisms and allow a low-bandwidth attacker to exhaust Nginx worker connections with minimal resources. Full path: initiate many slow connections → hold workers open indefinitely → exhaust server capacity.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "unencrypted-proxy-with-weak-tls",
+    "target_name": "nginx",
+    "misconfig_directives": ["proxy_pass", "ssl_protocols"],
+    "amplification": 1.4,
+    "justification": "Step 1 (proxy_pass to http://) routes backend traffic over unencrypted HTTP within the internal network, exposing credentials, session tokens, and API responses to any attacker with network access to the internal segment. Step 2 (ssl_protocols with weak protocols) means the client-facing connection is also potentially weak, enabling a MitM attacker to simultaneously intercept both the external TLS session (via downgrade) and the cleartext internal hop. Together, these directives create an end-to-end exposure path: attacker downgrades the external TLS session, then reads the cleartext proxy-to-backend channel. Full path: TLS downgrade on client connection → intercept cleartext proxy_pass channel → capture sensitive data.",
+    "cross_target": false
+  }
+]

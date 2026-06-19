@@ -360,27 +360,36 @@ class Database:
         keep_pairs: list,
     ) -> int:
         """
-        Delete misconfigurations for *target_name* whose (directive, bad_value)
-        is NOT in *keep_pairs* (a list of (directive, bad_value) tuples).
+        Delete misconfigurations for *target_name* whose identity key is NOT
+        in *keep_pairs*.
+
+        Each element of *keep_pairs* must be a 3-tuple:
+            (directive, bad_value, expected_value_prefix)
+
+        This matches the 4-column UNIQUE constraint
+        (target_name, directive, bad_value, expected_value_prefix).
+        Using only (directive, bad_value) would incorrectly collapse multiple
+        absence rules for the same directive (e.g. several add_header rules
+        that share bad_value='' but differ in expected_value_prefix).
 
         Makes the build idempotent: rebuilding with a smaller ENTRIES list
-        removes orphaned entries instead of leaving them in the DB. The
-        narrative lives in the same row, so it is removed together.
+        removes orphaned entries without touching the narrative column.
 
         Returns the number of rows deleted.
         """
         existing = self.get_all_misconfigurations(target_name)
-        keep = {(d, v) for d, v in keep_pairs}
+        keep = {(d, v, p) for d, v, p in keep_pairs}
         to_delete = [
-            (m.directive, m.bad_value)
+            (m.directive, m.bad_value, m.expected_value_prefix)
             for m in existing
-            if (m.directive, m.bad_value) not in keep
+            if (m.directive, m.bad_value, m.expected_value_prefix) not in keep
         ]
-        for directive, bad_value in to_delete:
+        for directive, bad_value, prefix in to_delete:
             self._conn.execute(
                 "DELETE FROM misconfigurations "
-                "WHERE target_name = ? AND directive = ? AND bad_value = ?",
-                (target_name, directive, bad_value),
+                "WHERE target_name = ? AND directive = ? AND bad_value = ? "
+                "AND expected_value_prefix = ?",
+                (target_name, directive, bad_value, prefix),
             )
         self._conn.commit()
         return len(to_delete)

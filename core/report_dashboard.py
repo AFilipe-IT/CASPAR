@@ -39,6 +39,13 @@ def _sev_label(s):
 def _e(t):
     return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
+def _display_value(issue):
+    """Return the display string for the bad_value field.
+    Absence issues (rule_type='absence') have bad_value='' — show a badge instead."""
+    if getattr(issue, "rule_type", "value") == "absence":
+        return '<span style="font-style:italic;color:var(--mt)">[not configured]</span>'
+    return _e(issue.bad_value)
+
 def _strip_metric_prefix(text):
     import re
     t = str(text).strip()
@@ -226,7 +233,7 @@ def _build_detail_html(g, av_rat, au_rat):
     parts.append(f'<div class="drawer-score-row"><span class="drawer-score t-{cls}">{issue.temporal_score:.1f}</span>'
                  f'<span class="t-pill pill-{cls}">{_sev_label(issue.temporal_score)}</span></div>'
                  f'<div class="drawer-dir">{_e(issue.directive)}</div>'
-                 f'<div class="drawer-val">= {_e(issue.bad_value)}</div>')
+                 f'<div class="drawer-val">= {_display_value(issue)}</div>')
     header = "".join(parts)
 
     body = ""
@@ -260,7 +267,11 @@ def _build_detail_html(g, av_rat, au_rat):
         body += f'<div class="dsec"><div class="dsec-title">Recommendation</div><div class="drec">{_e(issue.recommendation)}</div></div>'
 
     # Config snippet (primary occurrence)
-    if issue.source_directive and issue.source_directive.source_file:
+    if getattr(issue, "rule_type", "value") == "absence":
+        body += (f'<div class="dsec"><div class="dsec-title">Location in File</div>'
+                 f'<div class="dsec-desc" style="font-style:italic;color:var(--mt)">'
+                 f'Directive absent — no source location to show.</div></div>')
+    elif issue.source_directive and issue.source_directive.source_file:
         snip = _read_snippet(issue.source_directive.source_file, issue.source_directive.line_number)
         if snip:
             hdr = f"{issue.source_directive.source_file}:{issue.source_directive.line_number}"
@@ -354,7 +365,7 @@ def generate_dashboard(result, resolved=None):
                  f'<td class="t-score t-{cls}">{issue.temporal_score:.1f}</td>'
                  f'<td><span class="t-pill pill-{cls}">{lbl}</span></td>'
                  f'<td class="t-dir">{_e(issue.directive)}</td>'
-                 f'<td class="t-val">{_e(issue.bad_value)}</td>'
+                 f'<td class="t-val">{_display_value(issue)}</td>'
                  f'<td class="t-metrics">{metrics}</td>'
                  f'<td class="t-cve">{cves}</td>'
                  f'<td><button class="details-btn" onclick="openDrawer({idx})">Details</button></td>'

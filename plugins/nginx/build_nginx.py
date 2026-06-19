@@ -299,9 +299,10 @@ def run_build(
         ))
 
         # Idempotency: drop misconfigs no longer in ENTRIES or ABSENCE_RULES before inserting.
+        # 3-tuple (directive, bad_value, expected_value_prefix) matches the 4-column UNIQUE key.
         keep_pairs = (
-            [(e.directive, e.bad_value) for e in ENTRIES]
-            + [(r.directive, r.bad_value) for r in ABSENCE_RULES]
+            [(e.directive, e.bad_value, "") for e in ENTRIES]
+            + [(r.directive, r.bad_value, r.expected_value_prefix) for r in ABSENCE_RULES]
         )
         removed = db.delete_misconfigurations_not_in(meta.name, keep_pairs)
         if removed:
