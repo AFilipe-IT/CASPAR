@@ -111,7 +111,9 @@ class Database:
         """Apply schema migrations to existing databases (idempotent)."""
         import logging
         _log = logging.getLogger(__name__)
-        migrations = [
+
+        # Simple ADD COLUMN migrations (idempotent: SQLite raises on duplicate column)
+        simple_migrations = [
             ("narrative",
              "ALTER TABLE misconfigurations ADD COLUMN narrative TEXT NOT NULL DEFAULT '{}'"),
             ("rule_type",
@@ -119,13 +121,105 @@ class Database:
             ("required_when",
              "ALTER TABLE misconfigurations ADD COLUMN required_when TEXT NOT NULL DEFAULT 'always'"),
         ]
-        for col_name, sql in migrations:
+        for col_name, sql in simple_migrations:
             try:
                 self._conn.execute(sql)
                 self._conn.commit()
                 _log.info("Migration applied: added column '%s'", col_name)
             except Exception:
                 pass  # Column already exists — safe to ignore
+
+        # Table-recreation migration: add expected_value_prefix + widen UNIQUE constraint.
+        # Cannot use ALTER TABLE ADD COLUMN because the UNIQUE constraint must change.
+        existing_cols = {r[1] for r in self._conn.execute(
+            "PRAGMA table_info(misconfigurations)"
+        ).fetchall()}
+        if "expected_value_prefix" in existing_cols:
+            return  # Already migrated — idempotent
+
+        _log.info("Migration: adding expected_value_prefix (table recreation)")
+        before = self._conn.execute(
+            "SELECT COUNT(*) FROM misconfigurations"
+        ).fetchone()[0]
+
+        self._conn.execute("PRAGMA foreign_keys=OFF")
+        try:
+            self._conn.execute("BEGIN")
+            self._conn.execute("""
+                CREATE TABLE misconfigurations_new (
+                    id               TEXT    PRIMARY KEY,
+                    target_id        INTEGER NOT NULL REFERENCES targets(id) ON DELETE CASCADE,
+                    target_name      TEXT    NOT NULL,
+                    directive        TEXT    NOT NULL,
+                    bad_value        TEXT    NOT NULL,
+                    good_value       TEXT    NOT NULL DEFAULT '',
+                    av               TEXT    NOT NULL DEFAULT 'N',
+                    au               TEXT    NOT NULL DEFAULT 'N',
+                    ac               TEXT    NOT NULL,
+                    c                TEXT    NOT NULL,
+                    i                TEXT    NOT NULL,
+                    a                TEXT    NOT NULL,
+                    base_score       REAL    NOT NULL DEFAULT 0.0,
+                    temporal_score   REAL    NOT NULL DEFAULT 0.0,
+                    gel              TEXT    NOT NULL DEFAULT 'ND',
+                    grl              TEXT    NOT NULL DEFAULT 'ND',
+                    cves             TEXT    NOT NULL DEFAULT '[]',
+                    cce_id           TEXT    NOT NULL DEFAULT '',
+                    cis_section      TEXT    NOT NULL DEFAULT '',
+                    justification    TEXT    NOT NULL DEFAULT '',
+                    recommendation   TEXT    NOT NULL DEFAULT '',
+                    created_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    updated_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    narrative        TEXT    NOT NULL DEFAULT '{}',
+                    rule_type        TEXT    NOT NULL DEFAULT 'value',
+                    required_when    TEXT    NOT NULL DEFAULT 'always',
+                    expected_value_prefix TEXT NOT NULL DEFAULT '',
+                    UNIQUE (target_name, directive, bad_value, expected_value_prefix)
+                )
+            """)
+            self._conn.execute("""
+                INSERT INTO misconfigurations_new
+                    SELECT id, target_id, target_name,
+                           directive, bad_value, good_value,
+                           av, au, ac, c, i, a,
+                           base_score, temporal_score,
+                           gel, grl, cves, cce_id, cis_section,
+                           justification, recommendation,
+                           created_at, updated_at,
+                           narrative, rule_type, required_when,
+                           ''
+                    FROM misconfigurations
+            """)
+            after = self._conn.execute(
+                "SELECT COUNT(*) FROM misconfigurations_new"
+            ).fetchone()[0]
+            if before != after:
+                self._conn.execute("DROP TABLE IF EXISTS misconfigurations_new")
+                self._conn.rollback()
+                raise RuntimeError(
+                    f"Migration aborted: {before} rows before, {after} after — "
+                    "original table unchanged."
+                )
+            self._conn.execute("DROP TABLE misconfigurations")
+            self._conn.execute(
+                "ALTER TABLE misconfigurations_new RENAME TO misconfigurations"
+            )
+            self._conn.execute(
+                "CREATE INDEX idx_misconf_lookup "
+                "ON misconfigurations (target_name, directive, bad_value)"
+            )
+            self._conn.execute(
+                "CREATE INDEX idx_misconf_target ON misconfigurations (target_name)"
+            )
+            self._conn.commit()
+            _log.info(
+                "Migration applied: expected_value_prefix added (%d rows preserved)", after
+            )
+        except Exception:
+            self._conn.rollback()
+            raise
+        finally:
+            self._conn.execute("PRAGMA foreign_keys=ON")
 
     def __exit__(self, *_: object) -> None:
         self.close()
@@ -199,7 +293,7 @@ class Database:
                 base_score, temporal_score,
                 gel, grl, cves, cce_id, cis_section,
                 justification, recommendation,
-                rule_type, required_when
+                rule_type, required_when, expected_value_prefix
             ) VALUES (
                 :id, :target_id, :target_name,
                 :directive, :bad_value, :good_value,
@@ -207,28 +301,29 @@ class Database:
                 :base_score, :temporal_score,
                 :gel, :grl, :cves, :cce_id, :cis_section,
                 :justification, :recommendation,
-                :rule_type, :required_when
+                :rule_type, :required_when, :expected_value_prefix
             )
-            ON CONFLICT(target_name, directive, bad_value) DO UPDATE SET
-                good_value     = excluded.good_value,
-                av             = excluded.av,
-                au             = excluded.au,
-                ac             = excluded.ac,
-                c              = excluded.c,
-                i              = excluded.i,
-                a              = excluded.a,
-                base_score     = excluded.base_score,
-                temporal_score = excluded.temporal_score,
-                gel            = excluded.gel,
-                grl            = excluded.grl,
-                cves           = excluded.cves,
-                cce_id         = excluded.cce_id,
-                cis_section    = excluded.cis_section,
-                justification  = excluded.justification,
-                recommendation = excluded.recommendation,
-                rule_type      = excluded.rule_type,
-                required_when  = excluded.required_when,
-                updated_at     = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            ON CONFLICT(target_name, directive, bad_value, expected_value_prefix) DO UPDATE SET
+                good_value            = excluded.good_value,
+                av                    = excluded.av,
+                au                    = excluded.au,
+                ac                    = excluded.ac,
+                c                     = excluded.c,
+                i                     = excluded.i,
+                a                     = excluded.a,
+                base_score            = excluded.base_score,
+                temporal_score        = excluded.temporal_score,
+                gel                   = excluded.gel,
+                grl                   = excluded.grl,
+                cves                  = excluded.cves,
+                cce_id                = excluded.cce_id,
+                cis_section           = excluded.cis_section,
+                justification         = excluded.justification,
+                recommendation        = excluded.recommendation,
+                rule_type             = excluded.rule_type,
+                required_when         = excluded.required_when,
+                expected_value_prefix = excluded.expected_value_prefix,
+                updated_at            = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
             """,
             {
                 "id": m.id,
@@ -254,6 +349,7 @@ class Database:
                 "recommendation": m.recommendation,
                 "rule_type": m.rule_type,
                 "required_when": m.required_when,
+                "expected_value_prefix": m.expected_value_prefix,
             },
         )
         self._conn.commit()
@@ -353,6 +449,7 @@ class Database:
             narrative=row["narrative"] if "narrative" in row.keys() else "{}",
             rule_type=row["rule_type"] if "rule_type" in row.keys() else "value",
             required_when=row["required_when"] if "required_when" in row.keys() else "always",
+            expected_value_prefix=row["expected_value_prefix"] if "expected_value_prefix" in row.keys() else "",
         )
 
     # ------------------------------------------------------------------ #

@@ -56,7 +56,8 @@ _WORST_CASE: dict[str, Path] = {
 # Um config de ausência tem as condições de trigger (ssl_certificate)
 # mas NÃO tem as directivas que deviam estar presentes.
 _WORST_CASE_ABSENCE: dict[str, Path] = {
-    "nginx": _PROJECT_ROOT / "test_target" / "nginx_absence.conf",
+    "apache-httpd": _PROJECT_ROOT / "test_target" / "httpd_absence.conf",
+    "nginx":        _PROJECT_ROOT / "test_target" / "nginx_absence.conf",
 }
 
 

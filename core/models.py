@@ -106,6 +106,7 @@ class Misconfiguration:
     recommendation: str = ""
     rule_type: str = "value"    # "value" (lookup) | "absence" (missing directive)
     required_when: str = "always"  # condition: "always" | "if_directive:X"
+    expected_value_prefix: str = ""  # for multi-instance directives (e.g. add_header)
     detected_in_scan: bool = False   # runtime
     source_directive: Optional[Directive] = None  # runtime
     narrative: str = "{}"  # JSON string — rich narrative from Stage 3 LLM pipeline

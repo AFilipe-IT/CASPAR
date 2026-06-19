@@ -108,6 +108,99 @@ ABSENCE_RULES: list[Misconfiguration] = [
             "that use proxy_pass. The value must match the upstream server's hostname."
         ),
     ),
+    # ── CIS 4.1.8 — HSTS header (add_header multi-instance) ─────────────────────
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="add_header",
+        bad_value="",
+        good_value='add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;',
+        rule_type="absence",
+        required_when="if_directive:ssl_certificate",
+        expected_value_prefix="Strict-Transport-Security",
+        ac="M", c="P", i="P", a="N",
+        gel="L", grl="W",
+        cis_section="4.1.8",
+        justification=(
+            "Without the Strict-Transport-Security (HSTS) header, browsers are not "
+            "instructed to enforce HTTPS. This leaves users vulnerable to protocol "
+            "downgrade attacks and cookie hijacking on their first visit, before any "
+            "HTTPS redirect has been applied."
+        ),
+        recommendation=(
+            'Add \'add_header Strict-Transport-Security '
+            '"max-age=63072000; includeSubDomains" always;\' '
+            "to the server block serving HTTPS."
+        ),
+    ),
+    # ── CIS 5.3.1 — X-Content-Type-Options (add_header multi-instance) ───────────
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="add_header",
+        bad_value="",
+        good_value='add_header X-Content-Type-Options "nosniff" always;',
+        rule_type="absence",
+        required_when="always",
+        expected_value_prefix="X-Content-Type-Options",
+        ac="L", c="P", i="N", a="N",
+        gel="L", grl="W",
+        cis_section="5.3.1",
+        justification=(
+            "Without X-Content-Type-Options: nosniff, browsers may perform MIME "
+            "type sniffing and execute files as a different content type than "
+            "declared. This enables drive-by download attacks and MIME confusion "
+            "attacks where a text file is executed as a script."
+        ),
+        recommendation=(
+            'Add \'add_header X-Content-Type-Options "nosniff" always;\' '
+            "to the server block."
+        ),
+    ),
+    # ── CIS 5.3.2 — Content-Security-Policy (add_header multi-instance) ──────────
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="add_header",
+        bad_value="",
+        good_value="add_header Content-Security-Policy \"default-src 'self'; frame-ancestors 'self';\" always;",
+        rule_type="absence",
+        required_when="always",
+        expected_value_prefix="Content-Security-Policy",
+        ac="L", c="P", i="P", a="N",
+        gel="L", grl="W",
+        cis_section="5.3.2",
+        justification=(
+            "Without a Content-Security-Policy header, browsers apply only the "
+            "Same-Origin Policy, which does not prevent XSS attacks from loading "
+            "external scripts or data exfiltration. CSP significantly reduces the "
+            "XSS attack surface by whitelisting approved content sources."
+        ),
+        recommendation=(
+            "Add a Content-Security-Policy header tailored to the application. "
+            "Start with 'Content-Security-Policy-Report-Only' to audit before "
+            "enforcing. Minimum: default-src 'self'; frame-ancestors 'self'."
+        ),
+    ),
+    # ── CIS 5.3.3 — Referrer-Policy (add_header multi-instance) ─────────────────
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="add_header",
+        bad_value="",
+        good_value='add_header Referrer-Policy "strict-origin-when-cross-origin" always;',
+        rule_type="absence",
+        required_when="always",
+        expected_value_prefix="Referrer-Policy",
+        ac="L", c="P", i="N", a="N",
+        gel="L", grl="W",
+        cis_section="5.3.3",
+        justification=(
+            "Without an explicit Referrer-Policy, browsers fall back to their "
+            "defaults which may send the full URL (including query parameters "
+            "with session tokens or PII) to third-party sites as the Referer header."
+        ),
+        recommendation=(
+            'Add \'add_header Referrer-Policy "strict-origin-when-cross-origin" always;\' '
+            "to the server block."
+        ),
+    ),
     # ── CIS 4.1.4 — explicit TLS protocol specification ───────────────────────────
     Misconfiguration(
         target_name=_TARGET,
