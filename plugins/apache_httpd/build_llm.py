@@ -133,7 +133,7 @@ def run_build(
 
         # Run LLM pipeline
         # Idempotency: drop misconfigs no longer in ENTRIES before inserting.
-        keep_pairs = [(e.directive, e.bad_value) for e in ENTRIES]
+        keep_pairs = [(e.directive, e.bad_value, "") for e in ENTRIES]
         removed = db.delete_misconfigurations_not_in(meta.name, keep_pairs)
         if removed:
             logger.info("Removed %d orphaned misconfiguration(s) not in ENTRIES", removed)
