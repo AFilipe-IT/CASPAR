@@ -124,6 +124,47 @@ def _check_condition(required_when: str, all_parsed_names: set[str]) -> bool:
     return False
 
 
+def _match_value_rules(db, target_name: str, directive) -> list[Misconfiguration]:
+    """
+    Return the value-rules a directive triggers.
+
+    Two matching modes, in order:
+
+    1. Exact match (the O(1) hot path) — bad_value == directive.value. Covers
+       scalar directives like ``server_tokens on``.
+
+    2. Token-subset match — for list-valued directives like
+       ``ssl_protocols SSLv3 TLSv1 TLSv1.1`` a single config line carries several
+       bad_value tokens stored as separate rules ('SSLv3', 'TLSv1 TLSv1.1'). A
+       rule fires when *all* of its bad_value tokens appear among the directive's
+       tokens. This is what makes detection robust on real-world configs, not
+       just the worst-case fixtures where each bad_value sits on its own line.
+
+    Results are de-duplicated by rule id so a rule matched both ways is not
+    double-counted.
+    """
+    matched: dict[int, Misconfiguration] = {}
+
+    for row in db.get_misconfigurations(
+        target_name=target_name,
+        directive=directive.name,
+        bad_value=directive.value,
+    ):
+        matched[row.id] = row
+
+    directive_tokens = set(directive.value.split())
+    if len(directive_tokens) > 1:
+        for rule in db.get_value_rules(target_name, directive.name):
+            if rule.id in matched:
+                continue
+            rule_tokens = set(rule.bad_value.split())
+            # Subset, but never an empty rule (would match everything).
+            if rule_tokens and rule_tokens <= directive_tokens:
+                matched[rule.id] = rule
+
+    return list(matched.values())
+
+
 def _detect_absences(
     absence_rules: list[Misconfiguration],
     all_parsed_names: set[str],
@@ -290,12 +331,7 @@ def scan(input_path: str, db: Database) -> ScanResult:
     # 4. Scan — lookup each directive in the DB
     issues: list[Misconfiguration] = []
     for directive in directives:
-        rows = db.get_misconfigurations(
-            target_name=meta.name,
-            directive=directive.name,
-            bad_value=directive.value,
-        )
-        for row in rows:
+        for row in _match_value_rules(db, meta.name, directive):
             row.detected_in_scan = True
             row.source_directive = directive
             issues.append(row)

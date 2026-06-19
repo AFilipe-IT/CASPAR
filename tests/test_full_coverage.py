@@ -235,6 +235,42 @@ def test_all_absence_rules_are_detected(db, target_name, absence_case):
     assert expected.issubset(detected), "Cobertura de ausências incompleta (ver acima)."
 
 
+def test_ssl_protocols_multitoken_detected(db):
+    """
+    Regression guard for the ssl_protocols multi-token bug.
+
+    A real-world config writes every weak protocol on one line:
+        ssl_protocols SSLv3 TLSv1 TLSv1.1;
+    The DB stores the bad_values as separate rules ('SSLv3', 'TLSv1 TLSv1.1').
+    Exact-match lookup missed both; token-subset matching must fire both.
+    """
+    cfg = _PROJECT_ROOT / "test_target" / "nginx_realistic.conf"
+    if not cfg.exists():
+        pytest.skip(f"{cfg.relative_to(_PROJECT_ROOT)} ausente.")
+
+    expected = {
+        m.bad_value
+        for m in db.get_all_misconfigurations("nginx")
+        if m.directive == "ssl_protocols" and m.rule_type == "value"
+    }
+    if not expected:
+        pytest.skip("Banco não tem value-rules ssl_protocols — nada a verificar.")
+
+    scan = runtime.scan(str(cfg), db)
+    detected = {
+        issue.bad_value
+        for issue in scan.issues
+        if issue.directive == "ssl_protocols" and issue.rule_type == "value"
+    }
+
+    missing = expected - detected
+    assert not missing, (
+        f"ssl_protocols multi-token não detetado para: {sorted(missing)}. "
+        "Uma linha 'ssl_protocols SSLv3 TLSv1 TLSv1.1' deve disparar todas as "
+        "value-rules cujos tokens de bad_value sejam subconjunto da directiva."
+    )
+
+
 def test_loadmodule_specifically_detected(db, scan_result):
     """
     Regression guard for the LoadModule .so-path bug specifically.
