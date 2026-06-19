@@ -44,6 +44,71 @@ _TARGET = "nginx"
 # bad_value="" + rule_type="absence" is the sentinel for absence detection.
 # ────────────────────────────────────────────────────────────────────
 ABSENCE_RULES: list[Misconfiguration] = [
+    # ── CIS 4.1.10 — upstream certificate validation (proxy context) ──────────────
+    # All three directives are required together. Each modelled as an independent
+    # absence rule so the scanner can report exactly which piece is missing.
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="proxy_ssl_verify",
+        bad_value="",
+        good_value="proxy_ssl_verify on;",
+        rule_type="absence",
+        required_when="if_directive:proxy_pass",
+        ac="M", c="P", i="P", a="N",
+        gel="L", grl="W",
+        cis_section="4.1.10",
+        justification=(
+            "Without proxy_ssl_verify on, NGINX does not validate the upstream "
+            "server's TLS certificate. This is equivalent to a browser ignoring "
+            "all certificate warnings, making the proxy-to-backend channel "
+            "vulnerable to man-in-the-middle attacks within the internal network."
+        ),
+        recommendation=(
+            "Add 'proxy_ssl_verify on;' to location blocks that use proxy_pass. "
+            "Also configure proxy_ssl_trusted_certificate and proxy_ssl_name."
+        ),
+    ),
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="proxy_ssl_trusted_certificate",
+        bad_value="",
+        good_value="proxy_ssl_trusted_certificate /etc/nginx/ssl/upstream_ca.crt;",
+        rule_type="absence",
+        required_when="if_directive:proxy_pass",
+        ac="M", c="P", i="P", a="N",
+        gel="L", grl="W",
+        cis_section="4.1.10",
+        justification=(
+            "Without proxy_ssl_trusted_certificate, NGINX cannot verify the "
+            "upstream server's certificate against a trusted CA even when "
+            "proxy_ssl_verify is on, leaving the mTLS chain incomplete."
+        ),
+        recommendation=(
+            "Add 'proxy_ssl_trusted_certificate /path/to/ca.crt;' to location "
+            "blocks that use proxy_pass with upstream TLS."
+        ),
+    ),
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="proxy_ssl_name",
+        bad_value="",
+        good_value="proxy_ssl_name your-upstream-hostname.com;",
+        rule_type="absence",
+        required_when="if_directive:proxy_pass",
+        ac="M", c="P", i="P", a="N",
+        gel="L", grl="W",
+        cis_section="4.1.10",
+        justification=(
+            "Without proxy_ssl_name, NGINX does not verify that the upstream "
+            "server's certificate Subject Name matches the expected hostname, "
+            "allowing certificate substitution attacks even with proxy_ssl_verify on."
+        ),
+        recommendation=(
+            "Add 'proxy_ssl_name your-upstream-hostname.com;' to location blocks "
+            "that use proxy_pass. The value must match the upstream server's hostname."
+        ),
+    ),
+    # ── CIS 4.1.4 — explicit TLS protocol specification ───────────────────────────
     Misconfiguration(
         target_name=_TARGET,
         directive="ssl_protocols",
@@ -60,24 +125,6 @@ ABSENCE_RULES: list[Misconfiguration] = [
             "configuration is required to exclude deprecated protocol versions."
         ),
         recommendation="Add 'ssl_protocols TLSv1.2 TLSv1.3;' to the http block.",
-    ),
-    Misconfiguration(
-        target_name=_TARGET,
-        directive="ssl_session_tickets",
-        bad_value="",
-        good_value="ssl_session_tickets off;",
-        rule_type="absence",
-        required_when="if_directive:ssl_certificate",
-        ac="H", c="P", i="N", a="N",
-        gel="L", grl="W",
-        cis_section="4.1.11",
-        justification=(
-            "When ssl_session_tickets is absent, Nginx defaults to ON. Session "
-            "tickets allow servers to resume TLS sessions without re-running the "
-            "full handshake, but they undermine Perfect Forward Secrecy: a "
-            "compromised ticket key can decrypt all past and future sessions."
-        ),
-        recommendation="Add 'ssl_session_tickets off;' to the server block.",
     ),
     Misconfiguration(
         target_name=_TARGET,
@@ -126,6 +173,9 @@ ENTRIES: list[MisconfigEntry] = [
     # ── TLS / SSL (CIS 4.1) ──
     MisconfigEntry("ssl_protocols", "TLSv1 TLSv1.1", "TLSv1.2 TLSv1.3", "4.1.4", "", _TARGET),
     MisconfigEntry("ssl_protocols", "SSLv3", "TLSv1.2 TLSv1.3", "4.1.4", "", _TARGET),
+    # CIS 4.1.11: ssl_session_tickets off é o bad value — o default (on) é o estado seguro para TLS 1.3.
+    # Audit: "verify that ssl_session_tickets is NOT explicitly turned off"
+    MisconfigEntry("ssl_session_tickets", "off", "on (or remove directive — default is on)", "4.1.11", "", _TARGET),
 
     # ── Reverse proxy / SSRF surface (CIS 2.5.4) ──
     MisconfigEntry("proxy_pass", "http://127.0.0.1:8080", "https://backend with restrictions", "2.5.4", "", _TARGET),
