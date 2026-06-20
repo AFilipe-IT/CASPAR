@@ -337,7 +337,10 @@ def scan(ctx, input_path, live, report, fmt, output, threshold, online) -> None:
     _deferred_cleanup = resolved.cleanup if resolved.cleanup else None
     try:
         with Database(db_path) as db:
-            result = runtime.scan(resolved.path, db)
+            detected_version = resolved.metadata.get("version") or None
+            if detected_version == "unknown":
+                detected_version = None
+            result = runtime.scan(resolved.path, db, version=detected_version)
     except Exception:
         if _deferred_cleanup:
             _deferred_cleanup()

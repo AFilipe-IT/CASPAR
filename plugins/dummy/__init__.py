@@ -63,6 +63,7 @@ class DummyPlugin(Target):
             version="1.0",
             benchmark_source="CCSS-Scan Phase 1 test fixture",
             priority=10,
+            version_exposing_directives=("DangerousOption",),
         )
 
 

@@ -143,6 +143,7 @@ class NginxPlugin(Target):
             version="3.0",
             benchmark_source="CIS NGINX Benchmark v3.0.0",
             priority=100,
+            version_exposing_directives=("server_tokens",),
         )
 
     def detection_confidence(self, path: str) -> int:

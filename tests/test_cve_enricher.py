@@ -29,8 +29,11 @@ from core.cve_enricher import (
     CVERecord,
     EnrichmentResult,
     NVDClient,
+    VersionExploitInfo,
     _compute_gel,
     enrich_misconfiguration,
+    get_version_exploit_info,
+    version_amplification,
 )
 
 
@@ -293,6 +296,140 @@ class TestEnrichMisconfiguration:
         ]
         result = enrich_misconfiguration("Dir", "bad", many, nvd, set())
         assert len(result.cve_ids) <= 10
+
+
+# ════════════════════════════════════════════════════════════════════
+# F1 — version exploitability lookup + amplification (mocked network)
+# ════════════════════════════════════════════════════════════════════
+
+def _fake_cpe_response(n_cves=0, kev_ids=(), scores=()):
+    """Build an NVD CPE-match response with n_cves vulnerabilities."""
+    vulns = []
+    for idx in range(n_cves):
+        cid = f"CVE-2021-{1000 + idx}"
+        score = scores[idx] if idx < len(scores) else 5.0
+        vulns.append({
+            "cve": {
+                "id": cid,
+                "metrics": {
+                    "cvssMetricV31": [{"cvssData": {"baseScore": score, "baseSeverity": "MEDIUM"}}]
+                },
+            }
+        })
+    return {"vulnerabilities": vulns}
+
+
+@pytest.fixture
+def isolated_cache(tmp_path, monkeypatch):
+    """Point the version cache at a temp file so tests never touch the real one."""
+    cache_dir = tmp_path / ".ccss_cache"
+    monkeypatch.setattr("core.cve_enricher.VERSION_CACHE_DIR", cache_dir)
+    monkeypatch.setattr("core.cve_enricher.VERSION_CACHE_FILE", cache_dir / "version_exploits.json")
+    return cache_dir / "version_exploits.json"
+
+
+class TestVersionAmplification:
+    """Pure mapping — no I/O."""
+
+    def test_none_returns_one(self):
+        assert version_amplification(None) == 1.0
+
+    def test_kev_returns_1_5(self):
+        info = VersionExploitInfo("apache-httpd", "2.4.49", cve_count=10, kev_count=2, max_cvss=9.8)
+        assert version_amplification(info) == 1.5
+
+    def test_cve_count_5_no_kev_returns_1_3(self):
+        info = VersionExploitInfo("apache-httpd", "2.4.51", cve_count=5, kev_count=0)
+        assert version_amplification(info) == 1.3
+
+    def test_cve_count_1_returns_1_15(self):
+        info = VersionExploitInfo("nginx", "1.27.0", cve_count=1, kev_count=0)
+        assert version_amplification(info) == 1.15
+
+    def test_no_cves_returns_one(self):
+        info = VersionExploitInfo("nginx", "1.27.4", cve_count=0, kev_count=0)
+        assert version_amplification(info) == 1.0
+
+
+class TestGetCVEsForVersion:
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_counts_cves_and_max_cvss(self, mock_urlopen):
+        mock_urlopen.return_value = _FakeHTTPResponse(
+            _fake_cpe_response(n_cves=3, scores=(7.5, 9.1, 4.2))
+        )
+        info = NVDClient().get_cves_for_version("apache-httpd", "2.4.51", kev_ids=set())
+        assert info.cve_count == 3
+        assert info.max_cvss == 9.1
+        assert info.kev_count == 0
+        assert info.cached is False
+
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_counts_kev(self, mock_urlopen):
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=3))
+        info = NVDClient().get_cves_for_version(
+            "apache-httpd", "2.4.49", kev_ids={"CVE-2021-1001"}
+        )
+        assert info.kev_count == 1
+
+    def test_unknown_product_no_network(self):
+        # Product not in CPE_TEMPLATES → empty info, never hits the network.
+        info = NVDClient().get_cves_for_version("mystery-svc", "1.0")
+        assert info.cve_count == 0 and info.kev_count == 0
+
+
+class TestVersionCacheFlow:
+    @patch("core.cve_enricher._load_kev", return_value=set())
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_live_lookup_returns_fresh(self, mock_urlopen, _kev, isolated_cache):
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=1))
+        info = get_version_exploit_info("apache-httpd", "2.4.49", client=NVDClient())
+        assert info.cve_count == 1
+        assert info.cached is False
+
+    @patch("core.cve_enricher._load_kev", return_value={"CVE-2021-1000"})
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_kev_active_amplifies_1_5(self, mock_urlopen, _kev, isolated_cache):
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=1))
+        info = get_version_exploit_info("apache-httpd", "2.4.49", client=NVDClient())
+        assert info.kev_count == 1
+        assert version_amplification(info) == 1.5
+
+    @patch("core.cve_enricher._load_kev", return_value=set())
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_cache_hit_skips_network(self, mock_urlopen, _kev, isolated_cache):
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=5))
+        # First call populates the cache (1 CPE network call; KEV is mocked).
+        get_version_exploit_info("apache-httpd", "2.4.51", client=NVDClient())
+        assert mock_urlopen.call_count == 1
+        # Second call within TTL must NOT hit the network.
+        info2 = get_version_exploit_info("apache-httpd", "2.4.51", client=NVDClient())
+        assert mock_urlopen.call_count == 1
+        assert info2.cached is True
+        assert info2.cve_count == 5
+
+    @patch("core.cve_enricher._load_kev", return_value=set())
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_expired_ttl_refetches(self, mock_urlopen, _kev, isolated_cache):
+        import json as _json, time as _time
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=2))
+        # Seed an expired cache entry (fetched 25h ago).
+        isolated_cache.parent.mkdir(parents=True, exist_ok=True)
+        isolated_cache.write_text(_json.dumps({
+            "apache-httpd:2.4.51": {
+                "cve_count": 99, "kev_count": 0, "max_cvss": 1.0,
+                "fetched_at": _time.time() - 25 * 3600,
+            }
+        }))
+        info = get_version_exploit_info("apache-httpd", "2.4.51", client=NVDClient())
+        assert mock_urlopen.call_count == 1   # refetched
+        assert info.cve_count == 2            # fresh value, not the stale 99
+        assert info.cached is False
+
+    def test_no_version_returns_none(self, isolated_cache):
+        assert get_version_exploit_info("apache-httpd", None) is None
+
+    def test_unknown_product_returns_none(self, isolated_cache):
+        assert get_version_exploit_info("mystery-svc", "1.0") is None
 
 
 if __name__ == "__main__":

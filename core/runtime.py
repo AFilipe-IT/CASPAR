@@ -3,8 +3,8 @@ core/runtime.py
 ---------------
 Runtime scan engine.
 
-This is the performance-critical, zero-LLM, deterministic path.
-For any given input file, it always produces the same ScanResult.
+This is the performance-critical, zero-LLM path.
+For any given input file (and version), it produces the same ScanResult.
 
 Pipeline (executed for every scan):
   1. detect()           — select the right plugin(s) for this input
@@ -12,12 +12,17 @@ Pipeline (executed for every scan):
   3. get_profile()      — infer system-level AV and Au (via plugin rule engine)
   4. scan()             — lookup each directive in the database
   5. score()            — adjust AV/Au, recompute temporal scores
+  5b version-amplify    — amplify version-exposing misconfigs (F1, see below)
   6. detect_chains()    — subset-match active directives against known chains
   7. aggregate()        — compute global score from worst-case temporal scores
   8. report()           — assemble ScanResult
 
-Zero external calls.  All knowledge is in the database, pre-calculated
-at build time.  Lookup is O(1) per directive (index on target+directive+value).
+Database knowledge is pre-calculated at build time; lookup is O(1) per directive.
+EXCEPTION (F1): when a version is supplied, step 5b consults the NVD for the
+version's exploitability. This is the one network-touching step in runtime — it
+is online-first with a 24h persistent cache, and degrades to a ×1.0 no-op when
+there is no version, no network, or an unknown product. Without a version the
+runtime stays fully offline and deterministic, as before.
 """
 
 from __future__ import annotations
@@ -294,7 +299,61 @@ def _amplify_chains(
 # Main scan entry point                                                #
 # ------------------------------------------------------------------ #
 
-def scan(input_path: str, db: Database) -> ScanResult:
+def _amplify_version_exposure(
+    issues: list[Misconfiguration],
+    product: str,
+    version: str | None,
+    exposing_directives: tuple[str, ...],
+) -> None:
+    """Amplify the temporal score of version-exposing misconfigs in place (F1).
+
+    A misconfig that discloses the service version (declared by the plugin via
+    `exposing_directives`) becomes more critical when that version is actually
+    exploitable. Multiplies its temporal_score by version_amplification(info),
+    capped at 10.0. Other misconfigs are never touched.
+
+    Degrades to a no-op (×1.0) when there is no version, an unknown product, or
+    no exposing directives present — keeping the offline/deterministic path.
+    """
+    if not version or not exposing_directives:
+        return
+    exposed = [m for m in issues if m.directive in exposing_directives]
+    if not exposed:
+        return
+
+    # Lazy import: only reached when a version is present, so the offline path
+    # never imports the network module.
+    from core.cve_enricher import get_version_exploit_info, version_amplification
+
+    info = get_version_exploit_info(product, version)
+    factor = version_amplification(info)
+    if factor == 1.0:
+        return
+
+    note = _version_risk_note(product, version, info)
+    for m in exposed:
+        m.temporal_score = min(round(m.temporal_score * factor, 1), 10.0)
+        m.version_amplification = factor
+        m.version_risk_note = note
+        logger.info(
+            "[scan] Version-amplified %s ×%.2f → %.1f (%s)",
+            m.directive, factor, m.temporal_score, note,
+        )
+
+
+def _version_risk_note(product: str, version: str, info) -> str:
+    """One-line, human-readable reason shown in the dashboard drawer (F1)."""
+    name = {"apache-httpd": "Apache", "nginx": "Nginx"}.get(product, product)
+    if info is None:
+        return f"{name} {version} — exploitable version detected"
+    if info.kev_count > 0:
+        return (f"{name} {version} — {info.kev_count} KEV-listed "
+                f"CVE{'s' if info.kev_count != 1 else ''} detected")
+    return (f"{name} {version} — {info.cve_count} known "
+            f"CVE{'s' if info.cve_count != 1 else ''} detected")
+
+
+def scan(input_path: str, db: Database, *, version: str | None = None) -> ScanResult:
     """
     Run a full scan of *input_path* and return a ScanResult.
 
@@ -307,13 +366,18 @@ def scan(input_path: str, db: Database) -> ScanResult:
         Path to the configuration file or directory to scan.
     db:
         Open Database handle (see core.db.database).
+    version:
+        Detected service version (e.g. "2.4.51"), or None when the input mode
+        cannot reveal it. Propagated to ScanResult.detected_version and used by
+        version-aware scoring (F1). Optional and keyword-only — existing callers
+        are unaffected.
 
     Returns
     -------
     ScanResult
         Complete, self-contained result of the scan.
     """
-    logger.info("[scan] Starting scan: %s", input_path)
+    logger.info("[scan] Starting scan: %s (version=%s)", input_path, version or "unknown")
 
     # 1. Detect
     plugin = _select_plugin(input_path)
@@ -351,6 +415,14 @@ def scan(input_path: str, db: Database) -> ScanResult:
     # 5. Score — adjust AV/Au, recompute scores with system profile
     issues = _score_issues(issues, profile)
 
+    # 5b. Version-aware amplification (F1) — make version-exposing misconfigs
+    # more critical when the detected version is exploitable. No-op without a
+    # version. The plugin declares which directives expose the version, so the
+    # core never hardcodes directive names.
+    _amplify_version_exposure(
+        issues, meta.name, version, meta.version_exposing_directives,
+    )
+
     # 6. Detect chains
     # A chain fires when:
     #   (a) ALL its required directives are present in the config (parsed), AND
@@ -385,6 +457,7 @@ def scan(input_path: str, db: Database) -> ScanResult:
         total_directives_scanned=len(directives),
         total_issues_found=len(issues),
         total_chains_detected=len(fired_chains),
+        detected_version=version,
     )
 
     logger.info(
