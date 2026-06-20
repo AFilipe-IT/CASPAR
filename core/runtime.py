@@ -304,7 +304,7 @@ def _amplify_version_exposure(
     product: str,
     version: str | None,
     exposing_directives: tuple[str, ...],
-) -> tuple[list[dict], bool]:
+) -> tuple[list[dict], bool, int]:
     """Amplify version-exposing misconfigs and resolve public exploits (F1).
 
     A misconfig that discloses the service version (declared by the plugin via
@@ -316,16 +316,17 @@ def _amplify_version_exposure(
     in Exploit-DB; the returned list of public exploits (as dicts) is attached to
     the ScanResult so the report can show them with an alert.
 
-    Returns (exploits, lookup_failed). lookup_failed is True when the NVD query
-    errored, so the report can say "could not check" rather than implying the
-    version is exploit-free. Degrades to ([], False) when there is no version,
-    an unknown product, or no exposing directive present.
+    Returns (exploits, lookup_failed, cves_checked). lookup_failed is True when
+    the NVD query errored (report says "could not check"). cves_checked is the
+    number of CVEs the lookup examined — >0 with no exploits means "checked and
+    clean". Degrades to ([], False, 0) when there is no version, an unknown
+    product, or no exposing directive present.
     """
     if not version or not exposing_directives:
-        return [], False
+        return [], False, 0
     exposed = [m for m in issues if m.directive in exposing_directives]
     if not exposed:
-        return [], False
+        return [], False, 0
 
     # Lazy imports: only reached when a version is present, so the offline path
     # never imports the network/exploit modules.
@@ -347,15 +348,16 @@ def _amplify_version_exposure(
             )
 
     # lookup_failed propagates the NVD failure so the report can distinguish
-    # "no exploits found" from "could not check".
+    # three states: exploits found / lookup failed / checked-and-clean.
     lookup_failed = bool(info and info.lookup_failed)
+    cves_checked = info.cve_count if (info and not info.lookup_failed) else 0
     exploits = search_exploits_for_cves(info.cve_ids) if info else []
     if exploits:
         logger.info(
             "[scan] %d public exploit(s) found for %s %s",
             len(exploits), product, version,
         )
-    return [vars(e) for e in exploits], lookup_failed
+    return [vars(e) for e in exploits], lookup_failed, cves_checked
 
 
 def _version_risk_note(product: str, version: str, info) -> str:
@@ -435,7 +437,7 @@ def scan(input_path: str, db: Database, *, version: str | None = None) -> ScanRe
     # 5b. Version-aware amplification + exploit lookup (F1). No-op without a
     # version. The plugin declares which directives expose the version, so the
     # core never hardcodes directive names.
-    version_exploits, exploit_lookup_failed = _amplify_version_exposure(
+    version_exploits, exploit_lookup_failed, version_cves_checked = _amplify_version_exposure(
         issues, meta.name, version, meta.version_exposing_directives,
     )
 
@@ -476,6 +478,7 @@ def scan(input_path: str, db: Database, *, version: str | None = None) -> ScanRe
         detected_version=version,
         version_exploits=version_exploits,
         exploit_lookup_failed=exploit_lookup_failed,
+        version_cves_checked=version_cves_checked,
     )
 
     logger.info(

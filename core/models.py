@@ -177,6 +177,9 @@ class ScanResult:
     # True when the CVE/exploit lookup could not run (e.g. NVD timeout). Lets the
     # report distinguish "no exploits found" from "could not check".
     exploit_lookup_failed: bool = False
+    # Number of CVEs the exploit lookup examined (>0 with no exploits = checked
+    # and clean). Drives the "no public exploits found" report state.
+    version_cves_checked: int = 0
 
     def model_dump_json(self, indent: int = 2) -> str:
         """Compatibility shim — matches Pydantic's .model_dump_json() API."""
