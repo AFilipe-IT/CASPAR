@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from core.db.database import Database
 from core.llm_client import make_client
-from core.models import TargetMetadata
+from core.models import Misconfiguration, TargetMetadata
 from plugins.apache_httpd import ApachePlugin
 from plugins.apache_httpd.llm_pipeline import LLMBuildPipeline, MisconfigEntry
 from plugins.apache_httpd.chain_pipeline import generate_chains
@@ -103,6 +103,131 @@ ENTRIES: list[MisconfigEntry] = [
 ]
 
 
+# Absence rules: directives/headers that SHOULD be present but are reported when
+# missing. Hard-coded (not LLM-generated) so the build is deterministic and
+# reproducible — mirrors plugins/nginx/build_nginx.py::ABSENCE_RULES. These are
+# modern security headers / TLS hardening directives with no published CCE
+# ground truth, hence cce_id="" (consistent with the Nginx rationale). Scores,
+# justifications and CIS sections match the curated reference DB.
+_TARGET = "apache-httpd"
+
+ABSENCE_RULES: list[Misconfiguration] = [
+    # ── CIS 7.10 — OCSP stapling (TLS context) ──────────────────────────────────
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="SSLUseStapling",
+        bad_value="",
+        good_value="SSLUseStapling On",
+        rule_type="absence",
+        required_when="if_directive:SSLCertificateFile",
+        ac="M", c="P", i="N", a="N",
+        gel="L", grl="W",
+        cis_section="7.10",
+        justification=(
+            "Without SSLUseStapling On, Apache does not perform OCSP stapling. "
+            "Clients must contact the CA directly for revocation status, which "
+            "leaks browsing activity to the CA, degrades performance, and can be "
+            "suppressed if the OCSP responder is unavailable."
+        ),
+        recommendation=(
+            "Add 'SSLUseStapling On' and 'SSLStaplingCache "
+            "shmcb:logs/ssl_staple_cache(512000)' to the server-level "
+            "configuration and every SSL-enabled VirtualHost."
+        ),
+    ),
+    # ── CIS 7.11 — HSTS header (Header multi-instance, TLS context) ──────────────
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="Header",
+        bad_value="",
+        good_value='Header always set Strict-Transport-Security "max-age=600; includeSubDomains"',
+        rule_type="absence",
+        required_when="if_directive:SSLCertificateFile",
+        expected_value_prefix="Strict-Transport-Security",
+        ac="M", c="P", i="P", a="N",
+        gel="L", grl="W",
+        cis_section="7.11",
+        justification=(
+            "Without HSTS, browsers are not instructed to enforce HTTPS. This "
+            "leaves users vulnerable to protocol downgrade attacks (sslstrip) and "
+            "cookie hijacking on their first visit or after the HSTS policy expires."
+        ),
+        recommendation=(
+            'Add \'Header always set Strict-Transport-Security '
+            '"max-age=600; includeSubDomains"\' to every SSL-enabled VirtualHost.'
+        ),
+    ),
+    # ── CIS 5.16 — Content-Security-Policy (Header multi-instance) ───────────────
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="Header",
+        bad_value="",
+        good_value='Header always append Content-Security-Policy "frame-ancestors \'self\'"',
+        rule_type="absence",
+        required_when="always",
+        expected_value_prefix="Content-Security-Policy",
+        ac="L", c="P", i="P", a="N",
+        gel="L", grl="W",
+        cis_section="5.16",
+        justification=(
+            "Without a Content-Security-Policy or X-Frame-Options header, Apache "
+            "does not prevent clickjacking attacks where an attacker frames the "
+            "site inside an iframe on a malicious page. UI redressing can trick "
+            "users into performing unintended actions on the legitimate site."
+        ),
+        recommendation=(
+            'Add \'Header always append Content-Security-Policy '
+            '"frame-ancestors \'self\'"\' to the server configuration.'
+        ),
+    ),
+    # ── CIS 5.17 — Referrer-Policy (Header multi-instance) ───────────────────────
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="Header",
+        bad_value="",
+        good_value='Header set Referrer-Policy "strict-origin-when-cross-origin"',
+        rule_type="absence",
+        required_when="always",
+        expected_value_prefix="Referrer-Policy",
+        ac="L", c="P", i="N", a="N",
+        gel="L", grl="W",
+        cis_section="5.17",
+        justification=(
+            "Without an explicit Referrer-Policy header, browsers may send the "
+            "full URL including sensitive query parameters (session tokens, PII) "
+            "to third-party sites via the Referer header."
+        ),
+        recommendation=(
+            'Add \'Header set Referrer-Policy "strict-origin-when-cross-origin"\' '
+            "to the server configuration."
+        ),
+    ),
+    # ── CIS 5.18 — Permissions-Policy (Header multi-instance) ────────────────────
+    Misconfiguration(
+        target_name=_TARGET,
+        directive="Header",
+        bad_value="",
+        good_value='Header set Permissions-Policy "geolocation=(), microphone=(), camera=()"',
+        rule_type="absence",
+        required_when="always",
+        expected_value_prefix="Permissions-Policy",
+        ac="L", c="P", i="N", a="N",
+        gel="L", grl="W",
+        cis_section="5.18",
+        justification=(
+            "Without a Permissions-Policy header, browsers may allow web pages to "
+            "access sensitive device features (geolocation, microphone, camera) "
+            "without explicit restriction, violating the principle of least privilege."
+        ),
+        recommendation=(
+            'Add \'Header set Permissions-Policy '
+            '"geolocation=(), microphone=(), camera=()"\' to the server '
+            "configuration, adjusted for the application's actual needs."
+        ),
+    ),
+]
+
+
 def run_build(
     benchmark_path: str,
     db_path: str,
@@ -132,8 +257,12 @@ def run_build(
         ))
 
         # Run LLM pipeline
-        # Idempotency: drop misconfigs no longer in ENTRIES before inserting.
-        keep_pairs = [(e.directive, e.bad_value, "") for e in ENTRIES]
+        # Idempotency: drop misconfigs no longer in ENTRIES or ABSENCE_RULES before inserting.
+        # 3-tuple (directive, bad_value, expected_value_prefix) matches the 4-column UNIQUE key.
+        keep_pairs = (
+            [(e.directive, e.bad_value, "") for e in ENTRIES]
+            + [(r.directive, r.bad_value, r.expected_value_prefix) for r in ABSENCE_RULES]
+        )
         removed = db.delete_misconfigurations_not_in(meta.name, keep_pairs)
         if removed:
             logger.info("Removed %d orphaned misconfiguration(s) not in ENTRIES", removed)
@@ -144,6 +273,16 @@ def run_build(
         )
         results = pipeline.run(ENTRIES, db, dry_run=dry_run)
 
+        # Absence rules are pre-scored manually and inserted directly (no LLM pass).
+        for rule in ABSENCE_RULES:
+            if not dry_run:
+                db.upsert_misconfiguration(rule)
+                logger.info(
+                    "Absence rule upserted: %s (required_when=%s)",
+                    rule.directive, rule.required_when,
+                )
+        results = results + ABSENCE_RULES
+
         # Stage 2: generate attack chains via LLM
         # timeout=300: the chain prompt contains all 30 misconfigs — needs more time
         # than individual metric calls (which use the default 120s)
@@ -153,6 +292,7 @@ def run_build(
             llm=llm,
             merge_with_fallback=False,
             timeout=300,
+            chains_json_path=Path(__file__).parent / "chains.json",
         )
 
         if not dry_run:
