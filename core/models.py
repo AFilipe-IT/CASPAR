@@ -174,6 +174,9 @@ class ScanResult:
     # Each entry is a dict (edb_id, title, type, verified, cve, path). Empty when
     # there is no version, no exploits, or searchsploit is unavailable.
     version_exploits: list = field(default_factory=list)
+    # True when the CVE/exploit lookup could not run (e.g. NVD timeout). Lets the
+    # report distinguish "no exploits found" from "could not check".
+    exploit_lookup_failed: bool = False
 
     def model_dump_json(self, indent: int = 2) -> str:
         """Compatibility shim — matches Pydantic's .model_dump_json() API."""

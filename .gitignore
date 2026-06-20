@@ -17,6 +17,10 @@ env/
 # Cache de exploitabilidade por versão (F1, online-first)
 .ccss_cache/
 
+# Relatórios gerados pelo scan (output, não versionar)
+reports/*
+!reports/.gitkeep
+
 # Python
 __pycache__/
 *.pyc
