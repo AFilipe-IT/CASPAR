@@ -304,41 +304,54 @@ def _amplify_version_exposure(
     product: str,
     version: str | None,
     exposing_directives: tuple[str, ...],
-) -> None:
-    """Amplify the temporal score of version-exposing misconfigs in place (F1).
+) -> list[dict]:
+    """Amplify version-exposing misconfigs and resolve public exploits (F1).
 
     A misconfig that discloses the service version (declared by the plugin via
     `exposing_directives`) becomes more critical when that version is actually
     exploitable. Multiplies its temporal_score by version_amplification(info),
     capped at 10.0. Other misconfigs are never touched.
 
-    Degrades to a no-op (×1.0) when there is no version, an unknown product, or
-    no exposing directives present — keeping the offline/deterministic path.
+    Independently of the amplification factor, the version's CVEs are looked up
+    in Exploit-DB; the returned list of public exploits (as dicts) is attached to
+    the ScanResult so the report can show them with an alert.
+
+    Degrades to a no-op (no amplification, empty exploit list) when there is no
+    version, an unknown product, or no exposing directive present — keeping the
+    offline/deterministic path.
     """
     if not version or not exposing_directives:
-        return
+        return []
     exposed = [m for m in issues if m.directive in exposing_directives]
     if not exposed:
-        return
+        return []
 
-    # Lazy import: only reached when a version is present, so the offline path
-    # never imports the network module.
+    # Lazy imports: only reached when a version is present, so the offline path
+    # never imports the network/exploit modules.
     from core.cve_enricher import get_version_exploit_info, version_amplification
+    from core.exploit_enricher import search_exploits_for_cves
 
     info = get_version_exploit_info(product, version)
-    factor = version_amplification(info)
-    if factor == 1.0:
-        return
 
-    note = _version_risk_note(product, version, info)
-    for m in exposed:
-        m.temporal_score = min(round(m.temporal_score * factor, 1), 10.0)
-        m.version_amplification = factor
-        m.version_risk_note = note
+    factor = version_amplification(info)
+    if factor > 1.0:
+        note = _version_risk_note(product, version, info)
+        for m in exposed:
+            m.temporal_score = min(round(m.temporal_score * factor, 1), 10.0)
+            m.version_amplification = factor
+            m.version_risk_note = note
+            logger.info(
+                "[scan] Version-amplified %s ×%.2f → %.1f (%s)",
+                m.directive, factor, m.temporal_score, note,
+            )
+
+    exploits = search_exploits_for_cves(info.cve_ids) if info else []
+    if exploits:
         logger.info(
-            "[scan] Version-amplified %s ×%.2f → %.1f (%s)",
-            m.directive, factor, m.temporal_score, note,
+            "[scan] %d public exploit(s) found for %s %s",
+            len(exploits), product, version,
         )
+    return [vars(e) for e in exploits]
 
 
 def _version_risk_note(product: str, version: str, info) -> str:
@@ -415,11 +428,10 @@ def scan(input_path: str, db: Database, *, version: str | None = None) -> ScanRe
     # 5. Score — adjust AV/Au, recompute scores with system profile
     issues = _score_issues(issues, profile)
 
-    # 5b. Version-aware amplification (F1) — make version-exposing misconfigs
-    # more critical when the detected version is exploitable. No-op without a
+    # 5b. Version-aware amplification + exploit lookup (F1). No-op without a
     # version. The plugin declares which directives expose the version, so the
     # core never hardcodes directive names.
-    _amplify_version_exposure(
+    version_exploits = _amplify_version_exposure(
         issues, meta.name, version, meta.version_exposing_directives,
     )
 
@@ -458,6 +470,7 @@ def scan(input_path: str, db: Database, *, version: str | None = None) -> ScanRe
         total_issues_found=len(issues),
         total_chains_detected=len(fired_chains),
         detected_version=version,
+        version_exploits=version_exploits,
     )
 
     logger.info(

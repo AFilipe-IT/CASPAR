@@ -170,6 +170,10 @@ class ScanResult:
     # when the input mode cannot reveal it (a bare config file). Drives the
     # version-aware scoring in F1.
     detected_version: str | None = None
+    # Public exploits (Exploit-DB) for the detected version's CVEs (F1 extension).
+    # Each entry is a dict (edb_id, title, type, verified, cve, path). Empty when
+    # there is no version, no exploits, or searchsploit is unavailable.
+    version_exploits: list = field(default_factory=list)
 
     def model_dump_json(self, indent: int = 2) -> str:
         """Compatibility shim — matches Pydantic's .model_dump_json() API."""
