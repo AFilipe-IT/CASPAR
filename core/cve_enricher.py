@@ -57,6 +57,11 @@ VERSION_CACHE_DIR = Path(".ccss_cache")
 VERSION_CACHE_FILE = VERSION_CACHE_DIR / "version_exploits.json"
 VERSION_CACHE_TTL = 24 * 60 * 60  # seconds
 
+# The CPE/version query (resultsPerPage=2000) is heavy and the NVD is often slow
+# to answer it — measured ~24s for a busy product. 20s timed out every time;
+# 60s gives the NVD room to respond.
+NVD_CPE_TIMEOUT = 60  # seconds
+
 
 # ------------------------------------------------------------------ #
 # .env loader                                                          #
@@ -205,7 +210,7 @@ class NVDClient:
             req = urllib.request.Request(
                 url, headers={"User-Agent": "CCSS-Scan/0.1 (security research)"},
             )
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=NVD_CPE_TIMEOUT) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             if e.code == 429:
@@ -214,7 +219,7 @@ class NVDClient:
                 try:
                     with urllib.request.urlopen(
                         urllib.request.Request(url, headers={"User-Agent": "CCSS-Scan/0.1"}),
-                        timeout=20,
+                        timeout=NVD_CPE_TIMEOUT,
                     ) as resp:
                         data = json.loads(resp.read().decode("utf-8"))
                 except Exception as e2:
@@ -285,7 +290,7 @@ class NVDClient:
             req = urllib.request.Request(
                 url, headers={"User-Agent": "CCSS-Scan/0.1 (security research)"},
             )
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=NVD_CPE_TIMEOUT) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             if e.code == 429:
@@ -294,7 +299,7 @@ class NVDClient:
                 try:
                     with urllib.request.urlopen(
                         urllib.request.Request(url, headers={"User-Agent": "CCSS-Scan/0.1"}),
-                        timeout=20,
+                        timeout=NVD_CPE_TIMEOUT,
                     ) as resp:
                         data = json.loads(resp.read().decode("utf-8"))
                 except Exception as e2:
