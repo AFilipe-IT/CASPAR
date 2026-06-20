@@ -392,9 +392,12 @@ def get_version_exploit_info(
     client = client or NVDClient(api_key=get_nvd_api_key())
     info = client.get_cves_for_version(product, version, kev_ids=_load_kev())
 
-    # Do not cache a failed lookup — otherwise a transient NVD timeout would be
-    # pinned for the whole TTL. Only successful results are persisted.
-    if not info.lookup_failed:
+    # Do not cache inconclusive results — a failed lookup (timeout) OR an empty
+    # CVE set. The NVD intermittently returns an empty "vulnerabilities" array
+    # for a busy product even on a 200 OK; caching that 0 would pin a false
+    # negative for the whole TTL and hide the real CVEs. Only a non-empty,
+    # successful result is persisted.
+    if not info.lookup_failed and info.cve_count > 0:
         cache[key] = {
             "cve_count": info.cve_count,
             "kev_count": info.kev_count,

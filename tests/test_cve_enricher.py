@@ -442,6 +442,22 @@ class TestVersionCacheFlow:
         assert second.cached is True
         assert second.cve_ids == ["CVE-2021-1000", "CVE-2021-1001"]
 
+    @patch("core.cve_enricher._load_kev", return_value=set())
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_empty_result_not_cached(self, mock_urlopen, _kev, isolated_cache):
+        """A 0-CVE NVD response must NOT be cached (could be a spurious empty
+        array); the next call re-queries instead of serving a false negative."""
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=0))
+        first = get_version_exploit_info("apache-httpd", "2.4.58", client=NVDClient())
+        assert first.cve_count == 0
+        # Cache file must not have pinned the empty result.
+        assert not isolated_cache.exists() or "2.4.58" not in isolated_cache.read_text()
+        # Second call hits the network again (no cached 0).
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=3))
+        second = get_version_exploit_info("apache-httpd", "2.4.58", client=NVDClient())
+        assert second.cve_count == 3
+        assert second.cached is False
+
     def test_no_version_returns_none(self, isolated_cache):
         assert get_version_exploit_info("apache-httpd", None) is None
 
