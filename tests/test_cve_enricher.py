@@ -465,5 +465,59 @@ class TestVersionCacheFlow:
         assert get_version_exploit_info("mystery-svc", "1.0") is None
 
 
+class TestPriorityDbFirst:
+    """Priority: local DB > JSON cache > live NVD."""
+
+    @pytest.fixture
+    def db(self):
+        from core.db.database import Database
+        d = Database(":memory:")
+        yield d
+        d.close()
+
+    def _seed(self, db, n_cves=3, exploits=None):
+        db.upsert_version_exploits(
+            "apache-httpd", "2.4.49",
+            cve_count=n_cves, kev_count=1, max_cvss=9.8,
+            cve_ids=["CVE-2021-41773"],
+            exploits=exploits or [{"edb_id": "50383", "title": "RCE",
+                                   "verified": True, "cve": "CVE-2021-41773"}],
+        )
+
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_db_hit_skips_network_and_cache(self, mock_urlopen, db, isolated_cache):
+        self._seed(db)
+        info = get_version_exploit_info("apache-httpd", "2.4.49", db=db)
+        assert info.cached is True
+        assert info.cve_count == 3
+        assert info.exploits[0]["edb_id"] == "50383"   # pre-resolved from DB
+        mock_urlopen.assert_not_called()                # no network
+        assert not isolated_cache.exists()              # JSON cache untouched
+
+    @patch("core.cve_enricher._load_kev", return_value=set())
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_db_miss_falls_back_to_cache(self, mock_urlopen, _kev, db, isolated_cache):
+        # DB empty for this version → JSON cache path (seed cache, no network).
+        import json as _json, time as _time
+        isolated_cache.parent.mkdir(parents=True, exist_ok=True)
+        isolated_cache.write_text(_json.dumps({
+            "apache-httpd:2.4.49": {"cve_count": 7, "kev_count": 0,
+                                    "max_cvss": 1.0, "cve_ids": [],
+                                    "fetched_at": _time.time()}
+        }))
+        info = get_version_exploit_info("apache-httpd", "2.4.49", db=db)
+        assert info.cached is True and info.cve_count == 7
+        mock_urlopen.assert_not_called()
+
+    @patch("core.cve_enricher._load_kev", return_value=set())
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_db_and_cache_miss_hits_nvd(self, mock_urlopen, _kev, db, isolated_cache):
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=4))
+        info = get_version_exploit_info("apache-httpd", "2.4.49", db=db, client=NVDClient())
+        assert info.cve_count == 4
+        assert info.cached is False
+        mock_urlopen.assert_called()                    # live NVD
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -444,6 +444,61 @@ def build(ctx, benchmark, model, ollama_url, target, dry_run) -> None:
         sys.exit(1)
 
 
+@cli.command(name="fetch-exploits")
+@click.option("--product", "-p", default=None,
+              help="Target product (e.g. apache-httpd). Default: all plugins.")
+@click.option("--version", "-V", "versions", multiple=True,
+              help="Specific version(s) to fetch. Default: the plugin's curated list.")
+@click.pass_context
+def fetch_exploits(ctx, product, versions) -> None:
+    """Pre-fetch version exploitability (NVD + Exploit-DB) into the local DB.
+
+    \b
+    Runs the network lookups once, at build time, so scans stay offline.
+      ccss fetch-exploits                          # all plugins, curated versions
+      ccss fetch-exploits -p apache-httpd          # one product, curated versions
+      ccss fetch-exploits -p apache-httpd -V 2.4.49
+    """
+    _discover_plugins()
+    from core.runtime import registered_plugins
+    from core.version_prefetch import fetch_versions
+    from core.db.database import Database
+
+    # Build the {product: [versions]} plan from plugins (or the explicit args).
+    plan: dict[str, list[str]] = {}
+    for p in registered_plugins():
+        m = p.metadata()
+        if product and m.name != product:
+            continue
+        vlist = list(versions) if versions else list(m.prefetch_versions)
+        if vlist:
+            plan[m.name] = vlist
+
+    if not plan:
+        click.echo("Nada a buscar (nenhuma versão curada; usa -p/-V).", err=True)
+        return
+
+    with Database(ctx.obj["db_path"]) as db:
+        for prod, vlist in plan.items():
+            click.echo(f"\n  {prod} — {len(vlist)} versão(ões)")
+            click.echo("  " + "─" * 50)
+            results = fetch_versions(db, prod, vlist)
+            for r in results:
+                if not r["ok"]:
+                    click.echo(click.style(
+                        f"  ✗ {r['version']:<10} NVD indisponível (tenta de novo)",
+                        fg="yellow"))
+                elif r["exploit_count"] > 0:
+                    click.echo(click.style(
+                        f"  ⚠ {r['version']:<10} {r['cve_count']} CVEs, "
+                        f"{r['exploit_count']} exploits", fg="red"))
+                else:
+                    click.echo(click.style(
+                        f"  ✓ {r['version']:<10} {r['cve_count']} CVEs, "
+                        f"sem exploits", fg="green"))
+    click.echo()
+
+
 @cli.command()
 def targets() -> None:
     """Listar plugins disponíveis."""

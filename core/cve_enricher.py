@@ -141,6 +141,7 @@ class VersionExploitInfo:
     cached: bool = False
     cve_ids: list[str] = field(default_factory=list)  # CVEs affecting this version (for exploit lookup)
     lookup_failed: bool = False  # True when the NVD query errored (timeout etc.) — distinct from "no CVEs"
+    exploits: list | None = None  # pre-resolved Exploit-DB records (set only on a DB hit); None ⇒ resolve at runtime
 
 
 # ------------------------------------------------------------------ #
@@ -366,16 +367,39 @@ def get_version_exploit_info(
     version: str | None,
     client: "NVDClient | None" = None,
     use_cache: bool = True,
+    db=None,
 ) -> VersionExploitInfo | None:
-    """Resolve version→exploitability, online-first with a 24h persistent cache.
+    """Resolve version→exploitability.
+
+    Priority: local DB (pre-fetched) > JSON cache > live NVD.
+
+    The DB path is fully offline and deterministic: when `db` holds a
+    pre-fetched row for (product, version), it is returned immediately — with the
+    already-resolved Exploit-DB records attached — and neither the JSON cache nor
+    the NVD is consulted. Otherwise it falls back to the online-first behaviour
+    (JSON cache within TTL, else a live NVD query that is then persisted).
 
     Returns None when there is nothing to look up (no version, or product not in
-    CPE_TEMPLATES) — callers treat None as amplification ×1.0. A fresh NVD lookup
-    is persisted; a cache hit within TTL skips the network entirely.
+    CPE_TEMPLATES) — callers treat None as amplification ×1.0.
     """
     if not version or product not in CPE_TEMPLATES:
         return None
 
+    # 1. Local DB (pre-fetched by `ccss fetch-exploits`) — zero network.
+    if db is not None:
+        row = db.get_version_exploits(product, version)
+        if row is not None:
+            return VersionExploitInfo(
+                product=product, version=version,
+                cve_count=row["cve_count"],
+                kev_count=row["kev_count"],
+                max_cvss=row["max_cvss"],
+                cached=True,
+                cve_ids=row["cve_ids"],
+                exploits=row["exploits"],
+            )
+
+    # 2. JSON cache (within TTL).
     key = f"{product}:{version}"
     cache = _load_version_cache()
     entry = cache.get(key)
