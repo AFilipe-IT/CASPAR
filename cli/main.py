@@ -281,7 +281,8 @@ def cli(ctx: click.Context, db: str, verbose: bool) -> None:
 @click.option("--format", "-f", "fmt", default="html",
               type=click.Choice(["html", "dashboard", "json", "sarif"], case_sensitive=False),
               show_default=True)
-@click.option("--output", "-o", default=".", show_default=True)
+@click.option("--output", "-o", default=None,
+              help="Directory for reports (default: <project>/reports/).")
 @click.option("--online", is_flag=True, default=False,
               help="Use online charts (ECharts via CDN) for the dashboard format.")
 @click.option("--threshold", "-t", default=0.0, type=float,
@@ -349,7 +350,12 @@ def scan(ctx, input_path, live, report, fmt, output, threshold, online) -> None:
     _print_result(result, resolved=resolved)
 
     if report:
-        od = Path(output)
+        # Default: a reports/ directory inside the project (next to cli/),
+        # so reports are collected in the repo regardless of the cwd.
+        if output:
+            od = Path(output)
+        else:
+            od = Path(__file__).resolve().parent.parent / "reports"
         od.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         stem = (

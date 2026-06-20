@@ -135,6 +135,7 @@ class VersionExploitInfo:
     max_cvss: float = 0.0
     cached: bool = False
     cve_ids: list[str] = field(default_factory=list)  # CVEs affecting this version (for exploit lookup)
+    lookup_failed: bool = False  # True when the NVD query errored (timeout etc.) — distinct from "no CVEs"
 
 
 # ------------------------------------------------------------------ #
@@ -298,13 +299,13 @@ class NVDClient:
                         data = json.loads(resp.read().decode("utf-8"))
                 except Exception as e2:
                     logger.warning("NVD CPE retry failed: %s", e2)
-                    return VersionExploitInfo(product=product, version=version)
+                    return VersionExploitInfo(product=product, version=version, lookup_failed=True)
             else:
                 logger.debug("NVD %d for %s @ %s", e.code, product, version)
-                return VersionExploitInfo(product=product, version=version)
+                return VersionExploitInfo(product=product, version=version, lookup_failed=True)
         except Exception as e:
             logger.warning("NVD CPE error for %s @ %s: %s", product, version, e)
-            return VersionExploitInfo(product=product, version=version)
+            return VersionExploitInfo(product=product, version=version, lookup_failed=True)
         finally:
             self._last_request = time.monotonic()
 
@@ -386,14 +387,17 @@ def get_version_exploit_info(
     client = client or NVDClient(api_key=get_nvd_api_key())
     info = client.get_cves_for_version(product, version, kev_ids=_load_kev())
 
-    cache[key] = {
-        "cve_count": info.cve_count,
-        "kev_count": info.kev_count,
-        "max_cvss": info.max_cvss,
-        "cve_ids": info.cve_ids,
-        "fetched_at": time.time(),
-    }
-    _save_version_cache(cache)
+    # Do not cache a failed lookup — otherwise a transient NVD timeout would be
+    # pinned for the whole TTL. Only successful results are persisted.
+    if not info.lookup_failed:
+        cache[key] = {
+            "cve_count": info.cve_count,
+            "kev_count": info.kev_count,
+            "max_cvss": info.max_cvss,
+            "cve_ids": info.cve_ids,
+            "fetched_at": time.time(),
+        }
+        _save_version_cache(cache)
     return info
 
 
