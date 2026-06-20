@@ -330,6 +330,7 @@ def run_build(
             llm=llm,
             merge_with_fallback=False,
             timeout=300,
+            chains_json_path=Path(__file__).parent / "chains.json",
         )
         if not dry_run:
             for chain in chains:

@@ -17,13 +17,20 @@ import pytest
 from core.ccss import base_score, temporal_score
 from core.llm_client import StubLLMClient
 from core.models import AttackChain, Misconfiguration
+from pathlib import Path
+
 from plugins.apache_httpd.chain_pipeline import (
     _build_chain_prompt,
     _extract_chains_json,
-    _load_fallback_chains,
+    _load_curated_chains,
     _validate_chain,
     generate_chains,
 )
+
+# Sentinel path with no chains.json → forces the LLM bootstrap path.
+# (generate_chains is JSON-first: a real chains.json short-circuits the LLM.)
+_NO_JSON = Path("/nonexistent/__no_chains__.json")
+_APACHE_JSON = Path(__file__).resolve().parents[1] / "plugins" / "apache_httpd" / "chains.json"
 
 
 # ------------------------------------------------------------------ #
@@ -282,89 +289,102 @@ class TestValidateChain:
 # Fallback loading                                                      #
 # ------------------------------------------------------------------ #
 
-class TestFallbackChains:
+class TestCuratedChains:
 
-    def test_fallback_loads_chains_json(self):
-        chains = _load_fallback_chains()
-        assert len(chains) >= 5
+    def test_curated_loads_apache_chains_json(self):
+        chains = _load_curated_chains(_APACHE_JSON)
+        assert len(chains) == 11  # curated set (see chains.json)
         assert all(isinstance(c, AttackChain) for c in chains)
 
-    def test_fallback_chains_have_valid_fields(self):
-        chains = _load_fallback_chains()
+    def test_curated_chains_have_valid_fields(self):
+        chains = _load_curated_chains(_APACHE_JSON)
         for c in chains:
             assert c.chain_id
             assert len(c.misconfig_directives) >= 2
             assert 1.0 <= c.amplification <= 2.0
             assert c.target_name == "apache-httpd"
 
+    def test_curated_missing_file_returns_empty(self):
+        assert _load_curated_chains(_NO_JSON) == []
+
 
 # ------------------------------------------------------------------ #
 # End-to-end generate_chains                                            #
 # ------------------------------------------------------------------ #
 
-class TestGenerateChains:
+class TestGenerateChainsJsonFirst:
+    """JSON-first semantics: a curated chains.json is the source of truth and
+    the LLM is never called when it exists (deterministic, reproducible)."""
+
+    def test_curated_json_used_and_llm_ignored(self, sample_misconfigs):
+        # Stub LLM returns junk; it must be ignored because the JSON exists.
+        llm = StubLLMClient(fixed_response="garbage, no chains here")
+        chains = generate_chains(sample_misconfigs, llm, chains_json_path=_APACHE_JSON)
+        ids = {c.chain_id for c in chains}
+        # Curated chains whose directives are a subset of sample_misconfigs.
+        assert "info-disclosure-chain" in ids        # ServerTokens, ServerSignature
+        assert "directory-traversal-chain" in ids    # Options, AllowOverride
+        assert chains, "Curated JSON should yield chains"
+
+    def test_curated_chains_filtered_by_known_directives(self, sample_misconfigs):
+        # sample_misconfigs lacks e.g. Group/Timeout-trio, so chains needing
+        # absent directives are dropped — same validity rule as the LLM path.
+        llm = StubLLMClient(fixed_response="[]")
+        chains = generate_chains(sample_misconfigs, llm, chains_json_path=_APACHE_JSON)
+        known = {m.directive for m in sample_misconfigs}
+        for c in chains:
+            assert set(c.misconfig_directives) <= known, (
+                f"Chain '{c.chain_id}' references directives absent from the bank"
+            )
+
+    def test_no_duplicate_chain_ids(self, sample_misconfigs):
+        llm = StubLLMClient(fixed_response="[]")
+        chains = generate_chains(sample_misconfigs, llm, chains_json_path=_APACHE_JSON)
+        ids = [c.chain_id for c in chains]
+        assert len(ids) == len(set(ids)), "Duplicate chain IDs found"
+
+
+class TestGenerateChainsLLMBootstrap:
+    """LLM-bootstrap path: only reached when there is no curated chains.json
+    (e.g. a brand-new target). Forced here with a nonexistent JSON path."""
 
     def test_valid_llm_response_produces_chains(self, sample_misconfigs):
         llm = StubLLMClient(fixed_response=VALID_LLM_RESPONSE)
-        chains = generate_chains(sample_misconfigs, llm)
+        chains = generate_chains(sample_misconfigs, llm, chains_json_path=_NO_JSON)
         assert len(chains) == 3
 
     def test_chain_ids_are_present(self, sample_misconfigs):
         llm = StubLLMClient(fixed_response=VALID_LLM_RESPONSE)
-        chains = generate_chains(sample_misconfigs, llm)
+        chains = generate_chains(sample_misconfigs, llm, chains_json_path=_NO_JSON)
         ids = {c.chain_id for c in chains}
         assert "recon-to-rce" in ids
         assert "root-privilege-escalation" in ids
 
     def test_amplification_values_in_range(self, sample_misconfigs):
         llm = StubLLMClient(fixed_response=VALID_LLM_RESPONSE)
-        chains = generate_chains(sample_misconfigs, llm)
+        chains = generate_chains(sample_misconfigs, llm, chains_json_path=_NO_JSON)
         for c in chains:
             assert 1.1 <= c.amplification <= 1.8
 
-    def test_bad_llm_falls_back_to_chains_json(self, sample_misconfigs):
-        """LLM que devolve lixo → fallback para chains.json."""
+    def test_bad_llm_no_json_returns_empty(self, sample_misconfigs):
+        """LLM lixo + sem chains.json → vazio (nada a que recorrer)."""
         llm = StubLLMClient(fixed_response="I cannot identify any chains, sorry.")
-        chains = generate_chains(sample_misconfigs, llm, max_retries=1)
-        # Should have fallen back to chains.json
-        assert len(chains) >= 5
-        fallback_ids = {c.chain_id for c in _load_fallback_chains()}
-        chain_ids = {c.chain_id for c in chains}
-        assert len(chain_ids & fallback_ids) > 0
+        chains = generate_chains(
+            sample_misconfigs, llm, max_retries=1, chains_json_path=_NO_JSON
+        )
+        assert chains == []
 
-    def test_empty_llm_array_falls_back(self, sample_misconfigs):
-        """LLM que devolve [] (sem chains) → fallback."""
+    def test_empty_llm_array_no_json_returns_empty(self, sample_misconfigs):
         llm = StubLLMClient(fixed_response="[]")
-        chains = generate_chains(sample_misconfigs, llm, max_retries=1)
-        assert len(chains) >= 5  # from fallback
-
-    def test_merge_with_fallback_adds_missing(self, sample_misconfigs):
-        """merge_with_fallback=True adiciona chains.json que o LLM não gerou."""
-        # LLM só gera 1 chain
-        one_chain = json.dumps([{
-            "chain_id": "unique-llm-chain",
-            "misconfig_directives": ["ServerTokens", "User"],
-            "amplification": 1.4,
-            "justification": "LLM chain.",
-            "cross_target": False,
-        }])
-        llm = StubLLMClient(fixed_response=one_chain)
-        chains = generate_chains(sample_misconfigs, llm, merge_with_fallback=True)
-        ids = {c.chain_id for c in chains}
-        # LLM chain + fallback chains (sem duplicados)
-        assert "unique-llm-chain" in ids
-        assert len(chains) > 1
-
-    def test_no_duplicate_chain_ids(self, sample_misconfigs):
-        llm = StubLLMClient(fixed_response=VALID_LLM_RESPONSE)
-        chains = generate_chains(sample_misconfigs, llm, merge_with_fallback=True)
-        ids = [c.chain_id for c in chains]
-        assert len(ids) == len(set(ids)), "Duplicate chain IDs found"
+        chains = generate_chains(
+            sample_misconfigs, llm, max_retries=1, chains_json_path=_NO_JSON
+        )
+        assert chains == []
 
     def test_directives_are_subset_of_known(self, sample_misconfigs):
         """LLM não pode inventar directivas que não estão nas misconfigs."""
         llm = StubLLMClient(fixed_response=VALID_LLM_RESPONSE)
-        chains = generate_chains(sample_misconfigs, llm)
+        chains = generate_chains(sample_misconfigs, llm, chains_json_path=_NO_JSON)
         known = {m.directive for m in sample_misconfigs}
         for chain in chains:
             for d in chain.misconfig_directives:
@@ -372,12 +392,12 @@ class TestGenerateChains:
 
     def test_empty_misconfigs_returns_empty(self):
         llm = StubLLMClient(fixed_response="[]")
-        chains = generate_chains([], llm)
+        chains = generate_chains([], llm, chains_json_path=_NO_JSON)
         assert chains == []
 
     def test_markdown_fenced_response_parsed(self, sample_misconfigs):
         """LLM que envolve JSON em markdown fences."""
         md_response = f"```json\n{VALID_LLM_RESPONSE}\n```"
         llm = StubLLMClient(fixed_response=md_response)
-        chains = generate_chains(sample_misconfigs, llm)
+        chains = generate_chains(sample_misconfigs, llm, chains_json_path=_NO_JSON)
         assert len(chains) == 3

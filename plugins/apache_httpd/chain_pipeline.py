@@ -231,18 +231,27 @@ def _validate_chain(raw: dict, known_directives: set[str]) -> AttackChain | None
 # Fallback chains (from hard-coded chains.json)                        #
 # ------------------------------------------------------------------ #
 
-def _load_fallback_chains() -> list[AttackChain]:
-    """Load hand-curated chains.json as fallback."""
+def _load_curated_chains(chains_path) -> list[AttackChain]:
+    """Load a hand-curated chains.json from *chains_path* (a Path or str).
+
+    This is the source of truth for attack chains: the build prefers these
+    versioned, deterministic chains over LLM generation (see generate_chains).
+    The LLM path remains only as a bootstrap for targets that have no
+    chains.json yet. ``target_name`` is taken from each entry (no plugin-specific
+    default), so this loader works for any target's JSON.
+    """
     import json as _json
     from pathlib import Path
 
-    chains_path = Path(__file__).parent / "chains.json"
+    chains_path = Path(chains_path)
+    if not chains_path.exists():
+        return []
     try:
         raw = _json.loads(chains_path.read_text(encoding="utf-8"))
         return [
             AttackChain(
                 chain_id=c["chain_id"],
-                target_name=c.get("target_name", "apache-httpd"),
+                target_name=c["target_name"],
                 misconfig_directives=c["misconfig_directives"],
                 amplification=c.get("amplification", 1.3),
                 justification=c.get("justification", ""),
@@ -251,7 +260,7 @@ def _load_fallback_chains() -> list[AttackChain]:
             for c in raw
         ]
     except Exception as e:
-        logger.warning("Could not load fallback chains.json: %s", e)
+        logger.warning("Could not load curated chains %s: %s", chains_path, e)
         return []
 
 
@@ -265,16 +274,25 @@ def generate_chains(
     max_retries: int = 3,
     merge_with_fallback: bool = False,
     timeout: int = 300,
+    chains_json_path=None,
 ) -> list[AttackChain]:
     """
-    Generate attack chains from a list of scored misconfigurations using the LLM.
+    Resolve the attack chains for a target.
+
+    Source of truth is the curated, versioned chains.json (chains_json_path).
+    When it exists with at least one chain, those chains are used directly —
+    deterministic and reproducible — after the same directive-validity check the
+    LLM path applies (every directive must exist in this build's misconfig bank).
+    The LLM is only the bootstrap path for a target that has no chains.json yet.
 
     Args:
         misconfigs:           List of Misconfiguration with scores already computed.
         llm:                  LLM client (Ollama or stub).
-        max_retries:          Number of LLM call attempts before falling back.
-        merge_with_fallback:  If True, merge LLM chains with chains.json (dedup by chain_id).
-                              If False, use only LLM chains (or fallback if LLM fails entirely).
+        max_retries:          LLM call attempts (only used when there is no JSON).
+        merge_with_fallback:  Kept for API compatibility; ignored in the
+                              JSON-first path.
+        chains_json_path:     Path to the target's curated chains.json. Defaults
+                              to this module's apache chains.json (back-compat).
 
     Returns:
         List of AttackChain objects ready to upsert into the database.
@@ -284,6 +302,29 @@ def generate_chains(
         return []
 
     known = _known_directives(misconfigs)
+
+    # --- JSON-first: curated chains are the source of truth ---
+    if chains_json_path is None:
+        from pathlib import Path
+        chains_json_path = Path(__file__).parent / "chains.json"
+    curated = _load_curated_chains(chains_json_path)
+    if curated:
+        valid = [c for c in curated if set(c.misconfig_directives) <= known]
+        dropped = len(curated) - len(valid)
+        if dropped:
+            logger.warning(
+                "%d curated chain(s) reference directives absent from the "
+                "misconfig bank — skipped (check chains.json vs build).", dropped,
+            )
+        logger.info(
+            "Using %d curated chains from %s (LLM skipped).",
+            len(valid), chains_json_path,
+        )
+        return valid
+
+    logger.info(
+        "No curated chains at %s — bootstrapping via LLM.", chains_json_path,
+    )
     prompt = _build_chain_prompt(misconfigs)
 
     chains: list[AttackChain] = []
@@ -330,25 +371,13 @@ def generate_chains(
             last_error = e
             logger.warning("Chain generation attempt %d failed: %s", attempt + 1, e)
 
-    # If all attempts failed, use fallback
+    # This point is only reached when there was no curated chains.json (the
+    # bootstrap path), so there is no JSON to fall back to. Curate the LLM
+    # output into chains.json to make subsequent builds deterministic.
     if not chains:
         logger.error(
-            "All %d LLM attempts failed (%s) — using fallback chains.json",
+            "All %d LLM attempts failed (%s) and no curated chains.json exists.",
             max_retries, last_error,
         )
-        chains = _load_fallback_chains()
-
-    # Optionally merge with hand-curated chains
-    if merge_with_fallback and chains:
-        fallback = _load_fallback_chains()
-        existing_ids = {c.chain_id for c in chains}
-        added = 0
-        for fc in fallback:
-            if fc.chain_id not in existing_ids:
-                chains.append(fc)
-                existing_ids.add(fc.chain_id)
-                added += 1
-        if added:
-            logger.info("Merged %d additional chains from chains.json", added)
 
     return chains
