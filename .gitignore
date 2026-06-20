@@ -14,6 +14,9 @@ env/
 *.db-shm
 *.db-wal
 
+# Cache de exploitabilidade por versão (F1, online-first)
+.ccss_cache/
+
 # Python
 __pycache__/
 *.pyc

@@ -47,6 +47,10 @@ class TargetMetadata:
     version: str
     benchmark_source: str
     priority: int = 100
+    # Directives that disclose the service version (e.g. ("ServerTokens",)).
+    # The plugin declares them; the runtime amplifies only these misconfigs when
+    # the detected version is exploitable (F1). The core never hardcodes names.
+    version_exposing_directives: tuple[str, ...] = ()
 
 
 # ------------------------------------------------------------------ #
@@ -109,6 +113,8 @@ class Misconfiguration:
     expected_value_prefix: str = ""  # for multi-instance directives (e.g. add_header)
     detected_in_scan: bool = False   # runtime
     source_directive: Optional[Directive] = None  # runtime
+    version_amplification: float = 1.0  # runtime — F1 version-aware factor applied (1.0 = none)
+    version_risk_note: str = ""  # runtime — human-readable reason for the amplification
     narrative: str = "{}"  # JSON string — rich narrative from Stage 3 LLM pipeline
 
     def model_dump(self) -> dict:
@@ -160,6 +166,10 @@ class ScanResult:
     total_directives_scanned: int = 0
     total_issues_found: int = 0
     total_chains_detected: int = 0
+    # Service version detected for the scanned target (e.g. "2.4.51"), or None
+    # when the input mode cannot reveal it (a bare config file). Drives the
+    # version-aware scoring in F1.
+    detected_version: str | None = None
 
     def model_dump_json(self, indent: int = 2) -> str:
         """Compatibility shim — matches Pydantic's .model_dump_json() API."""

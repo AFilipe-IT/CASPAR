@@ -44,6 +44,19 @@ logger = logging.getLogger(__name__)
 NVD_API_BASE = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 
+# CPE 2.3 templates per target, for version-level CVE lookup (F1). The {version}
+# placeholder is substituted with the detected service version. Extensible to
+# new targets (SSH, Ubuntu, ...) without touching the lookup logic.
+CPE_TEMPLATES: dict[str, str] = {
+    "apache-httpd": "cpe:2.3:a:apache:http_server:{version}:*:*:*:*:*:*:*",
+    "nginx":        "cpe:2.3:a:nginx:nginx:{version}:*:*:*:*:*:*:*",
+}
+
+# Persistent cache of version→exploitability lookups (F1, online-first).
+VERSION_CACHE_DIR = Path(".ccss_cache")
+VERSION_CACHE_FILE = VERSION_CACHE_DIR / "version_exploits.json"
+VERSION_CACHE_TTL = 24 * 60 * 60  # seconds
+
 
 # ------------------------------------------------------------------ #
 # .env loader                                                          #
@@ -106,6 +119,21 @@ class EnrichmentResult:
     gel: str = "ND"
     grl: str = "H"
     notes: str = ""
+
+
+@dataclass
+class VersionExploitInfo:
+    """Exploitability summary for a detected service version (F1).
+
+    cached=True means the data came from the local cache (within TTL) rather
+    than a live NVD lookup — surfaced so the dashboard can show provenance.
+    """
+    product: str
+    version: str
+    cve_count: int = 0
+    kev_count: int = 0
+    max_cvss: float = 0.0
+    cached: bool = False
 
 
 # ------------------------------------------------------------------ #
@@ -223,6 +251,162 @@ class NVDClient:
             severity=severity,
             published=cve.get("published", "")[:10],
         )
+
+    def get_cves_for_version(
+        self, product: str, version: str, kev_ids: set[str] | None = None,
+    ) -> VersionExploitInfo:
+        """Count CVEs affecting *product* at *version* via NVD CPE match (F1).
+
+        Queries the NVD by CPE (virtualMatchString) — a parallel path to the
+        per-CVE-ID get_cve(). Returns a VersionExploitInfo (cached=False, this is
+        a live lookup); on any error returns an empty info so scoring degrades to
+        amplification ×1.0 rather than failing the scan.
+        """
+        cpe = CPE_TEMPLATES.get(product)
+        if not cpe or not version:
+            return VersionExploitInfo(product=product, version=version or "")
+        if kev_ids is None:
+            kev_ids = _load_kev()
+
+        params: dict[str, str] = {
+            "virtualMatchString": cpe.format(version=version),
+            "resultsPerPage": "2000",
+        }
+        if self.api_key:
+            params["apiKey"] = self.api_key
+
+        self._wait()
+        url = f"{NVD_API_BASE}?{urllib.parse.urlencode(params)}"
+        logger.debug("NVD CPE lookup: %s @ %s", product, version)
+
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "CCSS-Scan/0.1 (security research)"},
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                logger.warning("NVD rate limited (429) — waiting 35s")
+                time.sleep(35)
+                try:
+                    with urllib.request.urlopen(
+                        urllib.request.Request(url, headers={"User-Agent": "CCSS-Scan/0.1"}),
+                        timeout=20,
+                    ) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                except Exception as e2:
+                    logger.warning("NVD CPE retry failed: %s", e2)
+                    return VersionExploitInfo(product=product, version=version)
+            else:
+                logger.debug("NVD %d for %s @ %s", e.code, product, version)
+                return VersionExploitInfo(product=product, version=version)
+        except Exception as e:
+            logger.warning("NVD CPE error for %s @ %s: %s", product, version, e)
+            return VersionExploitInfo(product=product, version=version)
+        finally:
+            self._last_request = time.monotonic()
+
+        vulns = data.get("vulnerabilities", [])
+        cve_count = len(vulns)
+        kev_count = 0
+        max_cvss = 0.0
+        for v in vulns:
+            cve = v.get("cve", {})
+            if cve.get("id") in kev_ids:
+                kev_count += 1
+            for mk in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+                entries = cve.get("metrics", {}).get(mk, [])
+                if entries:
+                    score = entries[0].get("cvssData", {}).get("baseScore")
+                    if score is not None:
+                        max_cvss = max(max_cvss, float(score))
+                    break
+
+        return VersionExploitInfo(
+            product=product, version=version,
+            cve_count=cve_count, kev_count=kev_count,
+            max_cvss=round(max_cvss, 1), cached=False,
+        )
+
+
+# ------------------------------------------------------------------ #
+# Version exploitability — cache + amplification (F1)                  #
+# ------------------------------------------------------------------ #
+
+def _load_version_cache() -> dict:
+    try:
+        return json.loads(VERSION_CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_version_cache(cache: dict) -> None:
+    try:
+        VERSION_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        VERSION_CACHE_FILE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning("Could not write version cache: %s", e)
+
+
+def get_version_exploit_info(
+    product: str,
+    version: str | None,
+    client: "NVDClient | None" = None,
+    use_cache: bool = True,
+) -> VersionExploitInfo | None:
+    """Resolve version→exploitability, online-first with a 24h persistent cache.
+
+    Returns None when there is nothing to look up (no version, or product not in
+    CPE_TEMPLATES) — callers treat None as amplification ×1.0. A fresh NVD lookup
+    is persisted; a cache hit within TTL skips the network entirely.
+    """
+    if not version or product not in CPE_TEMPLATES:
+        return None
+
+    key = f"{product}:{version}"
+    cache = _load_version_cache()
+    entry = cache.get(key)
+    if use_cache and entry and (time.time() - entry.get("fetched_at", 0)) < VERSION_CACHE_TTL:
+        return VersionExploitInfo(
+            product=product, version=version,
+            cve_count=entry.get("cve_count", 0),
+            kev_count=entry.get("kev_count", 0),
+            max_cvss=entry.get("max_cvss", 0.0),
+            cached=True,
+        )
+
+    client = client or NVDClient(api_key=get_nvd_api_key())
+    info = client.get_cves_for_version(product, version, kev_ids=_load_kev())
+
+    cache[key] = {
+        "cve_count": info.cve_count,
+        "kev_count": info.kev_count,
+        "max_cvss": info.max_cvss,
+        "fetched_at": time.time(),
+    }
+    _save_version_cache(cache)
+    return info
+
+
+def version_amplification(info: VersionExploitInfo | None) -> float:
+    """Pure mapping exploitability → score amplification factor (F1).
+
+    No I/O. None / unknown version → ×1.0 (graceful no-op).
+        kev_count > 0   → ×1.5   (actively exploited version)
+        cve_count >= 5  → ×1.3
+        cve_count >= 1  → ×1.15
+        otherwise       → ×1.0
+    """
+    if info is None:
+        return 1.0
+    if info.kev_count > 0:
+        return 1.5
+    if info.cve_count >= 5:
+        return 1.3
+    if info.cve_count >= 1:
+        return 1.15
+    return 1.0
 
 
 # ------------------------------------------------------------------ #

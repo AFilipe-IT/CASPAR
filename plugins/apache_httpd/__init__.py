@@ -158,6 +158,7 @@ class ApachePlugin(Target):
             version="2.4",
             benchmark_source="CIS Apache HTTP Server 2.4 Benchmark v2.3.0",
             priority=100,
+            version_exposing_directives=("ServerTokens",),
         )
 
     def detection_confidence(self, path: str) -> int:

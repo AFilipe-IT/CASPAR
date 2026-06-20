@@ -10,8 +10,10 @@ minimal plugin — without touching a single line of the core modules.
 
 import os
 import tempfile
+from unittest.mock import patch
 import pytest
 
+from core.cve_enricher import VersionExploitInfo
 from core.db.database import Database
 from core.models import (
     AttackChain,
@@ -352,3 +354,102 @@ class TestEndToEnd:
         r1 = runtime.scan(dummy_config_file, db)
         r2 = runtime.scan(safe_config_file, db)
         assert r1.input_hash != r2.input_hash
+
+
+class TestVersionPropagation:
+    """F1 Peça 1: detected version flows into the ScanResult."""
+
+    def test_version_propagates_to_scan_result(self, dummy_config_file, db):
+        from plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+
+        result = runtime.scan(dummy_config_file, db, version="2.4.51")
+        assert result.detected_version == "2.4.51"
+
+    def test_version_defaults_to_none(self, dummy_config_file, db):
+        """Existing callers that omit version see None — unchanged behaviour."""
+        from plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+
+        result = runtime.scan(dummy_config_file, db)
+        assert result.detected_version is None
+
+    def test_version_serialised_in_json(self, dummy_config_file, db):
+        from plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+
+        result = runtime.scan(dummy_config_file, db, version="1.27.0")
+        assert '"detected_version": "1.27.0"' in result.model_dump_json()
+
+
+class TestVersionAmplificationE2E:
+    """F1 Peça 3: version-exposing misconfig amplified end-to-end via scan().
+
+    The dummy plugin declares DangerousOption as version-exposing. We mock the
+    NVD lookup so no network is touched.
+    """
+
+    def _exposing_issue(self, result):
+        return next(m for m in result.issues if m.directive == "DangerousOption")
+
+    def _base_temporal(self, dummy_config_file, db):
+        """Temporal score with no version (no amplification) — the baseline."""
+        from plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+        result = runtime.scan(dummy_config_file, db)
+        return self._exposing_issue(result).temporal_score
+
+    @patch("core.cve_enricher.get_version_exploit_info")
+    def test_kev_active_amplifies_temporal(self, mock_info, dummy_config_file, db):
+        from plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+        base = self._base_temporal(dummy_config_file, db)
+
+        # KEV active → factor 1.5
+        mock_info.return_value = VersionExploitInfo(
+            "dummy", "2.4.49", cve_count=8, kev_count=2, max_cvss=9.8
+        )
+        result = runtime.scan(dummy_config_file, db, version="2.4.49")
+        issue = self._exposing_issue(result)
+
+        assert issue.version_amplification == 1.5
+        assert issue.temporal_score == min(round(base * 1.5, 1), 10.0)
+        assert issue.temporal_score > base
+
+    @patch("core.cve_enricher.get_version_exploit_info")
+    def test_no_cves_no_amplification(self, mock_info, dummy_config_file, db):
+        from plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+        base = self._base_temporal(dummy_config_file, db)
+
+        mock_info.return_value = VersionExploitInfo("dummy", "2.4.99", cve_count=0)
+        result = runtime.scan(dummy_config_file, db, version="2.4.99")
+        issue = self._exposing_issue(result)
+
+        assert issue.version_amplification == 1.0
+        assert issue.temporal_score == base
+
+    def test_version_none_no_amplification(self, dummy_config_file, db):
+        from plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+        base = self._base_temporal(dummy_config_file, db)
+
+        # version=None → enricher never consulted, score unchanged.
+        result = runtime.scan(dummy_config_file, db, version=None)
+        issue = self._exposing_issue(result)
+        assert issue.version_amplification == 1.0
+        assert issue.temporal_score == base
+
+    @patch("core.cve_enricher.get_version_exploit_info")
+    def test_only_exposing_directive_amplified(self, mock_info, dummy_config_file, db):
+        """Other misconfigs must NOT be touched — only DangerousOption."""
+        from plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+
+        mock_info.return_value = VersionExploitInfo(
+            "dummy", "2.4.49", cve_count=8, kev_count=2
+        )
+        result = runtime.scan(dummy_config_file, db, version="2.4.49")
+        for m in result.issues:
+            if m.directive != "DangerousOption":
+                assert m.version_amplification == 1.0
