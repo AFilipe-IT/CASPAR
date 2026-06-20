@@ -51,6 +51,9 @@ class TargetMetadata:
     # The plugin declares them; the runtime amplifies only these misconfigs when
     # the detected version is exploitable (F1). The core never hardcodes names.
     version_exposing_directives: tuple[str, ...] = ()
+    # Curated versions to pre-fetch exploitability for (F1, `ccss fetch-exploits`).
+    # Versions known to have public exploits + commonly deployed ones.
+    prefetch_versions: tuple[str, ...] = ()
 
 
 # ------------------------------------------------------------------ #

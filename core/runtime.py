@@ -304,6 +304,7 @@ def _amplify_version_exposure(
     product: str,
     version: str | None,
     exposing_directives: tuple[str, ...],
+    db=None,
 ) -> tuple[list[dict], bool, int]:
     """Amplify version-exposing misconfigs and resolve public exploits (F1).
 
@@ -333,7 +334,8 @@ def _amplify_version_exposure(
     from core.cve_enricher import get_version_exploit_info, version_amplification
     from core.exploit_enricher import search_exploits_for_cves
 
-    info = get_version_exploit_info(product, version)
+    # DB-first: a pre-fetched row is offline and deterministic.
+    info = get_version_exploit_info(product, version, db=db)
 
     factor = version_amplification(info)
     if factor > 1.0:
@@ -351,13 +353,20 @@ def _amplify_version_exposure(
     # three states: exploits found / lookup failed / checked-and-clean.
     lookup_failed = bool(info and info.lookup_failed)
     cves_checked = info.cve_count if (info and not info.lookup_failed) else 0
-    exploits = search_exploits_for_cves(info.cve_ids) if info else []
+    # If the info came from the DB it already carries resolved exploits — use
+    # them directly (no searchsploit). Otherwise resolve from the CVE ids.
+    if info and info.exploits is not None:
+        exploits = list(info.exploits)
+    elif info:
+        exploits = [vars(e) for e in search_exploits_for_cves(info.cve_ids)]
+    else:
+        exploits = []
     if exploits:
         logger.info(
             "[scan] %d public exploit(s) found for %s %s",
             len(exploits), product, version,
         )
-    return [vars(e) for e in exploits], lookup_failed, cves_checked
+    return exploits, lookup_failed, cves_checked
 
 
 def _version_risk_note(product: str, version: str, info) -> str:
@@ -438,7 +447,7 @@ def scan(input_path: str, db: Database, *, version: str | None = None) -> ScanRe
     # version. The plugin declares which directives expose the version, so the
     # core never hardcodes directive names.
     version_exploits, exploit_lookup_failed, version_cves_checked = _amplify_version_exposure(
-        issues, meta.name, version, meta.version_exposing_directives,
+        issues, meta.name, version, meta.version_exposing_directives, db=db,
     )
 
     # 6. Detect chains

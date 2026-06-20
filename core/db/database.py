@@ -540,6 +540,55 @@ class Database:
         )
 
     # ------------------------------------------------------------------ #
+    # version_exploits — pre-fetched version exploitability (F1)            #
+    # ------------------------------------------------------------------ #
+
+    def upsert_version_exploits(
+        self, product: str, version: str, *,
+        cve_count: int, kev_count: int, max_cvss: float,
+        cve_ids: list, exploits: list,
+    ) -> None:
+        """Insert or replace the pre-fetched exploitability for a version."""
+        self._conn.execute(
+            """
+            INSERT INTO version_exploits
+                (product, version, cve_count, kev_count, max_cvss,
+                 cve_ids, exploits, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            ON CONFLICT(product, version) DO UPDATE SET
+                cve_count  = excluded.cve_count,
+                kev_count  = excluded.kev_count,
+                max_cvss   = excluded.max_cvss,
+                cve_ids    = excluded.cve_ids,
+                exploits   = excluded.exploits,
+                fetched_at = excluded.fetched_at
+            """,
+            (product, version, cve_count, kev_count, max_cvss,
+             json.dumps(cve_ids), json.dumps(exploits)),
+        )
+        self._conn.commit()
+
+    def get_version_exploits(self, product: str, version: str) -> dict | None:
+        """Return the pre-fetched exploitability for a version, or None."""
+        cur = self._conn.execute(
+            "SELECT * FROM version_exploits WHERE product = ? AND version = ?",
+            (product, version),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        return {
+            "product": row["product"],
+            "version": row["version"],
+            "cve_count": row["cve_count"],
+            "kev_count": row["kev_count"],
+            "max_cvss": row["max_cvss"],
+            "cve_ids": json.loads(row["cve_ids"]),
+            "exploits": json.loads(row["exploits"]),
+            "fetched_at": row["fetched_at"],
+        }
+
+    # ------------------------------------------------------------------ #
     # scan_results                                                         #
     # ------------------------------------------------------------------ #
 

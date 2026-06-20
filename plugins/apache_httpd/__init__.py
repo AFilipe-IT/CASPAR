@@ -159,6 +159,9 @@ class ApachePlugin(Target):
             benchmark_source="CIS Apache HTTP Server 2.4 Benchmark v2.3.0",
             priority=100,
             version_exposing_directives=("ServerTokens",),
+            # 2.4.49/.50/.66 have public exploits in Exploit-DB; 2.4.58 is a
+            # commonly deployed version (demonstrates the "checked & clean" path).
+            prefetch_versions=("2.4.49", "2.4.50", "2.4.58", "2.4.66"),
         )
 
     def detection_confidence(self, path: str) -> int:

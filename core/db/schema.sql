@@ -107,3 +107,19 @@ CREATE INDEX IF NOT EXISTS idx_scan_results_target
 
 CREATE INDEX IF NOT EXISTS idx_scan_results_hash
     ON scan_results (input_hash);
+
+-- Pre-fetched version exploitability (F1). Populated at build time by
+-- `ccss fetch-exploits` (NVD + Exploit-DB), read locally at runtime so the
+-- scan path stays offline and deterministic. exploits_json holds the resolved
+-- Exploit-DB records so the runtime never shells out to searchsploit either.
+CREATE TABLE IF NOT EXISTS version_exploits (
+    product     TEXT    NOT NULL,
+    version     TEXT    NOT NULL,
+    cve_count   INTEGER NOT NULL DEFAULT 0,
+    kev_count   INTEGER NOT NULL DEFAULT 0,
+    max_cvss    REAL    NOT NULL DEFAULT 0.0,
+    cve_ids     TEXT    NOT NULL DEFAULT '[]',
+    exploits    TEXT    NOT NULL DEFAULT '[]',
+    fetched_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (product, version)
+);
