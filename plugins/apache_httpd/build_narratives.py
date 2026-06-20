@@ -33,6 +33,7 @@ from plugins.apache_httpd.narrative_pipeline import NarrativePipeline
 _SERVICE_NAMES = {
     "apache-httpd": "Apache HTTP Server",
     "nginx": "Nginx",
+    "ssh": "OpenSSH Server",
 }
 
 logging.basicConfig(
