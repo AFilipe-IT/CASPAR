@@ -134,6 +134,7 @@ class VersionExploitInfo:
     kev_count: int = 0
     max_cvss: float = 0.0
     cached: bool = False
+    cve_ids: list[str] = field(default_factory=list)  # CVEs affecting this version (for exploit lookup)
 
 
 # ------------------------------------------------------------------ #
@@ -311,9 +312,13 @@ class NVDClient:
         cve_count = len(vulns)
         kev_count = 0
         max_cvss = 0.0
+        cve_ids: list[str] = []
         for v in vulns:
             cve = v.get("cve", {})
-            if cve.get("id") in kev_ids:
+            cid = cve.get("id")
+            if cid:
+                cve_ids.append(cid)
+            if cid in kev_ids:
                 kev_count += 1
             for mk in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
                 entries = cve.get("metrics", {}).get(mk, [])
@@ -327,6 +332,7 @@ class NVDClient:
             product=product, version=version,
             cve_count=cve_count, kev_count=kev_count,
             max_cvss=round(max_cvss, 1), cached=False,
+            cve_ids=cve_ids,
         )
 
 
@@ -374,6 +380,7 @@ def get_version_exploit_info(
             kev_count=entry.get("kev_count", 0),
             max_cvss=entry.get("max_cvss", 0.0),
             cached=True,
+            cve_ids=entry.get("cve_ids", []),
         )
 
     client = client or NVDClient(api_key=get_nvd_api_key())
@@ -383,6 +390,7 @@ def get_version_exploit_info(
         "cve_count": info.cve_count,
         "kev_count": info.kev_count,
         "max_cvss": info.max_cvss,
+        "cve_ids": info.cve_ids,
         "fetched_at": time.time(),
     }
     _save_version_cache(cache)

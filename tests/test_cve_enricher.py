@@ -376,6 +376,12 @@ class TestGetCVEsForVersion:
         info = NVDClient().get_cves_for_version("mystery-svc", "1.0")
         assert info.cve_count == 0 and info.kev_count == 0
 
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_retains_cve_ids(self, mock_urlopen):
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=3))
+        info = NVDClient().get_cves_for_version("apache-httpd", "2.4.49", kev_ids=set())
+        assert info.cve_ids == ["CVE-2021-1000", "CVE-2021-1001", "CVE-2021-1002"]
+
 
 class TestVersionCacheFlow:
     @patch("core.cve_enricher._load_kev", return_value=set())
@@ -424,6 +430,17 @@ class TestVersionCacheFlow:
         assert mock_urlopen.call_count == 1   # refetched
         assert info.cve_count == 2            # fresh value, not the stale 99
         assert info.cached is False
+
+    @patch("core.cve_enricher._load_kev", return_value=set())
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_cve_ids_survive_cache_roundtrip(self, mock_urlopen, _kev, isolated_cache):
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=2))
+        first = get_version_exploit_info("apache-httpd", "2.4.49", client=NVDClient())
+        assert first.cve_ids == ["CVE-2021-1000", "CVE-2021-1001"]
+        # From cache (no network) the IDs must still be there.
+        second = get_version_exploit_info("apache-httpd", "2.4.49", client=NVDClient())
+        assert second.cached is True
+        assert second.cve_ids == ["CVE-2021-1000", "CVE-2021-1001"]
 
     def test_no_version_returns_none(self, isolated_cache):
         assert get_version_exploit_info("apache-httpd", None) is None

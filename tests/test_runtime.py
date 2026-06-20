@@ -453,3 +453,71 @@ class TestVersionAmplificationE2E:
         for m in result.issues:
             if m.directive != "DangerousOption":
                 assert m.version_amplification == 1.0
+
+
+class TestVersionExploitsE2E:
+    """F1 exploit extension: ScanResult.version_exploits populated via scan()."""
+
+    @patch("core.exploit_enricher.search_exploits_for_cves")
+    @patch("core.cve_enricher.get_version_exploit_info")
+    def test_exploits_attached_to_result(self, mock_info, mock_exploits,
+                                         dummy_config_file, db):
+        from plugins.dummy import DummyPlugin
+        from core.exploit_enricher import ExploitRecord
+        runtime.register_plugin(DummyPlugin())
+
+        mock_info.return_value = VersionExploitInfo(
+            "dummy", "2.4.49", cve_count=1, kev_count=0,
+            cve_ids=["CVE-2021-41773"],
+        )
+        mock_exploits.return_value = [
+            ExploitRecord(edb_id="50383", title="Apache RCE", verified=True,
+                          cve="CVE-2021-41773", path="/x/50383.py"),
+        ]
+        result = runtime.scan(dummy_config_file, db, version="2.4.49")
+
+        assert len(result.version_exploits) == 1
+        assert result.version_exploits[0]["edb_id"] == "50383"
+        # searchsploit was called with the CVE ids from the version lookup.
+        mock_exploits.assert_called_once_with(["CVE-2021-41773"])
+
+    @patch("core.exploit_enricher.search_exploits_for_cves", return_value=[])
+    @patch("core.cve_enricher.get_version_exploit_info")
+    def test_no_exploits_empty_list(self, mock_info, _mx, dummy_config_file, db):
+        from plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+        mock_info.return_value = VersionExploitInfo(
+            "dummy", "2.4.99", cve_count=0, cve_ids=[],
+        )
+        result = runtime.scan(dummy_config_file, db, version="2.4.99")
+        assert result.version_exploits == []
+
+    def test_no_version_no_exploits(self, dummy_config_file, db):
+        from plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+        result = runtime.scan(dummy_config_file, db)  # no version
+        assert result.version_exploits == []
+
+    @patch("core.exploit_enricher.search_exploits_for_cves")
+    @patch("core.cve_enricher.get_version_exploit_info")
+    def test_exploits_listed_even_without_amplification(
+        self, mock_info, mock_exploits, dummy_config_file, db
+    ):
+        """Public exploits are shown even when there is no KEV/CVE amplification."""
+        from plugins.dummy import DummyPlugin
+        from core.exploit_enricher import ExploitRecord
+        runtime.register_plugin(DummyPlugin())
+
+        # cve_count=0 → version_amplification == 1.0 (no score change) ...
+        mock_info.return_value = VersionExploitInfo(
+            "dummy", "2.4.49", cve_count=0, kev_count=0, cve_ids=["CVE-2021-41773"],
+        )
+        # ... but an exploit still exists for that CVE.
+        mock_exploits.return_value = [
+            ExploitRecord(edb_id="50383", title="Apache RCE", cve="CVE-2021-41773"),
+        ]
+        result = runtime.scan(dummy_config_file, db, version="2.4.49")
+
+        issue = next(m for m in result.issues if m.directive == "DangerousOption")
+        assert issue.version_amplification == 1.0       # no amplification
+        assert len(result.version_exploits) == 1        # but exploit listed
