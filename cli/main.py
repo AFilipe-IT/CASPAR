@@ -503,6 +503,149 @@ def fetch_exploits(ctx, product, versions) -> None:
     click.echo()
 
 
+@cli.group("plugin")
+def plugin_group():
+    """Manage CCSS-Scan plugins."""
+
+
+@plugin_group.command("add")
+@click.option("--source", "-s", required=True, type=click.Path(exists=True),
+              help="CIS Benchmark PDF")
+@click.option("--dry-run", is_flag=True, help="Show spec without installing")
+@click.option("--no-llm", is_flag=True,
+              help="Heuristic extraction only (skip LLM for ambiguous)")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+@click.option("--verbose", "verbose_list", is_flag=True,
+              help="List all extracted controls, not just a preview")
+@click.option("--model", "-m", default="qwen2.5:14b", show_default=True)
+@click.pass_context
+def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
+    """Install a new plugin from a CIS Benchmark PDF."""
+    from pathlib import Path as _Path
+    from core.plugin_detector import detect_service_from_pdf
+    from core.benchmark_extractor import extract_all
+    from core.rag import BenchmarkIndex
+    from core.plugin_scaffolder import PluginSpec, scaffold_plugin
+    from core.llm_client import make_client
+
+    src_name = _Path(source).name
+    click.echo(f"\nAnalysing {src_name}...")
+
+    llm = None if no_llm else make_client(
+        backend="ollama", model=model, fallback_to_stub=True)
+
+    # ── Peça 4: detect service ─────────────────────────────────────────
+    info = detect_service_from_pdf(source, llm=llm)
+    if info is None:
+        click.echo(click.style(
+            "  Service not recognised in known-services list.", fg="yellow"))
+        if not yes and not click.confirm(
+                "  Proceed anyway with a generic key_value plugin?", default=False):
+            click.echo("  Aborted.")
+            return
+        # Fallback generic descriptor derived from the filename.
+        stem = _Path(source).stem.lower().replace("cis_", "").split("_")[0] or "service"
+        info = {
+            "target_id": stem, "service_name": stem.capitalize(),
+            "config_format": "key_value", "config_paths": [],
+            "config_filenames": [f"{stem}.conf"], "bind_directive": None,
+            "version_exposing": [],
+        }
+    click.echo(f"Identified: {info['service_name']} "
+               f"({info['config_format']} — {info['config_filenames'][0]})")
+
+    # ── Peça 1+3: index + extract ──────────────────────────────────────
+    idx = BenchmarkIndex(source)
+    click.echo(f"Indexing benchmark sections: {len(idx.sections)} sections found\n")
+
+    click.echo("Extracting controls...")
+    candidates = extract_all(idx, llm=llm)
+    n_high = sum(1 for c in candidates if c.confidence == "high" and not c.needs_review)
+    n_llm = sum(1 for c in candidates if c.method == "LLM")
+    n_review = sum(1 for c in candidates if c.needs_review)
+    usable = [c for c in candidates if c.directive and not c.needs_review]
+    n_skipped = len(idx.sections) - len(usable)
+
+    click.echo(f"  Heuristic (high):  {n_high:3}")
+    if not no_llm:
+        click.echo(f"  LLM (medium/low):  {n_llm:3}")
+    click.echo(f"  Skipped:           {n_skipped:3}    (procedures/out-of-scope)")
+    click.echo(f"  Total:             {len(usable):3} controls\n")
+
+    if not usable:
+        click.echo(click.style("  No controls extracted — nothing to install.",
+                               fg="yellow"))
+        return
+
+    # ── preview ────────────────────────────────────────────────────────
+    click.echo("Preview:")
+    shown = usable if verbose_list else usable[:5]
+    for c in shown:
+        tag = "llm" if c.method == "LLM" else c.confidence
+        click.echo(f"  {c.directive:22} {(c.bad_value or '?'):12} → "
+                   f"{(c.good_value or '?'):16} §{c.section_id:8} [{tag}]")
+    if not verbose_list and len(usable) > 5:
+        click.echo(f"  ... ({len(usable) - 5} more — use --verbose to see all)")
+
+    click.echo(f"\nPlugin: {info['target_id']} | Format: {info['config_format']} "
+               f"| Config: {info['config_filenames'][0]}")
+    click.echo(f"Benchmark: {idx.sections[0].title[:40] if idx.sections else src_name}")
+
+    # ── build the spec ─────────────────────────────────────────────────
+    entries = [(c.directive, c.bad_value, c.good_value, c.section_id) for c in usable]
+    spec = PluginSpec(
+        service_name=info["service_name"], target_id=info["target_id"],
+        config_format=info["config_format"], config_paths=info["config_paths"],
+        config_filenames=info["config_filenames"],
+        bind_directive=info["bind_directive"],
+        version_exposing=info["version_exposing"], entries=entries,
+        benchmark_source=src_name.replace(".pdf", "").replace("_", " "),
+    )
+
+    if dry_run:
+        click.echo(click.style("\n[dry-run] No files created.", fg="cyan"))
+        return
+
+    # ── confirm ────────────────────────────────────────────────────────
+    plugins_dir = _Path(__file__).resolve().parent.parent / "plugins"
+    target_dir = plugins_dir / info["target_id"]
+    if target_dir.exists() and not yes:
+        if not click.confirm(
+                f"\nPlugin '{info['target_id']}' already exists — overwrite?",
+                default=False):
+            click.echo("  Aborted.")
+            return
+    if not yes and not click.confirm(
+            f"\nGenerate plugin '{info['target_id']}'?", default=False):
+        click.echo("  Aborted.")
+        return
+
+    # ── Peça 2: scaffold ───────────────────────────────────────────────
+    click.echo("\nGenerating plugin files...")
+    plugin_dir = scaffold_plugin(spec, plugins_dir, benchmark_pdf=source)
+    for f in sorted(plugin_dir.iterdir()):
+        click.echo(click.style(f"  ✓ plugins/{info['target_id']}/{f.name}", fg="green"))
+
+    # ── build pipeline (Stages 1+2+3) ──────────────────────────────────
+    click.echo("\nRunning build pipeline...")
+    from core.generic_build import run_generic_build
+    from plugins.apache_httpd.llm_pipeline import MisconfigEntry
+    mentries = [MisconfigEntry(d, b, g, s, "", info["target_id"])
+                for (d, b, g, s) in entries]
+    stats = run_generic_build(
+        target_id=info["target_id"], service_name=info["service_name"],
+        benchmark_source=spec.benchmark_source,
+        benchmark_path=str(plugin_dir / src_name),
+        entries=mentries, db_path=ctx.obj["db_path"], model=model,
+    )
+    click.echo(click.style(
+        f"\nPlugin '{info['target_id']}' installed successfully.", fg="green"))
+    click.echo(f"  Misconfigs: {stats['misconfigs']} | Chains: {stats['chains']} "
+               f"| Narratives: {stats['narratives']}/{stats['misconfigs']}")
+    cf = info["config_paths"][0] if info["config_paths"] else info["config_filenames"][0]
+    click.echo(f"\nRun: ccss scan {cf}")
+
+
 @cli.command()
 def targets() -> None:
     """Listar plugins disponíveis."""
