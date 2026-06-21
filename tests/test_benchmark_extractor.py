@@ -21,7 +21,10 @@ from core.benchmark_extractor import (
     try_extract_entry,
     classify_section,
     extract_bad_value_from_default,
+    llm_extract_entry,
+    extract_all,
 )
+from core.llm_client import StubLLMClient
 
 
 # ------------------------------------------------------------------ #
@@ -165,6 +168,85 @@ def test_verified_ground_truth(sections, sid, expected_bad):
         f"[{sid}] expected bad_value={expected_bad!r}, got {r.bad_value!r} "
         f"(method={r.method})"
     )
+
+
+class TestLLMExtraction:
+    def test_llm_extracts_directive(self):
+        s = _Sec(section_id="3.1.2", title="log_destination",
+                 remediation="set log_destination to csvlog", directives=[])
+        llm = StubLLMClient(fixed_response=(
+            '{"extract": true, "directive": "log_destination", '
+            '"bad_value": "stderr", "good_value": "csvlog", "rule_type": "value"}'))
+        r = llm_extract_entry(s, llm)
+        assert r is not None
+        assert r.directive == "log_destination"
+        assert r.bad_value == "stderr" and r.good_value == "csvlog"
+        assert r.method == "LLM" and r.confidence == "medium"
+
+    def test_llm_declines_procedure(self):
+        s = _Sec(section_id="2.1", title="file permissions")
+        llm = StubLLMClient(fixed_response='{"extract": false, "reason": "procedure"}')
+        assert llm_extract_entry(s, llm) is None
+
+    def test_llm_garbage_returns_none(self):
+        s = _Sec(section_id="x", title="y")
+        llm = StubLLMClient(fixed_response="no json here")
+        assert llm_extract_entry(s, llm) is None
+
+    def test_llm_json_with_preamble(self):
+        s = _Sec(section_id="z", title="ssl")
+        llm = StubLLMClient(fixed_response=(
+            'Sure! Here is the JSON:\n'
+            '{"extract": true, "directive": "ssl", "bad_value": "off", '
+            '"good_value": "on", "rule_type": "value"}'))
+        r = llm_extract_entry(s, llm)
+        assert r is not None and r.directive == "ssl"
+
+
+class TestExtractAll:
+    class _Idx:
+        def __init__(self, sections):
+            self.sections = sections
+
+    def test_high_confidence_kept_without_llm(self):
+        s = _Sec(section_id="8.1", remediation="ServerTokens Prod",
+                 default_value="The default value is Full.",
+                 directives=["ServerTokens"])
+        res = extract_all(self._Idx([s]), llm=None)
+        assert len(res) == 1 and res[0].confidence == "high"
+
+    def test_procedure_skipped(self):
+        s = _Sec(section_id="3.2", remediation="# chmod 600 file", directives=["User"])
+        res = extract_all(self._Idx([s]), llm=None)
+        assert res == []
+
+    def test_llm_used_for_non_high(self):
+        # A section with no known directive (heuristic fails) → LLM resolves it.
+        s = _Sec(section_id="3.1.2", title="log_destination",
+                 remediation="set log_destination to csvlog", directives=[])
+        llm = StubLLMClient(fixed_response=(
+            '{"extract": true, "directive": "log_destination", '
+            '"bad_value": "stderr", "good_value": "csvlog", "rule_type": "value"}'))
+        res = extract_all(self._Idx([s]), llm=llm)
+        assert len(res) == 1 and res[0].method == "LLM"
+
+    def test_needs_review_without_llm(self):
+        # Heuristic can't resolve, no LLM → needs_review (if a directive hint).
+        s = _Sec(section_id="6.6", title="x", directives=["User"],
+                 remediation="prose only", default_value="")
+        res = extract_all(self._Idx([s]), llm=None)
+        assert len(res) == 1 and res[0].needs_review is True
+
+    def test_high_sorted_before_medium(self):
+        high = _Sec(section_id="8.1", remediation="ServerTokens Prod",
+                    default_value="The default value is Full.",
+                    directives=["ServerTokens"])
+        med = _Sec(section_id="3.1", title="ssl", remediation="set ssl", directives=[])
+        llm = StubLLMClient(fixed_response=(
+            '{"extract": true, "directive": "ssl", "bad_value": "off", '
+            '"good_value": "on", "rule_type": "value"}'))
+        res = extract_all(self._Idx([med, high]), llm=llm)
+        assert res[0].confidence == "high"   # high first regardless of input order
 
 
 def test_coverage_is_stable(sections):

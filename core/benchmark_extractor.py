@@ -28,6 +28,8 @@ class ExtractionResult:
     rule_type: Literal["value", "absence", "skip"] = "skip"
     confidence: Literal["high", "medium", "low"] = "low"
     method: str = ""  # which heuristic fired
+    section_id: str = ""
+    needs_review: bool = False  # heuristic+LLM could not resolve confidently
 
 
 def classify_section(section) -> Literal["value", "absence", "procedure", "unknown"]:
@@ -100,3 +102,109 @@ def extract_bad_value_from_default(default_value: str, directive: str) -> str:
     if first_word and first_word[0].isupper() and len(first_word) > 1:
         return first_word
     return ""
+
+
+# ------------------------------------------------------------------ #
+# LLM extraction for ambiguous sections (Peça 3)                       #
+# ------------------------------------------------------------------ #
+
+def _extract_json(text: str) -> dict | None:
+    """Pull the first JSON object out of an LLM response."""
+    import json
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start:i + 1])
+                except json.JSONDecodeError:
+                    return None
+    return None
+
+
+def llm_extract_entry(section, llm) -> ExtractionResult | None:
+    """Ask the LLM to extract a (directive, bad, good) from an ambiguous section.
+
+    Used for sections the heuristic could not resolve (confidence != "high"),
+    e.g. any non-Apache benchmark where directive names are not in the parser's
+    regex. Returns an ExtractionResult, or None when the LLM says the section is
+    not a config-value control (procedure / absence / unknown) or fails.
+    """
+    prompt = f'''CIS Benchmark section {section.section_id}: "{section.title}"
+Remediation: {section.remediation[:400]}
+Default Value: {section.default_value[:200]}
+
+If this describes a config DIRECTIVE with a concrete BAD VALUE and GOOD VALUE, extract them.
+If it's about file permissions, system state, or service management, output extract=false.
+
+Output JSON only:
+{{"extract": true, "directive": "name", "bad_value": "insecure", "good_value": "secure", "rule_type": "value"}}
+or
+{{"extract": false, "reason": "procedure/absence/unknown"}}'''
+
+    try:
+        raw = llm.complete(prompt, system="You extract CIS config directives. Output JSON only.")
+    except Exception:
+        return None
+
+    data = _extract_json(raw)
+    if not data or not data.get("extract"):
+        return None
+
+    directive = str(data.get("directive", "")).strip()
+    if not directive:
+        return None
+    rule_type = data.get("rule_type", "value")
+    if rule_type not in ("value", "absence"):
+        rule_type = "value"
+    return ExtractionResult(
+        directive=directive,
+        bad_value=str(data.get("bad_value", "")).strip(),
+        good_value=str(data.get("good_value", "")).strip(),
+        rule_type=rule_type,
+        confidence="medium",   # LLM-derived: lower than a clean heuristic hit
+        method="LLM",
+        section_id=section.section_id,
+    )
+
+
+def extract_all(index, llm=None) -> list[ExtractionResult]:
+    """Extract entries from every section: heuristic first, LLM for the rest.
+
+    - High-confidence heuristic hits are kept as-is.
+    - For anything else, if `llm` is given, try the LLM; otherwise mark
+      needs_review. Procedure sections are skipped (not config values).
+    - Returns results sorted high-confidence first, then by section id.
+    """
+    results: list[ExtractionResult] = []
+    for section in index.sections:
+        if classify_section(section) == "procedure":
+            continue
+
+        r = try_extract_entry(section)
+        r.section_id = section.section_id
+
+        if r.confidence == "high" and r.directive:
+            results.append(r)
+            continue
+
+        if llm is not None:
+            llm_r = llm_extract_entry(section, llm)
+            if llm_r is not None:
+                results.append(llm_r)
+                continue
+
+        # Unresolved: keep only if there is at least a directive hint to review.
+        if r.directive:
+            r.needs_review = True
+            results.append(r)
+
+    _rank = {"high": 0, "medium": 1, "low": 2}
+    results.sort(key=lambda x: (_rank.get(x.confidence, 3), x.section_id))
+    return results

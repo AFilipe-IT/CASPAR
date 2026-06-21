@@ -484,7 +484,11 @@ def fetch_exploits(ctx, product, versions) -> None:
             click.echo("  " + "─" * 50)
             results = fetch_versions(db, prod, vlist)
             for r in results:
-                if not r["ok"]:
+                if not r["ok"] and r.get("empty"):
+                    click.echo(click.style(
+                        f"  ? {r['version']:<10} 0 CVEs (inconclusivo — CPE ou "
+                        f"NVD vazio; não gravado)", fg="yellow"))
+                elif not r["ok"]:
                     click.echo(click.style(
                         f"  ✗ {r['version']:<10} NVD indisponível (tenta de novo)",
                         fg="yellow"))

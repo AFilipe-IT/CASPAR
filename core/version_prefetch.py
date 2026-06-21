@@ -42,7 +42,17 @@ def fetch_version(
     info = client.get_cves_for_version(product, version, kev_ids=kev_ids)
     if info.lookup_failed:
         logger.warning("NVD lookup failed for %s %s — not stored", product, version)
-        return {"version": version, "cve_count": 0, "exploit_count": 0, "ok": False}
+        return {"version": version, "cve_count": 0, "exploit_count": 0,
+                "ok": False, "empty": False}
+
+    # The NVD intermittently returns an empty array on a 200 OK for a busy
+    # product (or the CPE is wrong). Treat 0 CVEs as inconclusive and do not
+    # store it — same rule as the JSON cache — so a false negative is not pinned.
+    if info.cve_count == 0:
+        logger.warning("NVD returned 0 CVEs for %s %s — inconclusive, not stored",
+                       product, version)
+        return {"version": version, "cve_count": 0, "exploit_count": 0,
+                "ok": False, "empty": True}
 
     exploits = search_exploits_for_cves(info.cve_ids) if info.cve_ids else []
     exploit_dicts = [vars(e) for e in exploits]

@@ -58,9 +58,9 @@ VERSION_CACHE_FILE = VERSION_CACHE_DIR / "version_exploits.json"
 VERSION_CACHE_TTL = 24 * 60 * 60  # seconds
 
 # The CPE/version query (resultsPerPage=2000) is heavy and the NVD is often slow
-# to answer it — measured ~24s for a busy product. 20s timed out every time;
-# 60s gives the NVD room to respond.
-NVD_CPE_TIMEOUT = 60  # seconds
+# to answer it — measured 60-65s for some busy products (Apache 2.4.49/2.4.66).
+# 20s/60s timed out on those; 90s gives the NVD room to respond.
+NVD_CPE_TIMEOUT = 90  # seconds
 
 
 # ------------------------------------------------------------------ #
