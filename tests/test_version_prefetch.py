@@ -73,6 +73,18 @@ def test_failed_lookup_not_stored(db):
     assert db.get_version_exploits("apache-httpd", "2.4.49") is None  # nothing stored
 
 
+def test_empty_cve_result_not_stored(db):
+    # 0 CVEs on a successful lookup is inconclusive (spurious empty array or bad
+    # CPE) — must not be stored, so it can be retried.
+    info = VersionExploitInfo("nginx", "1.20.0", cve_count=0, cve_ids=[])
+    with patch("core.version_prefetch.search_exploits_for_cves", return_value=[]), \
+         patch("core.version_prefetch._load_kev", return_value=set()):
+        r = version_prefetch.fetch_version(db, "nginx", "1.20.0",
+                                           client=_StubClient(info))
+    assert r["ok"] is False and r["empty"] is True
+    assert db.get_version_exploits("nginx", "1.20.0") is None
+
+
 def test_fetch_versions_multiple(db):
     infos = {
         "2.4.49": VersionExploitInfo("apache-httpd", "2.4.49", cve_count=2,
