@@ -49,7 +49,10 @@ CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_v
 # new targets (SSH, Ubuntu, ...) without touching the lookup logic.
 CPE_TEMPLATES: dict[str, str] = {
     "apache-httpd": "cpe:2.3:a:apache:http_server:{version}:*:*:*:*:*:*:*",
-    "nginx":        "cpe:2.3:a:nginx:nginx:{version}:*:*:*:*:*:*:*",
+    # The NVD moved the Nginx vendor to "f5" after F5 acquired Nginx (2019).
+    # nginx:nginx returns 0 CVEs for modern versions; f5:nginx is correct
+    # (verified: nginx:nginx 1.20.0 → 0, f5:nginx 1.20.0 → 7).
+    "nginx":        "cpe:2.3:a:f5:nginx:{version}:*:*:*:*:*:*:*",
 }
 
 # Persistent cache of version→exploitability lookups (F1, online-first).
