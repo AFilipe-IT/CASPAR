@@ -1,0 +1,53 @@
+# .dockerignore — keeps the build context small.
+# NOTE: data/ccss_canonical.sql MUST be included (the image restores the DB
+# from it), so we are careful NOT to exclude it.
+
+.venv/
+venv/
+env/
+.git/
+.github/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Built SQLite databases — the image restores from data/ccss_canonical.sql.
+*.db
+*.db-shm
+*.db-wal
+*.db.bak
+
+# Local snapshots / scratch SQL (but NOT the canonical dump in data/).
+ccss_before_*.sql
+ccss_fresh.sql
+ccss_reference.sql
+
+# Test fixtures and generated artefacts.
+benchmarks/
+reports/*
+!reports/.gitkeep
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated documents.
+**/*.docx
+*.docx
+
+# Benchmark PDFs are build-time only (LLM/RAG extraction). The scan runtime
+# never reads them, so they are excluded from the image to keep it small.
+# (Saves ~85MB — the SSH CIS benchmark alone is 78MB.)
+**/*.pdf
+*.pdf
+
+# Editor / OS.
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# The docker dir itself (Dockerfiles are passed via -f; no need in context).
+docker/
