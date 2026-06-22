@@ -1,0 +1,9 @@
+# docker-compose.yml (raiz) — atalho para a stack do CASPAR.
+# A definição completa (caspar + ollama) vive em docker/caspar/.
+#
+#   docker compose run --rm caspar targets
+#   docker compose --profile full up -d ollama
+#
+# Ver docker/caspar/README.md para todos os casos de uso.
+include:
+  - docker/caspar/docker-compose.yml

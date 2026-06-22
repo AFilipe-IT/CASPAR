@@ -1,0 +1,40 @@
+# docker/caspar/Dockerfile.slim — CASPAR ultra-light scan-only image
+#
+# Build context MUST be the repository root:
+#   docker build -t caspar:slim -f docker/caspar/Dockerfile.slim .
+#
+# Scope: deterministic offline scan of local files / directories only.
+# NOT included: docker:// scanning (no docker CLI), build-time commands
+# (plugin add / build need Ollama + build tooling). For CI/CD and constrained
+# environments where only `caspar scan <path>` is needed.
+FROM python:3.12-alpine
+
+# Absolute minimum system deps: sqlite to restore the canonical DB.
+RUN apk add --no-cache sqlite
+
+WORKDIR /app
+
+# Runtime-only Python deps (no dev tools, no build chain).
+COPY pyproject.toml .
+RUN pip install --no-cache-dir click pydantic pypdf openpyxl requests
+
+# Copy only the code paths exercised by `scan`.
+COPY config_assessment/__init__.py ./config_assessment/
+COPY config_assessment/core/        ./config_assessment/core/
+COPY config_assessment/plugins/     ./config_assessment/plugins/
+COPY config_assessment/reports/     ./config_assessment/reports/
+COPY config_assessment/parsers/     ./config_assessment/parsers/
+COPY config_assessment/enrichment/  ./config_assessment/enrichment/
+COPY cli/ ./cli/
+COPY data/ccss_canonical.sql ./data/
+
+# Canonical database: restored from SQL, never copied as a .db.
+RUN sqlite3 ccss.db < data/ccss_canonical.sql
+
+# Non-root user.
+RUN adduser -D caspar && chown -R caspar:caspar /app
+USER caspar
+
+# Invoked as a module (entry point not installed in the slim image).
+ENTRYPOINT ["python", "-m", "cli.main"]
+CMD ["--help"]

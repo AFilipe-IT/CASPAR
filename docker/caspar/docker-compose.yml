@@ -1,0 +1,34 @@
+# docker/caspar/docker-compose.yml — CASPAR + Ollama orchestration
+#
+#   Runtime only (no Ollama):   docker compose run --rm caspar targets
+#   Build-time (with Ollama):   docker compose --profile full up -d ollama
+#                               docker compose --profile full run --rm caspar plugin add ...
+#
+# Build context is the repository root (two levels up).
+services:
+  caspar:
+    build:
+      context: ../..
+      dockerfile: docker/caspar/Dockerfile
+    image: caspar:latest
+    volumes:
+      - ./reports:/home/caspar/reports               # persistent reports
+      - /var/run/docker.sock:/var/run/docker.sock     # scan docker:// images
+      - caspar_db:/home/caspar/app                     # persistent DB between runs
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    # No hard depends_on: Ollama is only needed for build-time commands
+    # (profile "full"); runtime scans work standalone.
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "11434:11434"
+    profiles:
+      - full      # only started on demand (build-time commands)
+
+volumes:
+  caspar_db:
+  ollama_models:
