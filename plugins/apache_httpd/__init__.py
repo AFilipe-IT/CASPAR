@@ -161,7 +161,7 @@ class ApachePlugin(Target):
             version_exposing_directives=("ServerTokens",),
             # 2.4.49/.50/.66 have public exploits in Exploit-DB; 2.4.58 is a
             # commonly deployed version (demonstrates the "checked & clean" path).
-            prefetch_versions=("2.4.49", "2.4.50", "2.4.58", "2.4.66"),
+            prefetch_versions=("2.2.31", "2.2.34", "2.4.49", "2.4.50", "2.4.58", "2.4.66"),
         )
 
     def detection_confidence(self, path: str) -> int:

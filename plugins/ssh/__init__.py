@@ -136,6 +136,7 @@ class SSHPlugin(Target):
             benchmark_source="CIS Ubuntu Linux 24.04 LTS Benchmark v2.0.0 — Section 5.1",
             priority=100,
             version_exposing_directives=("Banner",),
+            prefetch_versions=("7.4", "8.0", "9.0"),
         )
 
     def detection_confidence(self, path: str) -> int:
