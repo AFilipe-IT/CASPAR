@@ -302,11 +302,16 @@ class TestEnrichMisconfiguration:
 # F1 — version exploitability lookup + amplification (mocked network)
 # ════════════════════════════════════════════════════════════════════
 
-def _fake_cpe_response(n_cves=0, kev_ids=(), scores=()):
-    """Build an NVD CPE-match response with n_cves vulnerabilities."""
+def _fake_cpe_response(n_cves=0, kev_ids=(), scores=(),
+                       total_results=None, results_per_page=2000, start_id=1000):
+    """Build an NVD v2 cpeName response with n_cves vulnerabilities.
+
+    total_results defaults to n_cves (single page). Set it higher than
+    results_per_page to exercise pagination.
+    """
     vulns = []
     for idx in range(n_cves):
-        cid = f"CVE-2021-{1000 + idx}"
+        cid = f"CVE-2021-{start_id + idx}"
         score = scores[idx] if idx < len(scores) else 5.0
         vulns.append({
             "cve": {
@@ -316,7 +321,11 @@ def _fake_cpe_response(n_cves=0, kev_ids=(), scores=()):
                 },
             }
         })
-    return {"vulnerabilities": vulns}
+    return {
+        "vulnerabilities": vulns,
+        "totalResults": n_cves if total_results is None else total_results,
+        "resultsPerPage": results_per_page,
+    }
 
 
 @pytest.fixture
@@ -381,6 +390,27 @@ class TestGetCVEsForVersion:
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=3))
         info = NVDClient().get_cves_for_version("apache-httpd", "2.4.49", kev_ids=set())
         assert info.cve_ids == ["CVE-2021-1000", "CVE-2021-1001", "CVE-2021-1002"]
+
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_pagination_over_multiple_pages(self, mock_urlopen):
+        # Page 1: 2 CVEs of a total of 3 (per_page=2) → must fetch page 2.
+        page1 = _fake_cpe_response(n_cves=2, total_results=3, results_per_page=2,
+                                   start_id=1000)
+        page2 = _fake_cpe_response(n_cves=1, total_results=3, results_per_page=2,
+                                   start_id=1002)
+        mock_urlopen.side_effect = [_FakeHTTPResponse(page1), _FakeHTTPResponse(page2)]
+        info = NVDClient().get_cves_for_version("apache-httpd", "2.4.49", kev_ids=set())
+        assert info.cve_count == 3
+        assert info.cve_ids == ["CVE-2021-1000", "CVE-2021-1001", "CVE-2021-1002"]
+        assert mock_urlopen.call_count == 2   # paginated
+
+    @patch("core.cve_enricher.urllib.request.urlopen")
+    def test_uses_cpename_not_virtualmatchstring(self, mock_urlopen):
+        mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=1))
+        NVDClient().get_cves_for_version("apache-httpd", "2.4.49", kev_ids=set())
+        called_url = mock_urlopen.call_args[0][0].full_url
+        assert "cpeName=" in called_url
+        assert "virtualMatchString" not in called_url
 
 
 class TestVersionCacheFlow:
