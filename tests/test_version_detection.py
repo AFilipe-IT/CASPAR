@@ -55,3 +55,45 @@ class TestConfigText:
         # Explicit image hint wins over config text.
         assert detect_version("apache-httpd", str(cfg),
                               image="httpd:2.4.58") == "2.4.58"
+
+
+class TestResolveDockerVersionMetadata:
+    """Regression: resolve_docker must store the tag version in metadata so the
+    runtime can fire F1 amplification for docker:// scans (was always None)."""
+
+    def test_tag_version_lands_in_metadata(self, tmp_path, monkeypatch):
+        import config_assessment.core.input_resolver as ir
+
+        cfg = tmp_path / "httpd.conf"
+        cfg.write_text("ServerTokens Full\n")
+
+        # Stub out the daemon-dependent steps so the test runs offline.
+        monkeypatch.setattr(ir, "_docker_available", lambda: True)
+        monkeypatch.setattr(ir, "_docker_image_exists", lambda image: True)
+        monkeypatch.setattr(ir, "_extract_config_from_image",
+                            lambda image, tmpdir: str(tmp_path))
+
+        resolved = ir.resolve_docker("docker://httpd:2.4.49")
+        try:
+            assert resolved.metadata.get("version") == "2.4.49"
+            assert resolved.metadata.get("image") == "httpd:2.4.49"
+        finally:
+            if resolved.cleanup:
+                resolved.cleanup()
+
+    def test_non_version_tag_leaves_metadata_unset(self, tmp_path, monkeypatch):
+        import config_assessment.core.input_resolver as ir
+
+        (tmp_path / "httpd.conf").write_text("Listen 80\n")
+        monkeypatch.setattr(ir, "_docker_available", lambda: True)
+        monkeypatch.setattr(ir, "_docker_image_exists", lambda image: True)
+        monkeypatch.setattr(ir, "_extract_config_from_image",
+                            lambda image, tmpdir: str(tmp_path))
+
+        resolved = ir.resolve_docker("docker://httpd:latest")
+        try:
+            # "latest" is not a version → no version key, graceful.
+            assert resolved.metadata.get("version") is None
+        finally:
+            if resolved.cleanup:
+                resolved.cleanup()
