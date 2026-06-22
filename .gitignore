@@ -54,3 +54,4 @@ ccss_*.sarif
 # Logs
 *.log
 narratives_reference.txt
+*.pdf
