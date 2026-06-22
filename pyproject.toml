@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ccss-scan"
+name = "caspar"
 version = "0.1.0"
-description = "Generic CCSS-based security configuration scoring framework"
+description = "CASPAR — Configuration Assessment and Security Posture Automated Review (CCSS-based)"
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0",
@@ -24,7 +24,7 @@ dev = [
 ]
 
 [project.scripts]
-ccss = "cli.main:cli"
+caspar = "cli.main:cli"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

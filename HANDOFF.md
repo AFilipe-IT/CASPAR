@@ -114,7 +114,7 @@ sem internet, mesmo resultado sempre.
 ```bash
 source .venv/bin/activate
 pytest tests/ -v                              # deve dar 183 passed
-ccss targets                                  # lista apache-httpd, dummy, nginx
-ccss scan test_nginx.conf                     # 3 Medium
-ccss scan docker://nginx:latest --report --format dashboard --output ~/relatorios/
+caspar targets                                  # lista apache-httpd, dummy, nginx
+caspar scan test_nginx.conf                     # 3 Medium
+caspar scan docker://nginx:latest --report --format dashboard --output ~/relatorios/
 ```
