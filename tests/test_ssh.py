@@ -6,11 +6,11 @@ Tests for the SSH plugin (Peça 1: parser).
 
 from __future__ import annotations
 
-from core.models import Directive
-from plugins.ssh import SSHPlugin
-from plugins.ssh.parser import parse_file, _canonical
-from plugins.ssh.rules import infer_profile
-from core.target import CONFIDENCE_EXACT_FILENAME, CONFIDENCE_SYNTAX_MARKER
+from config_assessment.core.models import Directive
+from config_assessment.plugins.ssh import SSHPlugin
+from config_assessment.plugins.ssh.parser import parse_file, _canonical
+from config_assessment.plugins.ssh.rules import infer_profile
+from config_assessment.core.target import CONFIDENCE_EXACT_FILENAME, CONFIDENCE_SYNTAX_MARKER
 
 
 def _dirs(*pairs):

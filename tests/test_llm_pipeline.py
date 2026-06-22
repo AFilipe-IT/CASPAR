@@ -21,13 +21,13 @@ import tempfile
 
 import pytest
 
-from core.ccss import base_score
-from core.db.database import Database
-from core.llm_client import OllamaClient, StubLLMClient, make_client
-from core.models import TargetMetadata
-from core.rag import BenchmarkIndex, parse_benchmark
-from plugins.apache_httpd import ApachePlugin
-from plugins.apache_httpd.llm_pipeline import (
+from config_assessment.core.ccss import base_score
+from config_assessment.core.db.database import Database
+from config_assessment.build.llm_client import OllamaClient, StubLLMClient, make_client
+from config_assessment.core.models import TargetMetadata
+from config_assessment.build.rag import BenchmarkIndex, parse_benchmark
+from config_assessment.plugins.apache_httpd import ApachePlugin
+from config_assessment.plugins.apache_httpd.llm_pipeline import (
     LLMBuildPipeline,
     MisconfigEntry,
     _conservative_fallback,
@@ -35,16 +35,17 @@ from plugins.apache_httpd.llm_pipeline import (
     build_prompt,
     validate_metrics,
 )
-from plugins.apache_httpd.build_llm import ENTRIES
+from config_assessment.plugins.apache_httpd.build_llm import ENTRIES
 from pathlib import Path as _Path
 
 
 def _find_benchmark() -> str:
     """Locate CIS Benchmark PDF — works locally and in sandbox."""
+    _plugins = _Path(__file__).parent.parent / "config_assessment" / "plugins"
     candidates = [
-        _Path(__file__).parent.parent / "plugins" / "apache_httpd" / "Benchmark.pdf",
+        _plugins / "apache_httpd" / "Benchmark.pdf",
         _Path("/mnt/project/CIS_Apache_HTTP_Server_2_4_Benchmark_V2_3_0.pdf"),
-        *sorted((_Path(__file__).parent.parent / "plugins" / "apache_httpd").glob("*.pdf")),
+        *sorted((_plugins / "apache_httpd").glob("*.pdf")),
     ]
     for p in candidates:
         if p.exists():
@@ -235,7 +236,7 @@ class TestPromptConstruction:
         # Metric definitions are in _SYSTEM_PROMPT, not in build_prompt().
         # build_prompt() contains the section body + few-shot examples.
         # We verify the system prompt has the definitions separately.
-        from plugins.apache_httpd.llm_pipeline import _SYSTEM_PROMPT
+        from config_assessment.plugins.apache_httpd.llm_pipeline import _SYSTEM_PROMPT
         assert "Access Complexity" in _SYSTEM_PROMPT
         assert "Confidentiality" in _SYSTEM_PROMPT
         # And build_prompt contains the section content

@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-from core.plugin_scaffolder import PluginSpec, scaffold_plugin
+from config_assessment.build.plugin_scaffolder import PluginSpec, scaffold_plugin
 
 
 def _spec(target_id="testservice", service="TestService"):
@@ -52,22 +52,22 @@ def test_scaffold_plugin_importable():
     import shutil
     from pathlib import Path
 
-    real_plugins = Path(__file__).resolve().parents[1] / "plugins"
+    real_plugins = Path(__file__).resolve().parents[1] / "config_assessment" / "plugins"
     spec = _spec(target_id="scaffoldimp", service="ScaffoldImp")
     plugin_dir = scaffold_plugin(spec, real_plugins, benchmark_pdf=None)
     try:
-        mod = importlib.import_module("plugins.scaffoldimp")
-        from core.runtime import registered_plugins
+        mod = importlib.import_module("config_assessment.plugins.scaffoldimp")
+        from config_assessment.core.runtime import registered_plugins
         names = [p.metadata().name for p in registered_plugins()]
         assert "scaffoldimp" in names
     finally:
         # Remove the generated package and its module cache + registration.
         shutil.rmtree(plugin_dir, ignore_errors=True)
         for m in list(sys.modules):
-            if m == "plugins.scaffoldimp" or m.startswith("plugins.scaffoldimp."):
+            if m == "config_assessment.plugins.scaffoldimp" or m.startswith("config_assessment.plugins.scaffoldimp."):
                 del sys.modules[m]
         try:
-            from core import runtime
+            from config_assessment.core import runtime
             runtime._REGISTRY[:] = [
                 p for p in runtime._REGISTRY
                 if p.metadata().name != "scaffoldimp"

@@ -6,7 +6,7 @@ Tests for the generic key-value parser (Peça 2a).
 
 from __future__ import annotations
 
-from core.parsers.key_value import parse_file
+from config_assessment.parsers.key_value import parse_file
 
 
 def _write(tmp_path, name, text):

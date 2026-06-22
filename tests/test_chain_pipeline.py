@@ -14,12 +14,12 @@ import os
 
 import pytest
 
-from core.ccss import base_score, temporal_score
-from core.llm_client import StubLLMClient
-from core.models import AttackChain, Misconfiguration
+from config_assessment.core.ccss import base_score, temporal_score
+from config_assessment.build.llm_client import StubLLMClient
+from config_assessment.core.models import AttackChain, Misconfiguration
 from pathlib import Path
 
-from plugins.apache_httpd.chain_pipeline import (
+from config_assessment.build.chain_pipeline import (
     _build_chain_prompt,
     _extract_chains_json,
     _load_curated_chains,
@@ -30,7 +30,7 @@ from plugins.apache_httpd.chain_pipeline import (
 # Sentinel path with no chains.json → forces the LLM bootstrap path.
 # (generate_chains is JSON-first: a real chains.json short-circuits the LLM.)
 _NO_JSON = Path("/nonexistent/__no_chains__.json")
-_APACHE_JSON = Path(__file__).resolve().parents[1] / "plugins" / "apache_httpd" / "chains.json"
+_APACHE_JSON = Path(__file__).resolve().parents[1] / "config_assessment" / "plugins" / "apache_httpd" / "chains.json"
 
 
 # ------------------------------------------------------------------ #
@@ -358,7 +358,7 @@ class TestGenerateChainsLLMBootstrap:
         not a hardcoded 'apache-httpd' (that bug sent PostgreSQL chains to the
         wrong target, so they vanished from get_attack_chains('postgresql'))."""
         import json
-        from core.models import Misconfiguration
+        from config_assessment.core.models import Misconfiguration
         ms = [
             Misconfiguration(target_name="postgresql", directive="ssl",
                              bad_value="off", good_value="on", ac="L", c="P",

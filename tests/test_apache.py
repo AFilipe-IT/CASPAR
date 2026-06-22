@@ -20,13 +20,13 @@ from pathlib import Path
 
 import pytest
 
-from core import runtime
-from core.ccss import base_score, temporal_score
-from core.db.database import Database
-from core.models import AttackChain, Misconfiguration, TargetMetadata
-from plugins.apache_httpd.build_apache import APACHE_MISCONFIGS, APACHE_ABSENCE_RULES, build_apache_db
-from plugins.apache_httpd.parser import parse_file
-from plugins.apache_httpd.rules import infer_profile
+from config_assessment.core import runtime
+from config_assessment.core.ccss import base_score, temporal_score
+from config_assessment.core.db.database import Database
+from config_assessment.core.models import AttackChain, Misconfiguration, TargetMetadata
+from config_assessment.plugins.apache_httpd.build_apache import APACHE_MISCONFIGS, APACHE_ABSENCE_RULES, build_apache_db
+from config_assessment.plugins.apache_httpd.parser import parse_file
+from config_assessment.plugins.apache_httpd.rules import infer_profile
 
 
 # ------------------------------------------------------------------ #
@@ -190,24 +190,24 @@ class TestRules:
 class TestDetection:
 
     def test_detects_httpd_conf(self):
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         path = write_conf("ServerTokens Full\n", filename="httpd.conf")
         assert ApachePlugin().detect(path) is True
 
     def test_detects_apache2_conf(self):
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         path = write_conf("ServerTokens Full\n", filename="apache2.conf")
         assert ApachePlugin().detect(path) is True
 
     def test_rejects_nginx_conf(self):
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         tmpdir = tempfile.mkdtemp()
         path = os.path.join(tmpdir, "nginx.conf")
         Path(path).write_text("worker_processes 1;\n", encoding="utf-8")
         assert ApachePlugin().detect(path) is False
 
     def test_detects_conf_with_apache_content(self):
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         path = write_conf("LoadModule ssl_module modules/mod_ssl.so\n", filename="ssl.conf")
         assert ApachePlugin().detect(path) is True
 
@@ -288,7 +288,7 @@ class TestApacheEndToEnd:
 
     def test_scan_insecure_httpd_conf(self, populated_db):
         """Insecure httpd.conf should produce issues and a non-zero score."""
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         runtime.register_plugin(ApachePlugin())
 
         config = write_conf("""
@@ -313,7 +313,7 @@ class TestApacheEndToEnd:
 
     def test_scan_detects_root_user_as_critical(self, populated_db):
         """User=root should produce a Critical or High issue."""
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         runtime.register_plugin(ApachePlugin())
 
         config = write_conf("User root\nGroup root\n")
@@ -327,7 +327,7 @@ class TestApacheEndToEnd:
 
     def test_scan_clean_config_zero_issues(self, populated_db):
         """A hardened config should produce zero issues."""
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         runtime.register_plugin(ApachePlugin())
 
         config = write_conf("""
@@ -354,7 +354,7 @@ class TestApacheEndToEnd:
 
     def test_scan_is_deterministic(self, populated_db):
         """Same httpd.conf → identical score on every run."""
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         runtime.register_plugin(ApachePlugin())
 
         config = write_conf("""
@@ -373,7 +373,7 @@ class TestApacheEndToEnd:
 
     def test_attack_chain_fires_for_compound_misconfigs(self, populated_db):
         """ServerTokens Full + ServerSignature On should fire info-disclosure-chain."""
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         runtime.register_plugin(ApachePlugin())
 
         config = write_conf("ServerTokens Full\nServerSignature On\n")
@@ -386,7 +386,7 @@ class TestApacheEndToEnd:
 
     def test_amplified_score_exceeds_individual_scores(self, populated_db):
         """When a chain fires, its amplified_score > max individual TemporalScore."""
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         runtime.register_plugin(ApachePlugin())
 
         config = write_conf("ServerTokens Full\nServerSignature On\n")

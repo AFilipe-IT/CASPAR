@@ -13,9 +13,9 @@ import tempfile
 from unittest.mock import patch
 import pytest
 
-from core.cve_enricher import VersionExploitInfo
-from core.db.database import Database
-from core.models import (
+from config_assessment.enrichment.cve_enricher import VersionExploitInfo
+from config_assessment.core.db.database import Database
+from config_assessment.core.models import (
     AttackChain,
     Directive,
     Misconfiguration,
@@ -23,8 +23,8 @@ from core.models import (
     SystemProfile,
     TargetMetadata,
 )
-from core import runtime
-from core.ccss import base_score, temporal_score
+from config_assessment.core import runtime
+from config_assessment.core.ccss import base_score, temporal_score
 
 
 # ------------------------------------------------------------------ #
@@ -187,7 +187,7 @@ class TestModels:
 class TestPluginRegistry:
 
     def test_register_and_retrieve(self):
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         plugin = DummyPlugin()
         runtime.register_plugin(plugin)
         assert plugin in runtime.registered_plugins()
@@ -197,7 +197,7 @@ class TestPluginRegistry:
             runtime.scan("/tmp/unknown.xyz", db)
 
     def test_select_plugin_by_extension(self, dummy_config_file, db):
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
         # Should not raise
         result = runtime.scan(dummy_config_file, db)
@@ -280,12 +280,12 @@ class TestEndToEnd:
     The Phase 1 completion criterion:
     "A plugin of ~20 lines implements the Target interface and passes
      through the runtime engine from start to finish without modifying
-     a single line of the core."
+     a single line of the config_assessment.core."
     """
 
     def test_full_pipeline_with_misconfiguration(self, dummy_config_file, db):
         """input → parse → profile → scan → scoring → chain detection → ScanResult"""
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
 
         result = runtime.scan(dummy_config_file, db)
@@ -324,7 +324,7 @@ class TestEndToEnd:
 
     def test_full_pipeline_clean_config(self, safe_config_file, db):
         """Clean config → zero issues, zero score."""
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
 
         result = runtime.scan(safe_config_file, db)
@@ -336,7 +336,7 @@ class TestEndToEnd:
 
     def test_scan_is_deterministic(self, dummy_config_file, db):
         """Same input → identical score every time (zero variance in runtime)."""
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
 
         scores = [
@@ -348,7 +348,7 @@ class TestEndToEnd:
     def test_hash_differs_for_different_inputs(
         self, dummy_config_file, safe_config_file, db
     ):
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
 
         r1 = runtime.scan(dummy_config_file, db)
@@ -360,7 +360,7 @@ class TestVersionPropagation:
     """F1 Peça 1: detected version flows into the ScanResult."""
 
     def test_version_propagates_to_scan_result(self, dummy_config_file, db):
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
 
         result = runtime.scan(dummy_config_file, db, version="2.4.51")
@@ -368,14 +368,14 @@ class TestVersionPropagation:
 
     def test_version_defaults_to_none(self, dummy_config_file, db):
         """Existing callers that omit version see None — unchanged behaviour."""
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
 
         result = runtime.scan(dummy_config_file, db)
         assert result.detected_version is None
 
     def test_version_serialised_in_json(self, dummy_config_file, db):
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
 
         result = runtime.scan(dummy_config_file, db, version="1.27.0")
@@ -394,14 +394,14 @@ class TestVersionAmplificationE2E:
 
     def _base_temporal(self, dummy_config_file, db):
         """Temporal score with no version (no amplification) — the baseline."""
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
         result = runtime.scan(dummy_config_file, db)
         return self._exposing_issue(result).temporal_score
 
-    @patch("core.cve_enricher.get_version_exploit_info")
+    @patch("config_assessment.enrichment.cve_enricher.get_version_exploit_info")
     def test_kev_active_amplifies_temporal(self, mock_info, dummy_config_file, db):
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
         base = self._base_temporal(dummy_config_file, db)
 
@@ -416,9 +416,9 @@ class TestVersionAmplificationE2E:
         assert issue.temporal_score == min(round(base * 1.5, 1), 10.0)
         assert issue.temporal_score > base
 
-    @patch("core.cve_enricher.get_version_exploit_info")
+    @patch("config_assessment.enrichment.cve_enricher.get_version_exploit_info")
     def test_no_cves_no_amplification(self, mock_info, dummy_config_file, db):
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
         base = self._base_temporal(dummy_config_file, db)
 
@@ -430,7 +430,7 @@ class TestVersionAmplificationE2E:
         assert issue.temporal_score == base
 
     def test_version_none_no_amplification(self, dummy_config_file, db):
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
         base = self._base_temporal(dummy_config_file, db)
 
@@ -440,10 +440,10 @@ class TestVersionAmplificationE2E:
         assert issue.version_amplification == 1.0
         assert issue.temporal_score == base
 
-    @patch("core.cve_enricher.get_version_exploit_info")
+    @patch("config_assessment.enrichment.cve_enricher.get_version_exploit_info")
     def test_only_exposing_directive_amplified(self, mock_info, dummy_config_file, db):
         """Other misconfigs must NOT be touched — only DangerousOption."""
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
 
         mock_info.return_value = VersionExploitInfo(
@@ -458,12 +458,12 @@ class TestVersionAmplificationE2E:
 class TestVersionExploitsE2E:
     """F1 exploit extension: ScanResult.version_exploits populated via scan()."""
 
-    @patch("core.exploit_enricher.search_exploits_for_cves")
-    @patch("core.cve_enricher.get_version_exploit_info")
+    @patch("config_assessment.enrichment.exploit_enricher.search_exploits_for_cves")
+    @patch("config_assessment.enrichment.cve_enricher.get_version_exploit_info")
     def test_exploits_attached_to_result(self, mock_info, mock_exploits,
                                          dummy_config_file, db):
-        from plugins.dummy import DummyPlugin
-        from core.exploit_enricher import ExploitRecord
+        from config_assessment.plugins.dummy import DummyPlugin
+        from config_assessment.enrichment.exploit_enricher import ExploitRecord
         runtime.register_plugin(DummyPlugin())
 
         mock_info.return_value = VersionExploitInfo(
@@ -481,10 +481,10 @@ class TestVersionExploitsE2E:
         # searchsploit was called with the CVE ids from the version lookup.
         mock_exploits.assert_called_once_with(["CVE-2021-41773"])
 
-    @patch("core.exploit_enricher.search_exploits_for_cves", return_value=[])
-    @patch("core.cve_enricher.get_version_exploit_info")
+    @patch("config_assessment.enrichment.exploit_enricher.search_exploits_for_cves", return_value=[])
+    @patch("config_assessment.enrichment.cve_enricher.get_version_exploit_info")
     def test_no_exploits_empty_list(self, mock_info, _mx, dummy_config_file, db):
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
         mock_info.return_value = VersionExploitInfo(
             "dummy", "2.4.99", cve_count=0, cve_ids=[],
@@ -493,19 +493,19 @@ class TestVersionExploitsE2E:
         assert result.version_exploits == []
 
     def test_no_version_no_exploits(self, dummy_config_file, db):
-        from plugins.dummy import DummyPlugin
+        from config_assessment.plugins.dummy import DummyPlugin
         runtime.register_plugin(DummyPlugin())
         result = runtime.scan(dummy_config_file, db)  # no version
         assert result.version_exploits == []
 
-    @patch("core.exploit_enricher.search_exploits_for_cves")
-    @patch("core.cve_enricher.get_version_exploit_info")
+    @patch("config_assessment.enrichment.exploit_enricher.search_exploits_for_cves")
+    @patch("config_assessment.enrichment.cve_enricher.get_version_exploit_info")
     def test_exploits_listed_even_without_amplification(
         self, mock_info, mock_exploits, dummy_config_file, db
     ):
         """Public exploits are shown even when there is no KEV/CVE amplification."""
-        from plugins.dummy import DummyPlugin
-        from core.exploit_enricher import ExploitRecord
+        from config_assessment.plugins.dummy import DummyPlugin
+        from config_assessment.enrichment.exploit_enricher import ExploitRecord
         runtime.register_plugin(DummyPlugin())
 
         # cve_count=0 → version_amplification == 1.0 (no score change) ...

@@ -25,7 +25,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.cve_enricher import (
+from config_assessment.enrichment.cve_enricher import (
     CVERecord,
     EnrichmentResult,
     NVDClient,
@@ -94,7 +94,7 @@ class _FakeHTTPResponse:
 
 
 class TestNVDClientGetCVE:
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_get_cve_returns_record(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse(
             _fake_nvd_response("CVE-2021-1234", 7.5, "HIGH")
@@ -106,19 +106,19 @@ class TestNVDClientGetCVE:
         assert rec.severity == "HIGH"
         assert "test vulnerability" in rec.description
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_get_cve_picks_english_description(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_nvd_response())
         rec = NVDClient().get_cve("CVE-2021-1234")
         assert rec.description != "ignored"
         assert rec.description.startswith("A test")
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_get_cve_empty_vulns_returns_none(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse({"vulnerabilities": []})
         assert NVDClient().get_cve("CVE-0000-0000") is None
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_get_cve_falls_back_to_v30(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse(
             _fake_nvd_response(score=5.0, severity="MEDIUM", metric_key="cvssMetricV30")
@@ -127,7 +127,7 @@ class TestNVDClientGetCVE:
         assert rec.cvss_score == 5.0
         assert rec.severity == "MEDIUM"
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_get_cve_no_metrics_returns_unknown(self, mock_urlopen):
         payload = _fake_nvd_response()
         payload["vulnerabilities"][0]["cve"]["metrics"] = {}
@@ -136,19 +136,19 @@ class TestNVDClientGetCVE:
         assert rec.cvss_score is None
         assert rec.severity == "UNKNOWN"
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_get_cve_network_error_returns_none(self, mock_urlopen):
         mock_urlopen.side_effect = OSError("network down")
         assert NVDClient().get_cve("CVE-2021-1234") is None
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_api_key_included_in_request(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_nvd_response())
         NVDClient(api_key="test-key-123").get_cve("CVE-2021-1234")
         called_url = mock_urlopen.call_args[0][0].full_url
         assert "apiKey=test-key-123" in called_url
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_no_api_key_omits_param(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_nvd_response())
         NVDClient().get_cve("CVE-2021-1234")
@@ -332,8 +332,8 @@ def _fake_cpe_response(n_cves=0, kev_ids=(), scores=(),
 def isolated_cache(tmp_path, monkeypatch):
     """Point the version cache at a temp file so tests never touch the real one."""
     cache_dir = tmp_path / ".ccss_cache"
-    monkeypatch.setattr("core.cve_enricher.VERSION_CACHE_DIR", cache_dir)
-    monkeypatch.setattr("core.cve_enricher.VERSION_CACHE_FILE", cache_dir / "version_exploits.json")
+    monkeypatch.setattr("config_assessment.enrichment.cve_enricher.VERSION_CACHE_DIR", cache_dir)
+    monkeypatch.setattr("config_assessment.enrichment.cve_enricher.VERSION_CACHE_FILE", cache_dir / "version_exploits.json")
     return cache_dir / "version_exploits.json"
 
 
@@ -361,7 +361,7 @@ class TestVersionAmplification:
 
 
 class TestGetCVEsForVersion:
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_counts_cves_and_max_cvss(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse(
             _fake_cpe_response(n_cves=3, scores=(7.5, 9.1, 4.2))
@@ -372,7 +372,7 @@ class TestGetCVEsForVersion:
         assert info.kev_count == 0
         assert info.cached is False
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_counts_kev(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=3))
         info = NVDClient().get_cves_for_version(
@@ -385,13 +385,13 @@ class TestGetCVEsForVersion:
         info = NVDClient().get_cves_for_version("mystery-svc", "1.0")
         assert info.cve_count == 0 and info.kev_count == 0
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_retains_cve_ids(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=3))
         info = NVDClient().get_cves_for_version("apache-httpd", "2.4.49", kev_ids=set())
         assert info.cve_ids == ["CVE-2021-1000", "CVE-2021-1001", "CVE-2021-1002"]
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_pagination_over_multiple_pages(self, mock_urlopen):
         # Page 1: 2 CVEs of a total of 3 (per_page=2) → must fetch page 2.
         page1 = _fake_cpe_response(n_cves=2, total_results=3, results_per_page=2,
@@ -404,7 +404,7 @@ class TestGetCVEsForVersion:
         assert info.cve_ids == ["CVE-2021-1000", "CVE-2021-1001", "CVE-2021-1002"]
         assert mock_urlopen.call_count == 2   # paginated
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_uses_cpename_not_virtualmatchstring(self, mock_urlopen):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=1))
         NVDClient().get_cves_for_version("apache-httpd", "2.4.49", kev_ids=set())
@@ -414,24 +414,24 @@ class TestGetCVEsForVersion:
 
 
 class TestVersionCacheFlow:
-    @patch("core.cve_enricher._load_kev", return_value=set())
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher._load_kev", return_value=set())
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_live_lookup_returns_fresh(self, mock_urlopen, _kev, isolated_cache):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=1))
         info = get_version_exploit_info("apache-httpd", "2.4.49", client=NVDClient())
         assert info.cve_count == 1
         assert info.cached is False
 
-    @patch("core.cve_enricher._load_kev", return_value={"CVE-2021-1000"})
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher._load_kev", return_value={"CVE-2021-1000"})
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_kev_active_amplifies_1_5(self, mock_urlopen, _kev, isolated_cache):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=1))
         info = get_version_exploit_info("apache-httpd", "2.4.49", client=NVDClient())
         assert info.kev_count == 1
         assert version_amplification(info) == 1.5
 
-    @patch("core.cve_enricher._load_kev", return_value=set())
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher._load_kev", return_value=set())
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_cache_hit_skips_network(self, mock_urlopen, _kev, isolated_cache):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=5))
         # First call populates the cache (1 CPE network call; KEV is mocked).
@@ -443,8 +443,8 @@ class TestVersionCacheFlow:
         assert info2.cached is True
         assert info2.cve_count == 5
 
-    @patch("core.cve_enricher._load_kev", return_value=set())
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher._load_kev", return_value=set())
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_expired_ttl_refetches(self, mock_urlopen, _kev, isolated_cache):
         import json as _json, time as _time
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=2))
@@ -461,8 +461,8 @@ class TestVersionCacheFlow:
         assert info.cve_count == 2            # fresh value, not the stale 99
         assert info.cached is False
 
-    @patch("core.cve_enricher._load_kev", return_value=set())
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher._load_kev", return_value=set())
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_cve_ids_survive_cache_roundtrip(self, mock_urlopen, _kev, isolated_cache):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=2))
         first = get_version_exploit_info("apache-httpd", "2.4.49", client=NVDClient())
@@ -472,8 +472,8 @@ class TestVersionCacheFlow:
         assert second.cached is True
         assert second.cve_ids == ["CVE-2021-1000", "CVE-2021-1001"]
 
-    @patch("core.cve_enricher._load_kev", return_value=set())
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher._load_kev", return_value=set())
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_empty_result_not_cached(self, mock_urlopen, _kev, isolated_cache):
         """A 0-CVE NVD response must NOT be cached (could be a spurious empty
         array); the next call re-queries instead of serving a false negative."""
@@ -500,7 +500,7 @@ class TestPriorityDbFirst:
 
     @pytest.fixture
     def db(self):
-        from core.db.database import Database
+        from config_assessment.core.db.database import Database
         d = Database(":memory:")
         yield d
         d.close()
@@ -514,7 +514,7 @@ class TestPriorityDbFirst:
                                    "verified": True, "cve": "CVE-2021-41773"}],
         )
 
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_db_hit_skips_network_and_cache(self, mock_urlopen, db, isolated_cache):
         self._seed(db)
         info = get_version_exploit_info("apache-httpd", "2.4.49", db=db)
@@ -524,8 +524,8 @@ class TestPriorityDbFirst:
         mock_urlopen.assert_not_called()                # no network
         assert not isolated_cache.exists()              # JSON cache untouched
 
-    @patch("core.cve_enricher._load_kev", return_value=set())
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher._load_kev", return_value=set())
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_db_miss_falls_back_to_cache(self, mock_urlopen, _kev, db, isolated_cache):
         # DB empty for this version → JSON cache path (seed cache, no network).
         import json as _json, time as _time
@@ -539,8 +539,8 @@ class TestPriorityDbFirst:
         assert info.cached is True and info.cve_count == 7
         mock_urlopen.assert_not_called()
 
-    @patch("core.cve_enricher._load_kev", return_value=set())
-    @patch("core.cve_enricher.urllib.request.urlopen")
+    @patch("config_assessment.enrichment.cve_enricher._load_kev", return_value=set())
+    @patch("config_assessment.enrichment.cve_enricher.urllib.request.urlopen")
     def test_db_and_cache_miss_hits_nvd(self, mock_urlopen, _kev, db, isolated_cache):
         mock_urlopen.return_value = _FakeHTTPResponse(_fake_cpe_response(n_cves=4))
         info = get_version_exploit_info("apache-httpd", "2.4.49", db=db, client=NVDClient())
