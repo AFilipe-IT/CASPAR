@@ -180,7 +180,8 @@ def _normalise_directive(raw_name: str) -> str:
     return str(raw_name).strip().split()[0] if raw_name else ""
 
 
-def _validate_chain(raw: dict, known_directives: set[str]) -> AttackChain | None:
+def _validate_chain(raw: dict, known_directives: set[str],
+                    target_name: str = "apache-httpd") -> AttackChain | None:
     """Validate and coerce one LLM chain entry."""
     try:
         chain_id = str(raw.get("chain_id", "")).strip()
@@ -216,7 +217,7 @@ def _validate_chain(raw: dict, known_directives: set[str]) -> AttackChain | None
 
         return AttackChain(
             chain_id=chain_id,
-            target_name="apache-httpd",
+            target_name=target_name,
             misconfig_directives=valid_dirs,
             amplification=round(amp, 2),
             justification=justification,
@@ -302,6 +303,9 @@ def generate_chains(
         return []
 
     known = _known_directives(misconfigs)
+    # The target is whatever the misconfigs belong to — so LLM-bootstrapped
+    # chains carry the right target_name (not the hardcoded "apache-httpd").
+    target_name = misconfigs[0].target_name
 
     # --- JSON-first: curated chains are the source of truth ---
     if chains_json_path is None:
@@ -349,7 +353,7 @@ def generate_chains(
                 raise ValueError(f"Could not extract JSON array from response: {raw_text[:300]}")
 
             for raw_chain in raw_list:
-                chain = _validate_chain(raw_chain, known)
+                chain = _validate_chain(raw_chain, known, target_name)
                 if chain:
                     chains.append(chain)
 

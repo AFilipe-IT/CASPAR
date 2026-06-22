@@ -353,6 +353,29 @@ class TestGenerateChainsLLMBootstrap:
         chains = generate_chains(sample_misconfigs, llm, chains_json_path=_NO_JSON)
         assert len(chains) == 3
 
+    def test_chain_target_name_from_misconfigs(self):
+        """Regression: LLM-bootstrapped chains must carry the misconfigs' target,
+        not a hardcoded 'apache-httpd' (that bug sent PostgreSQL chains to the
+        wrong target, so they vanished from get_attack_chains('postgresql'))."""
+        import json
+        from core.models import Misconfiguration
+        ms = [
+            Misconfiguration(target_name="postgresql", directive="ssl",
+                             bad_value="off", good_value="on", ac="L", c="P",
+                             i="N", a="N", base_score=5.0, temporal_score=5.0),
+            Misconfiguration(target_name="postgresql", directive="log_connections",
+                             bad_value="off", good_value="on", ac="L", c="P",
+                             i="N", a="N", base_score=5.0, temporal_score=5.0),
+        ]
+        resp = json.dumps([{
+            "chain_id": "pg-chain",
+            "misconfig_directives": ["ssl", "log_connections"],
+            "amplification": 1.4, "justification": "x", "cross_target": False,
+        }])
+        chains = generate_chains(ms, StubLLMClient(fixed_response=resp),
+                                 chains_json_path=_NO_JSON)
+        assert chains and all(c.target_name == "postgresql" for c in chains)
+
     def test_chain_ids_are_present(self, sample_misconfigs):
         llm = StubLLMClient(fixed_response=VALID_LLM_RESPONSE)
         chains = generate_chains(sample_misconfigs, llm, chains_json_path=_NO_JSON)
