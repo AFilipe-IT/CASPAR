@@ -539,6 +539,14 @@ def resolve_docker(image_ref: str) -> ResolvedInput:
             "image": image,
             "extracted_to": tmpdir,
         })
+
+        # Propagar a versão da tag Docker para o metadata, para que o runtime
+        # dispare a amplificação F1 (CVE/exploit) sem ter de a re-derivar.
+        version = version_from_docker_tag(image)
+        if version:
+            resolved.metadata["version"] = version
+            logger.info("[version] from docker tag: %s", version)
+
         return resolved
 
     except Exception:

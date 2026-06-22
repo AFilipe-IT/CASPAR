@@ -57,9 +57,17 @@ docker run --rm \
   caspar:latest scan /scan --report --format dashboard --output /home/caspar/reports
 ```
 
+> ⚠️ **O `--output` tem de apontar para um path montado.** O CASPAR escreve o
+> relatório *dentro* do contentor; se esse path não tiver um volume do host
+> montado, o ficheiro fica no contentor e perde-se quando ele é removido
+> (`--rm`). A regra é simples: **o argumento de `--output` e o destino do `-v`
+> têm de ser o mesmo path** (acima, ambos `/home/caspar/reports`).
+
 ### Scan de imagem Docker (`docker://`) — só `caspar:latest`
 Requer o *socket* do Docker do host. Como a imagem corre como não-root, é
-preciso conceder o grupo dono do *socket*:
+preciso conceder o grupo dono do *socket*. A versão é detectada a partir da tag
+(`httpd:2.4.49` → `2.4.49`) e cruzada com a base canónica para amplificar os
+*scores* (F1):
 
 ```bash
 SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
@@ -68,6 +76,18 @@ docker run --rm \
   --group-add "$SOCK_GID" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   caspar:latest scan docker://nginx:latest
+```
+
+`docker://` **com relatório persistente** — junta o *socket*, o `--group-add` e
+o volume de relatórios montado no mesmo path do `--output`:
+
+```bash
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --group-add "$(stat -c '%g' /var/run/docker.sock)" \
+  -v "$(pwd)/reports:/home/caspar/reports" \
+  caspar:latest scan docker://httpd:2.4.49 \
+  --report --format dashboard --output /home/caspar/reports
 ```
 
 ### Com docker-compose (inclui Ollama para *build-time*)
