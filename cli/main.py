@@ -290,8 +290,12 @@ def cli(ctx: click.Context, db: str, verbose: bool) -> None:
               help="Use online charts (ECharts via CDN) for the dashboard format.")
 @click.option("--threshold", "-t", default=0.0, type=float,
               help="Exit 1 se score > threshold (CI/CD).")
+@click.option("--service-version", "service_version", default=None,
+              help="Versão do serviço (ex: 2.4.58) para cruzar com CVEs/exploits. "
+                   "Se omitida, é auto-detectada (tag Docker, binário, config).")
 @click.pass_context
-def scan(ctx, input_path, live, report, fmt, output, threshold, online) -> None:
+def scan(ctx, input_path, live, report, fmt, output, threshold, online,
+         service_version) -> None:
     """Analisar configurações Apache — 4 modos.
 
     \b
@@ -341,10 +345,15 @@ def scan(ctx, input_path, live, report, fmt, output, threshold, online) -> None:
     _deferred_cleanup = resolved.cleanup if resolved.cleanup else None
     try:
         with Database(db_path) as db:
-            detected_version = resolved.metadata.get("version") or None
+            # Precedência: --service-version explícito > versão do resolver (--live).
+            # Sem nenhuma, o runtime auto-detecta (tag Docker, binário, config).
+            detected_version = (service_version
+                                or resolved.metadata.get("version") or None)
             if detected_version == "unknown":
                 detected_version = None
-            result = runtime.scan(resolved.path, db, version=detected_version)
+            image_hint = resolved.metadata.get("image")
+            result = runtime.scan(resolved.path, db, version=detected_version,
+                                  image=image_hint)
     except Exception:
         if _deferred_cleanup:
             _deferred_cleanup()

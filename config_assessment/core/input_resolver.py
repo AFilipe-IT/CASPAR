@@ -62,6 +62,94 @@ class ResolvedInput:
 
 
 # ------------------------------------------------------------------ #
+# Detecção best-effort de versão (file / directory / docker)          #
+# ------------------------------------------------------------------ #
+#
+# A versão é necessária para o cruzamento com CVEs/exploits (version_exploits).
+# Nos modos --live a versão vem do binário; nos restantes modos tentamos, por
+# best-effort e SEM rede, três fontes por esta ordem:
+#   1. tag da imagem Docker (ex.: httpd:2.4.58 → "2.4.58")
+#   2. binário do serviço no PATH (httpd -v, nginx -v, sshd -V, mysql --version)
+#   3. texto dos ficheiros de configuração (raramente expõe a versão no Apache,
+#      mas alguns serviços/cabeçalhos sim)
+# Devolve None quando nenhuma fonte revela uma versão fiável — nesse caso o
+# scan corre na mesma, apenas sem painel de exploits.
+
+# Comandos por produto para obter a versão a partir do binário no PATH.
+_VERSION_BINARIES: dict[str, list[tuple[list[str], str]]] = {
+    "apache-httpd": [(["httpd", "-v"], r"Apache/(\d+\.\d+\.\d+)"),
+                     (["apache2", "-v"], r"Apache/(\d+\.\d+\.\d+)")],
+    "nginx":        [(["nginx", "-v"], r"nginx/(\d+\.\d+\.\d+)")],
+    "ssh":          [(["sshd", "-V"], r"OpenSSH_(\d+\.\d+)"),
+                     (["ssh", "-V"], r"OpenSSH_(\d+\.\d+)")],
+    "mysql":        [(["mysql", "--version"], r"Ver\s+(\d+\.\d+\.\d+)"),
+                     (["mysqld", "--version"], r"Ver\s+(\d+\.\d+\.\d+)")],
+}
+
+# Padrões de versão dentro do conteúdo dos ficheiros de configuração.
+_VERSION_IN_CONFIG: dict[str, str] = {
+    "apache-httpd": r"Apache/(\d+\.\d+\.\d+)",
+    "nginx":        r"nginx/(\d+\.\d+\.\d+)",
+    "ssh":          r"OpenSSH[_/](\d+\.\d+)",
+    "mysql":        r"(?:MySQL|Ver)\s+(\d+\.\d+\.\d+)",
+}
+
+
+def version_from_docker_tag(image: str) -> str | None:
+    """Extrair uma versão da tag de uma imagem Docker (ex.: httpd:2.4.58)."""
+    if not image or ":" not in image:
+        return None
+    tag = image.rsplit(":", 1)[1]
+    m = re.match(r"v?(\d+(?:\.\d+){1,3})", tag)
+    return m.group(1) if m else None
+
+
+def _version_from_binary(target_id: str) -> str | None:
+    for argv, pattern in _VERSION_BINARIES.get(target_id, []):
+        if shutil.which(argv[0]) is None:
+            continue
+        try:
+            r = subprocess.run(argv, capture_output=True, text=True, timeout=5)
+            m = re.search(pattern, (r.stdout or "") + (r.stderr or ""))
+            if m:
+                return m.group(1)
+        except Exception:
+            continue
+    return None
+
+
+def _version_from_config_text(target_id: str, config_path: str) -> str | None:
+    pattern = _VERSION_IN_CONFIG.get(target_id)
+    if not pattern:
+        return None
+    try:
+        text = Path(config_path).read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return None
+    m = re.search(pattern, text)
+    return m.group(1) if m else None
+
+
+def detect_version(target_id: str, config_path: str,
+                   image: str | None = None) -> str | None:
+    """Best-effort, offline. Devolve a versão ou None. Ordem: tag → binário → config."""
+    if image:
+        v = version_from_docker_tag(image)
+        if v:
+            logger.info("[version] from docker tag: %s", v)
+            return v
+    v = _version_from_binary(target_id)
+    if v:
+        logger.info("[version] from binary on PATH: %s", v)
+        return v
+    v = _version_from_config_text(target_id, config_path)
+    if v:
+        logger.info("[version] from config text: %s", v)
+        return v
+    return None
+
+
+# ------------------------------------------------------------------ #
 # Modo 1 — Ficheiro único                                              #
 # ------------------------------------------------------------------ #
 

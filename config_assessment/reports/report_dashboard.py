@@ -482,6 +482,21 @@ def generate_dashboard(result, resolved=None):
             f'<b>no public exploit</b> is currently available for this version.'
             f'</div></div>'
         )
+    elif not ver:
+        # No version available — CVE/exploit cross-reference was not possible.
+        # Be explicit so the absence of an exploit panel is never read as
+        # "no CVEs exist". Tell the user how to supply the version.
+        exploits_section = (
+            f'<div class="exploits-panel exploits-unknown">'
+            f'<div class="panel-title">CVE / Exploit Check — Version Unknown</div>'
+            f'<div class="exploit-note">The service version could not be '
+            f'determined for {_e(result.target_name)}, so known CVEs and public '
+            f'exploits were <b>not checked</b>. This is not a confirmation that '
+            f'the version is exploit-free. Re-run with '
+            f'<b>--service-version &lt;x.y.z&gt;</b> (e.g. '
+            f'<b>caspar scan &lt;path&gt; --service-version 2.4.58</b>) to enable '
+            f'the version-aware CVE/exploit cross-reference.</div></div>'
+        )
 
     details_json = _json.dumps(details)
 

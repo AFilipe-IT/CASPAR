@@ -381,7 +381,8 @@ def _version_risk_note(product: str, version: str, info) -> str:
             f"CVE{'s' if info.cve_count != 1 else ''} detected")
 
 
-def scan(input_path: str, db: Database, *, version: str | None = None) -> ScanResult:
+def scan(input_path: str, db: Database, *, version: str | None = None,
+         auto_detect_version: bool = True, image: str | None = None) -> ScanResult:
     """
     Run a full scan of *input_path* and return a ScanResult.
 
@@ -398,7 +399,15 @@ def scan(input_path: str, db: Database, *, version: str | None = None) -> ScanRe
         Detected service version (e.g. "2.4.51"), or None when the input mode
         cannot reveal it. Propagated to ScanResult.detected_version and used by
         version-aware scoring (F1). Optional and keyword-only — existing callers
-        are unaffected.
+        are unaffected. An explicit value here takes precedence over
+        auto-detection.
+    auto_detect_version:
+        When True (default) and *version* is None, attempt a best-effort,
+        offline detection of the service version (docker tag → binary on PATH →
+        config text). Deterministic per environment.
+    image:
+        Optional Docker image reference (e.g. "httpd:2.4.58") used as a hint for
+        version auto-detection.
 
     Returns
     -------
@@ -411,6 +420,13 @@ def scan(input_path: str, db: Database, *, version: str | None = None) -> ScanRe
     plugin = _select_plugin(input_path)
     meta = plugin.metadata()
     logger.info("[scan] Plugin selected: %s", meta.name)
+
+    # 1b. Best-effort version detection (only if the caller didn't supply one).
+    if version is None and auto_detect_version:
+        from config_assessment.core.input_resolver import detect_version
+        version = detect_version(meta.name, input_path, image=image)
+        if version:
+            logger.info("[scan] Auto-detected version: %s", version)
 
     # 2. Parse
     directives = plugin.parse_config(input_path)
