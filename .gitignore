@@ -55,3 +55,6 @@ ccss_*.sarif
 *.log
 narratives_reference.txt
 *.pdf
+
+# Generated documents
+*.docx
