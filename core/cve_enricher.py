@@ -53,6 +53,9 @@ CPE_TEMPLATES: dict[str, str] = {
     # nginx:nginx returns 0 CVEs for modern versions; f5:nginx is correct
     # (verified: nginx:nginx 1.20.0 → 0, f5:nginx 1.20.0 → 7).
     "nginx":        "cpe:2.3:a:f5:nginx:{version}:*:*:*:*:*:*:*",
+    # Oracle acquired MySQL; NVD uses oracle:mysql
+    "mysql":        "cpe:2.3:a:oracle:mysql:{version}:*:*:*:*:*:*:*",
+    "ssh":          "cpe:2.3:a:openbsd:openssh:{version}:*:*:*:*:*:*:*",
 }
 
 # Persistent cache of version→exploitability lookups (F1, online-first).

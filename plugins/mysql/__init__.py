@@ -54,6 +54,7 @@ class MysqlPlugin(Target):
             benchmark_source="CIS Oracle MySQL Enterprise Edition 5.6 Benchmark v2.0.0 ARCHIVE",
             priority=100,
             version_exposing_directives=(),
+            prefetch_versions=("5.6.51", "5.7.44", "8.0.36", "8.4.0"),
         )
 
     def detection_confidence(self, path: str) -> int:
