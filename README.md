@@ -58,10 +58,10 @@ source .venv/bin/activate       # Linux / macOS / WSL2
 pip install pydantic>=2.0 click pytest openpyxl
 pip install -e .
 
-ccss --help
+caspar --help
 ```
 
-Requisitos: Python 3.11+, `pdftotext` (poppler-utils) para ler o PDF do benchmark, Docker (opcional, só para `ccss scan docker://...`).
+Requisitos: Python 3.11+, `pdftotext` (poppler-utils) para ler o PDF do benchmark, Docker (opcional, só para `caspar scan docker://...`).
 
 ```bash
 sudo apt-get install poppler-utils   # Ubuntu / Debian / WSL2
@@ -84,13 +84,13 @@ Pede uma key gratuita em https://nvd.nist.gov/developers/request-an-api-key — 
 ### Modo 1 — ficheiro único
 
 ```bash
-ccss scan /tmp/httpd.conf
+caspar scan /tmp/httpd.conf
 ```
 
 ### Modo 2 — directório completo (segue todos os Includes)
 
 ```bash
-ccss scan /etc/apache2/
+caspar scan /etc/apache2/
 ```
 
 Detecta automaticamente o ponto de entrada (`apache2.conf`, `httpd.conf`) e o parser segue `Include`/`IncludeOptional` recursivamente — `conf-enabled/`, `sites-enabled/`, `mods-enabled/` são todos incluídos.
@@ -98,8 +98,8 @@ Detecta automaticamente o ponto de entrada (`apache2.conf`, `httpd.conf`) e o pa
 ### Modo 3 — serviço instalado na máquina
 
 ```bash
-ccss scan --live apache2
-ccss scan --live httpd
+caspar scan --live apache2
+caspar scan --live httpd
 ```
 
 Usa `apache2ctl -V` / `httpd -V` para encontrar o `ServerRoot` e o ficheiro de config real, com fallback para caminhos hard-coded por distro (Debian, RHEL, macOS Homebrew).
@@ -107,8 +107,8 @@ Usa `apache2ctl -V` / `httpd -V` para encontrar o `ServerRoot` e o ficheiro de c
 ### Modo 4 — imagem Docker
 
 ```bash
-ccss scan docker://httpd:2.4
-ccss scan docker://my-custom-apache:latest
+caspar scan docker://httpd:2.4
+caspar scan docker://my-custom-apache:latest
 ```
 
 Faz `docker pull` se necessário, cria um container temporário (sem o correr), extrai os ficheiros de configuração via `docker cp`, e remove o container. Não precisa de Docker Desktop a correr no WSL2 só para inspeccionar — mas precisa para `docker create`/`docker cp`.
@@ -117,19 +117,19 @@ Faz `docker pull` se necessário, cria um container temporário (sem o correr), 
 
 ```bash
 # Relatório HTML completo (default)
-ccss scan /etc/apache2/ --report --output ./relatorios/
+caspar scan /etc/apache2/ --report --output ./relatorios/
 
 # Relatório JSON
-ccss scan /etc/apache2/ --report --format json
+caspar scan /etc/apache2/ --report --format json
 
 # Relatório SARIF (GitHub Security tab)
-ccss scan /etc/apache2/ --report --format sarif
+caspar scan /etc/apache2/ --report --format sarif
 
 # Gate CI/CD — exit 1 se score > 7.0
-ccss scan /etc/apache2/ --threshold 7.0
+caspar scan /etc/apache2/ --threshold 7.0
 
 # Base de dados alternativa
-ccss --db outra.db scan /etc/apache2/
+caspar --db outra.db scan /etc/apache2/
 ```
 
 ---
@@ -180,7 +180,7 @@ Filtros por severidade no topo. Exemplo de justificação real gerada para `Allo
 (não "Medium complexity" genérico — a justificação explica o *porquê* específico a esta directiva).
 
 ```bash
-ccss scan docker://ccss-test-apache:vulnerable --report --output ~/relatorios/
+caspar scan docker://ccss-test-apache:vulnerable --report --output ~/relatorios/
 explorer.exe ~/relatorios/ccss_*.html   # WSL2
 ```
 
@@ -352,8 +352,8 @@ Fallback (`chains.json`) usado apenas se o LLM falhar repetidamente.
 Estratégia: lookup directo por CVE ID (não keyword search — a NVD não indexa por directiva Apache). Para os ~5 misconfigurations com CVEs já identificados pelo LLM (TraceEnable, SSLProtocol, SSLCompression), faz-se lookup real na NVD para obter CVSS score actualizado e verificar presença na CISA KEV. As restantes ~25 recebem GEL=Low directamente (risco de configuração sem CVE associado — correcto metodologicamente).
 
 ```bash
-ccss refresh                    # actualiza GEL/GRL com dados NVD + KEV
-ccss refresh --dry-run          # preview sem escrever
+caspar refresh                    # actualiza GEL/GRL com dados NVD + KEV
+caspar refresh --dry-run          # preview sem escrever
 ```
 
 ---
@@ -405,13 +405,13 @@ pequena remove as entradas órfãs em vez de as deixar no banco.
 
 ```bash
 # Stage 1 (métricas) — usa o branch nginx do comando build
-ccss build --target nginx --benchmark plugins/nginx/CIS_NGINX_Benchmark_v3.0.0.pdf
+caspar build --target nginx --benchmark plugins/nginx/CIS_NGINX_Benchmark_v3.0.0.pdf
 
 # Stage 3 (narrativas) — pipeline genérico, target nginx
 python3 -m plugins.apache_httpd.build_narratives --db ccss.db --target nginx
 
 # Scan
-ccss scan /caminho/para/nginx.conf --report --format dashboard
+caspar scan /caminho/para/nginx.conf --report --format dashboard
 ```
 
 ---
@@ -435,7 +435,7 @@ ollama pull qwen2.5:14b
 ### Stage 1 + Stage 2 — métricas e chains
 
 ```bash
-ccss build --benchmark plugins/apache_httpd/Benchmark.pdf --model qwen2.5:14b
+caspar build --benchmark plugins/apache_httpd/Benchmark.pdf --model qwen2.5:14b
 ```
 
 ~2 minutos para 30 misconfigs + geração de chains (timeout de chains: 300s, prompt mais longo que métricas individuais).
@@ -458,7 +458,7 @@ python3 fix_ac_consistency.py --db ccss.db              # corrigir
 ### Modo stub (sem GPU)
 
 ```bash
-ccss build --benchmark Benchmark.pdf --stub
+caspar build --benchmark Benchmark.pdf --stub
 python3 -m plugins.apache_httpd.build_narratives --db ccss.db --stub
 ```
 

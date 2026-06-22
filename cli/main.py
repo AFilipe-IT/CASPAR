@@ -265,7 +265,10 @@ def _to_sarif(result) -> dict:
 @click.option("--verbose", "-v", is_flag=True)
 @click.pass_context
 def cli(ctx: click.Context, db: str, verbose: bool) -> None:
-    """CCSS-Scan — framework de scoring de configurações de segurança."""
+    """CASPAR — Configuration Assessment and Security Posture Automated Review.
+
+    Framework de scoring de configurações de segurança (baseado em CCSS).
+    """
     if verbose:
         logging.getLogger().setLevel(logging.INFO)
     ctx.ensure_object(dict)
