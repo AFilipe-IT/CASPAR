@@ -28,8 +28,8 @@ caspar = "cli.main:cli"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]  # so 'from core.xxx import' works without install
+pythonpath = ["."]  # so 'from config_assessment.xxx import' works without install
 addopts = "-v --tb=short"
 
 [tool.hatch.build.targets.wheel]
-packages = ["core", "plugins", "cli"]
+packages = ["config_assessment", "cli"]

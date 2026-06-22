@@ -9,7 +9,7 @@ NISTIR 7502 and reflected here first.
 """
 
 import pytest
-from core.ccss import (
+from config_assessment.core.ccss import (
     aggregate,
     amplified_score,
     base_score,

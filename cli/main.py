@@ -80,13 +80,13 @@ def _dedup_chains(chains: list) -> list:
 # ── Auto-descoberta de plugins ─────────────────────────────────────
 
 def _discover_plugins() -> None:
-    plugins_dir = Path(__file__).parent.parent / "plugins"
+    plugins_dir = Path(__file__).parent.parent / "config_assessment" / "plugins"
     if not plugins_dir.exists():
         return
     for plugin_dir in sorted(plugins_dir.iterdir()):
         if plugin_dir.is_dir() and (plugin_dir / "__init__.py").exists():
             try:
-                importlib.import_module(f"plugins.{plugin_dir.name}")
+                importlib.import_module(f"config_assessment.plugins.{plugin_dir.name}")
             except Exception as exc:
                 logger.warning("Plugin '%s' não carregado: %s", plugin_dir.name, exc)
 
@@ -94,7 +94,7 @@ def _discover_plugins() -> None:
 # ── Relatório terminal ─────────────────────────────────────────────
 
 def _print_result(result, resolved=None) -> None:
-    from core.ccss import severity_label as sl
+    from config_assessment.core.ccss import severity_label as sl
 
     groups = _dedup_issues(sorted(result.issues, key=lambda x: -x.temporal_score))
     active_chains = sorted(
@@ -300,9 +300,9 @@ def scan(ctx, input_path, live, report, fmt, output, threshold, online) -> None:
     Modo 3 — serviço live:  ccss scan --live apache2
     Modo 4 — Docker:        ccss scan docker://httpd:2.4
     """
-    from core.db.database import Database
-    from core.input_resolver import resolve
-    from core import runtime
+    from config_assessment.core.db.database import Database
+    from config_assessment.core.input_resolver import resolve
+    from config_assessment.core import runtime
 
     _discover_plugins()
     db_path: str = ctx.obj["db_path"]
@@ -368,16 +368,16 @@ def scan(ctx, input_path, live, report, fmt, output, threshold, online) -> None:
         ) or "scan"
 
         if fmt == "html":
-            from core.report_html import generate_html
+            from config_assessment.reports.report_html import generate_html
             p = od / f"ccss_{stem}_{ts}.html"
             p.write_text(generate_html(result, resolved=resolved), encoding="utf-8")
             click.echo(f"  HTML: {click.style(str(p), fg='cyan')}")
         elif fmt == "dashboard":
             if online:
-                from core.report_dashboard_online import generate_dashboard_online as _gen_dash
+                from config_assessment.reports.report_dashboard_online import generate_dashboard_online as _gen_dash
                 _suffix = "dashboard_online"
             else:
-                from core.report_dashboard import generate_dashboard as _gen_dash
+                from config_assessment.reports.report_dashboard import generate_dashboard as _gen_dash
                 _suffix = "dashboard"
             p = od / f"ccss_{stem}_{ts}_{_suffix}.html"
             p.write_text(_gen_dash(result, resolved=resolved), encoding="utf-8")
@@ -421,7 +421,7 @@ def build(ctx, benchmark, model, ollama_url, target, dry_run) -> None:
       ccss build --benchmark plugins/apache_httpd/Benchmark.pdf
     """
     if target == "apache-httpd":
-        from plugins.apache_httpd.build_llm import run_build
+        from config_assessment.plugins.apache_httpd.build_llm import run_build
         click.echo(f"  A construir '{target}' com {model}...")
         count = run_build(
             benchmark_path=benchmark,
@@ -432,7 +432,7 @@ def build(ctx, benchmark, model, ollama_url, target, dry_run) -> None:
         )
         click.echo(click.style(f"  Concluído: {count} misconfigurations.", fg="green"))
     elif target == "nginx":
-        from plugins.nginx.build_nginx import run_build
+        from config_assessment.plugins.nginx.build_nginx import run_build
         click.echo(f"  A construir '{target}' com {model}...")
         count = run_build(
             benchmark_path=benchmark,
@@ -449,7 +449,7 @@ def build(ctx, benchmark, model, ollama_url, target, dry_run) -> None:
 
 @cli.command(name="fetch-exploits")
 @click.option("--product", "-p", default=None,
-              help="Target product (e.g. apache-httpd). Default: all plugins.")
+              help="Target product (e.g. apache-httpd). Default: all config_assessment.plugins.")
 @click.option("--version", "-V", "versions", multiple=True,
               help="Specific version(s) to fetch. Default: the plugin's curated list.")
 @click.pass_context
@@ -463,9 +463,9 @@ def fetch_exploits(ctx, product, versions) -> None:
       ccss fetch-exploits -p apache-httpd -V 2.4.49
     """
     _discover_plugins()
-    from core.runtime import registered_plugins
-    from core.version_prefetch import fetch_versions
-    from core.db.database import Database
+    from config_assessment.core.runtime import registered_plugins
+    from config_assessment.enrichment.version_prefetch import fetch_versions
+    from config_assessment.core.db.database import Database
 
     # Build the {product: [versions]} plan from plugins (or the explicit args).
     plan: dict[str, list[str]] = {}
@@ -508,7 +508,7 @@ def fetch_exploits(ctx, product, versions) -> None:
 
 @cli.group("plugin")
 def plugin_group():
-    """Manage CCSS-Scan plugins."""
+    """Manage CCSS-Scan config_assessment.plugins."""
 
 
 @plugin_group.command("add")
@@ -525,11 +525,11 @@ def plugin_group():
 def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
     """Install a new plugin from a CIS Benchmark PDF."""
     from pathlib import Path as _Path
-    from core.plugin_detector import detect_service_from_pdf
-    from core.benchmark_extractor import extract_all
-    from core.rag import BenchmarkIndex
-    from core.plugin_scaffolder import PluginSpec, scaffold_plugin
-    from core.llm_client import make_client
+    from config_assessment.build.plugin_detector import detect_service_from_pdf
+    from config_assessment.build.benchmark_extractor import extract_all
+    from config_assessment.build.rag import BenchmarkIndex
+    from config_assessment.build.plugin_scaffolder import PluginSpec, scaffold_plugin
+    from config_assessment.build.llm_client import make_client
 
     src_name = _Path(source).name
     click.echo(f"\nAnalysing {src_name}...")
@@ -610,7 +610,7 @@ def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
         return
 
     # ── confirm ────────────────────────────────────────────────────────
-    plugins_dir = _Path(__file__).resolve().parent.parent / "plugins"
+    plugins_dir = _Path(__file__).resolve().parent.parent / "config_assessment" / "plugins"
     target_dir = plugins_dir / info["target_id"]
     if target_dir.exists() and not yes:
         if not click.confirm(
@@ -631,8 +631,8 @@ def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
 
     # ── build pipeline (Stages 1+2+3) ──────────────────────────────────
     click.echo("\nRunning build pipeline...")
-    from core.generic_build import run_generic_build
-    from plugins.apache_httpd.llm_pipeline import MisconfigEntry
+    from config_assessment.build.generic_build import run_generic_build
+    from config_assessment.plugins.apache_httpd.llm_pipeline import MisconfigEntry
     mentries = [MisconfigEntry(d, b, g, s, "", info["target_id"])
                 for (d, b, g, s) in entries]
     stats = run_generic_build(
@@ -653,7 +653,7 @@ def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
 def targets() -> None:
     """Listar plugins disponíveis."""
     _discover_plugins()
-    from core.runtime import registered_plugins
+    from config_assessment.core.runtime import registered_plugins
     plugins = registered_plugins()
     if not plugins:
         click.echo("Nenhum plugin registado.")
@@ -680,7 +680,7 @@ def refresh(ctx, target, nvd_key, dry_run) -> None:
       ccss refresh
       ccss refresh --dry-run
     """
-    from plugins.apache_httpd.refresh_cve import refresh_cve
+    from config_assessment.plugins.apache_httpd.refresh_cve import refresh_cve
     stats = refresh_cve(
         db_path=ctx.obj["db_path"],
         api_key=nvd_key,

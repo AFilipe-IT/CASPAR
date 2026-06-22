@@ -36,8 +36,8 @@ from pathlib import Path
 
 import pytest
 
-from core.db.database import Database
-from core import runtime
+from config_assessment.core.db.database import Database
+from config_assessment.core import runtime
 
 
 # ── Localizar os artefactos do projeto (raiz = dois níveis acima deste ficheiro) ──
@@ -82,7 +82,7 @@ def _register_plugins():
     Ensure the runtime plugin registry is populated before any scan.
 
     Plugins register themselves as a side-effect of being imported (the CLI
-    does this via _discover_plugins, which simply imports each plugins.* module).
+    does this via _discover_plugins, which simply imports each config_assessment.plugins.* module).
     When this test runs in isolation, nothing else imports the Apache plugin, so
     runtime.registered_plugins() is empty and _select_plugin() raises. Importing
     the plugin module here reproduces the CLI's discovery behaviour without
@@ -90,18 +90,18 @@ def _register_plugins():
     """
     import importlib
 
-    plugins_dir = _PROJECT_ROOT / "plugins"
+    plugins_dir = _PROJECT_ROOT / "config_assessment" / "plugins"
     if plugins_dir.exists():
         for plugin_dir in sorted(plugins_dir.iterdir()):
             if plugin_dir.is_dir() and (plugin_dir / "__init__.py").exists():
                 try:
-                    importlib.import_module(f"plugins.{plugin_dir.name}")
+                    importlib.import_module(f"config_assessment.plugins.{plugin_dir.name}")
                 except Exception:
                     pass  # a broken optional plugin shouldn't break coverage testing
 
     # Fallback: if discovery didn't register anything, register Apache explicitly.
     if not runtime.registered_plugins():
-        from plugins.apache_httpd import ApachePlugin
+        from config_assessment.plugins.apache_httpd import ApachePlugin
         runtime.register_plugin(ApachePlugin())
 
     assert runtime.registered_plugins(), (
@@ -115,7 +115,7 @@ def db() -> Database:
     _require(
         _DB_PATH,
         "Banco ccss.db",
-        "ccss build --benchmark <pdf> && python3 -m plugins.apache_httpd.build_narratives --db ccss.db",
+        "ccss build --benchmark <pdf> && python3 -m config_assessment.plugins.apache_httpd.build_narratives --db ccss.db",
     )
     with Database(str(_DB_PATH)) as database:
         yield database

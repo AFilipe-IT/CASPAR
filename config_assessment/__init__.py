@@ -1,0 +1,1 @@
+"""CASPAR — Configuration Assessment package."""

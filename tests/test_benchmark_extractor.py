@@ -17,14 +17,14 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from core.benchmark_extractor import (
+from config_assessment.build.benchmark_extractor import (
     try_extract_entry,
     classify_section,
     extract_bad_value_from_default,
     llm_extract_entry,
     extract_all,
 )
-from core.llm_client import StubLLMClient
+from config_assessment.build.llm_client import StubLLMClient
 
 
 # ------------------------------------------------------------------ #
@@ -133,7 +133,7 @@ class TestExtractBadValue:
 # Verified ground truth against the real Apache PDF (8/8)             #
 # ------------------------------------------------------------------ #
 
-_PDF = "plugins/apache_httpd/Benchmark.pdf"
+_PDF = "config_assessment/plugins/apache_httpd/Benchmark.pdf"
 
 # (section_id → expected bad_value), verified against the PDF text.
 _GT_VERIFIED = {
@@ -153,7 +153,7 @@ def sections():
     import os
     if not os.path.exists(_PDF):
         pytest.skip(f"{_PDF} not present")
-    from core.rag import BenchmarkIndex
+    from config_assessment.build.rag import BenchmarkIndex
     idx = BenchmarkIndex(_PDF)
     return {s.section_id: s for s in idx.sections}
 

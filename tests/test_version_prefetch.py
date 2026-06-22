@@ -11,10 +11,10 @@ from unittest.mock import patch
 
 import pytest
 
-from core.db.database import Database
-from core.cve_enricher import VersionExploitInfo
-from core.exploit_enricher import ExploitRecord
-from core import version_prefetch
+from config_assessment.core.db.database import Database
+from config_assessment.enrichment.cve_enricher import VersionExploitInfo
+from config_assessment.enrichment.exploit_enricher import ExploitRecord
+from config_assessment.enrichment import version_prefetch
 
 
 @pytest.fixture
@@ -39,8 +39,8 @@ def test_fetch_stores_cves_and_exploits(db):
     )
     exploits = [ExploitRecord(edb_id="50383", title="RCE", verified=True,
                               cve="CVE-2021-41773", path="/x.py")]
-    with patch("core.version_prefetch.search_exploits_for_cves", return_value=exploits), \
-         patch("core.version_prefetch._load_kev", return_value=set()):
+    with patch("config_assessment.enrichment.version_prefetch.search_exploits_for_cves", return_value=exploits), \
+         patch("config_assessment.enrichment.version_prefetch._load_kev", return_value=set()):
         r = version_prefetch.fetch_version(db, "apache-httpd", "2.4.49",
                                            client=_StubClient(info))
     assert r["ok"] and r["cve_count"] == 2 and r["exploit_count"] == 1
@@ -54,8 +54,8 @@ def test_fetch_stores_cves_and_exploits(db):
 def test_clean_version_stored_with_no_exploits(db):
     info = VersionExploitInfo("apache-httpd", "2.4.58", cve_count=48, kev_count=0,
                               cve_ids=["CVE-2023-25690"])
-    with patch("core.version_prefetch.search_exploits_for_cves", return_value=[]), \
-         patch("core.version_prefetch._load_kev", return_value=set()):
+    with patch("config_assessment.enrichment.version_prefetch.search_exploits_for_cves", return_value=[]), \
+         patch("config_assessment.enrichment.version_prefetch._load_kev", return_value=set()):
         r = version_prefetch.fetch_version(db, "apache-httpd", "2.4.58",
                                            client=_StubClient(info))
     assert r["ok"] and r["cve_count"] == 48 and r["exploit_count"] == 0
@@ -65,8 +65,8 @@ def test_clean_version_stored_with_no_exploits(db):
 
 def test_failed_lookup_not_stored(db):
     info = VersionExploitInfo("apache-httpd", "2.4.49", lookup_failed=True)
-    with patch("core.version_prefetch.search_exploits_for_cves", return_value=[]), \
-         patch("core.version_prefetch._load_kev", return_value=set()):
+    with patch("config_assessment.enrichment.version_prefetch.search_exploits_for_cves", return_value=[]), \
+         patch("config_assessment.enrichment.version_prefetch._load_kev", return_value=set()):
         r = version_prefetch.fetch_version(db, "apache-httpd", "2.4.49",
                                            client=_StubClient(info))
     assert r["ok"] is False
@@ -77,8 +77,8 @@ def test_empty_cve_result_not_stored(db):
     # 0 CVEs on a successful lookup is inconclusive (spurious empty array or bad
     # CPE) — must not be stored, so it can be retried.
     info = VersionExploitInfo("nginx", "1.20.0", cve_count=0, cve_ids=[])
-    with patch("core.version_prefetch.search_exploits_for_cves", return_value=[]), \
-         patch("core.version_prefetch._load_kev", return_value=set()):
+    with patch("config_assessment.enrichment.version_prefetch.search_exploits_for_cves", return_value=[]), \
+         patch("config_assessment.enrichment.version_prefetch._load_kev", return_value=set()):
         r = version_prefetch.fetch_version(db, "nginx", "1.20.0",
                                            client=_StubClient(info))
     assert r["ok"] is False and r["empty"] is True
@@ -97,8 +97,8 @@ def test_fetch_versions_multiple(db):
         def get_cves_for_version(self, product, version, kev_ids=None):
             return infos[version]
 
-    with patch("core.version_prefetch.search_exploits_for_cves", return_value=[]), \
-         patch("core.version_prefetch._load_kev", return_value=set()):
+    with patch("config_assessment.enrichment.version_prefetch.search_exploits_for_cves", return_value=[]), \
+         patch("config_assessment.enrichment.version_prefetch._load_kev", return_value=set()):
         results = version_prefetch.fetch_versions(
             db, "apache-httpd", ["2.4.49", "2.4.58"], client=_MultiStub())
     assert len(results) == 2

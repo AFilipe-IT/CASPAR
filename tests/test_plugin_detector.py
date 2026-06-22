@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from core.plugin_detector import detect_service_from_pdf, _from_filename
-from core.llm_client import StubLLMClient
+from config_assessment.build.plugin_detector import detect_service_from_pdf, _from_filename
+from config_assessment.build.llm_client import StubLLMClient
 
 
 class TestFilename:
@@ -33,15 +33,15 @@ class TestFilename:
 
     def test_unknown_filename_returns_none(self):
         # No content, no LLM → None for an unknown service.
-        with patch("core.plugin_detector._from_content", return_value=None):
+        with patch("config_assessment.build.plugin_detector._from_content", return_value=None):
             assert detect_service_from_pdf("CIS_Foobar_Benchmark.pdf") is None
 
 
 class TestContent:
     def test_content_fallback_when_filename_fails(self):
         # Filename has no service token; content names PostgreSQL.
-        with patch("core.plugin_detector._read_pdf_safe", create=True), \
-             patch("core.rag._read_pdf",
+        with patch("config_assessment.build.plugin_detector._read_pdf_safe", create=True), \
+             patch("config_assessment.build.rag._read_pdf",
                    return_value="CIS PostgreSQL 13 Benchmark\nThis document..."):
             r = detect_service_from_pdf("CIS_Database_Benchmark.pdf")
         assert r is not None and r["target_id"] == "postgresql"
@@ -50,19 +50,19 @@ class TestContent:
 class TestLLMFallback:
     def test_llm_used_when_filename_and_content_fail(self):
         llm = StubLLMClient(fixed_response="redis")
-        with patch("core.plugin_detector._from_filename", return_value=None), \
-             patch("core.plugin_detector._from_content", return_value=None), \
-             patch("core.rag._read_pdf", return_value="some benchmark text"):
+        with patch("config_assessment.build.plugin_detector._from_filename", return_value=None), \
+             patch("config_assessment.build.plugin_detector._from_content", return_value=None), \
+             patch("config_assessment.build.rag._read_pdf", return_value="some benchmark text"):
             r = detect_service_from_pdf("ambiguous.pdf", llm=llm)
         assert r is not None and r["target_id"] == "redis"
 
     def test_llm_unknown_returns_none(self):
         llm = StubLLMClient(fixed_response="unknown")
-        with patch("core.plugin_detector._from_filename", return_value=None), \
-             patch("core.plugin_detector._from_content", return_value=None):
+        with patch("config_assessment.build.plugin_detector._from_filename", return_value=None), \
+             patch("config_assessment.build.plugin_detector._from_content", return_value=None):
             assert detect_service_from_pdf("ambiguous.pdf", llm=llm) is None
 
     def test_no_llm_no_match_returns_none(self):
-        with patch("core.plugin_detector._from_filename", return_value=None), \
-             patch("core.plugin_detector._from_content", return_value=None):
+        with patch("config_assessment.build.plugin_detector._from_filename", return_value=None), \
+             patch("config_assessment.build.plugin_detector._from_content", return_value=None):
             assert detect_service_from_pdf("ambiguous.pdf") is None

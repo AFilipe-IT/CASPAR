@@ -1,0 +1,18 @@
+# CASPAR — dependências Python
+# Instalação: pip install -r requirement.txt
+#
+# NOTA sobre PDFs: a extracção de benchmarks CIS usa o utilitário de sistema
+# `pdftotext` (pacote poppler-utils), não uma biblioteca Python. Em Debian/Ubuntu:
+#   sudo apt-get install poppler-utils
+# O cliente LLM (Ollama / Claude API) usa apenas urllib da stdlib — sem deps extra.
+
+# ── Runtime (núcleo determinístico + CLI) ──────────────────────────
+pydantic>=2.0
+click>=8.1
+
+# ── Build-time (extracção de benchmarks; ficheiros .xlsx CCE) ───────
+openpyxl>=3.1
+
+# ── Desenvolvimento / testes ───────────────────────────────────────
+pytest>=7.4
+pytest-cov>=4.1
