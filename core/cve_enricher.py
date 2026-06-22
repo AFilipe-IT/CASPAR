@@ -263,39 +263,28 @@ class NVDClient:
             published=cve.get("published", "")[:10],
         )
 
-    def get_cves_for_version(
-        self, product: str, version: str, kev_ids: set[str] | None = None,
-    ) -> VersionExploitInfo:
-        """Count CVEs affecting *product* at *version* via NVD CPE match (F1).
+    def _fetch_page(self, cpe: str, start_index: int) -> dict | None:
+        """Fetch one page of the NVD v2 cpeName query. None on HTTP/network error.
 
-        Queries the NVD by CPE (virtualMatchString) — a parallel path to the
-        per-CVE-ID get_cve(). Returns a VersionExploitInfo (cached=False, this is
-        a live lookup); on any error returns an empty info so scoring degrades to
-        amplification ×1.0 rather than failing the scan.
+        Uses `cpeName` (exact CPE) rather than `virtualMatchString`: the NVD
+        consistently 503s on virtualMatchString for busy products, whereas
+        cpeName returns HTTP 200 reliably (verified empirically).
         """
-        cpe = CPE_TEMPLATES.get(product)
-        if not cpe or not version:
-            return VersionExploitInfo(product=product, version=version or "")
-        if kev_ids is None:
-            kev_ids = _load_kev()
-
         params: dict[str, str] = {
-            "virtualMatchString": cpe.format(version=version),
+            "cpeName": cpe,
             "resultsPerPage": "2000",
+            "startIndex": str(start_index),
         }
         if self.api_key:
             params["apiKey"] = self.api_key
 
         self._wait()
         url = f"{NVD_API_BASE}?{urllib.parse.urlencode(params)}"
-        logger.debug("NVD CPE lookup: %s @ %s", product, version)
-
         try:
             req = urllib.request.Request(
-                url, headers={"User-Agent": "CCSS-Scan/0.1 (security research)"},
-            )
+                url, headers={"User-Agent": "CCSS-Scan/0.1 (security research)"})
             with urllib.request.urlopen(req, timeout=NVD_CPE_TIMEOUT) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+                return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             if e.code == 429:
                 logger.warning("NVD rate limited (429) — waiting 35s")
@@ -303,46 +292,70 @@ class NVDClient:
                 try:
                     with urllib.request.urlopen(
                         urllib.request.Request(url, headers={"User-Agent": "CCSS-Scan/0.1"}),
-                        timeout=NVD_CPE_TIMEOUT,
-                    ) as resp:
-                        data = json.loads(resp.read().decode("utf-8"))
+                        timeout=NVD_CPE_TIMEOUT) as resp:
+                        return json.loads(resp.read().decode("utf-8"))
                 except Exception as e2:
                     logger.warning("NVD CPE retry failed: %s", e2)
-                    return VersionExploitInfo(product=product, version=version, lookup_failed=True)
-            else:
-                logger.debug("NVD %d for %s @ %s", e.code, product, version)
-                return VersionExploitInfo(product=product, version=version, lookup_failed=True)
+                    return None
+            logger.debug("NVD %d for %s", e.code, cpe)
+            return None
         except Exception as e:
-            logger.warning("NVD CPE error for %s @ %s: %s", product, version, e)
-            return VersionExploitInfo(product=product, version=version, lookup_failed=True)
+            logger.warning("NVD CPE error for %s: %s", cpe, e)
+            return None
         finally:
             self._last_request = time.monotonic()
 
-        vulns = data.get("vulnerabilities", [])
-        cve_count = len(vulns)
+    def get_cves_for_version(
+        self, product: str, version: str, kev_ids: set[str] | None = None,
+    ) -> VersionExploitInfo:
+        """Count CVEs affecting *product* at *version* via the NVD v2 cpeName query.
+
+        Paginates over startIndex when totalResults > resultsPerPage. Returns a
+        VersionExploitInfo (cached=False); on any error returns lookup_failed=True
+        so scoring degrades to amplification ×1.0 rather than failing the scan.
+        """
+        cpe_tmpl = CPE_TEMPLATES.get(product)
+        if not cpe_tmpl or not version:
+            return VersionExploitInfo(product=product, version=version or "")
+        if kev_ids is None:
+            kev_ids = _load_kev()
+        cpe = cpe_tmpl.format(version=version)
+
         kev_count = 0
         max_cvss = 0.0
         cve_ids: list[str] = []
-        for v in vulns:
-            cve = v.get("cve", {})
-            cid = cve.get("id")
-            if cid:
-                cve_ids.append(cid)
-            if cid in kev_ids:
-                kev_count += 1
-            for mk in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
-                entries = cve.get("metrics", {}).get(mk, [])
-                if entries:
-                    score = entries[0].get("cvssData", {}).get("baseScore")
-                    if score is not None:
-                        max_cvss = max(max_cvss, float(score))
-                    break
+        start_index = 0
+        while True:
+            data = self._fetch_page(cpe, start_index)
+            if data is None:
+                return VersionExploitInfo(product=product, version=version,
+                                          lookup_failed=True)
+            for v in data.get("vulnerabilities", []):
+                cve = v.get("cve", {})
+                cid = cve.get("id")
+                if cid:
+                    cve_ids.append(cid)
+                if cid in kev_ids:
+                    kev_count += 1
+                # Prefer CVSS v3, fall back to v2.
+                for mk in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+                    entries = cve.get("metrics", {}).get(mk, [])
+                    if entries:
+                        score = entries[0].get("cvssData", {}).get("baseScore")
+                        if score is not None:
+                            max_cvss = max(max_cvss, float(score))
+                        break
+
+            total = data.get("totalResults", len(cve_ids))
+            per_page = data.get("resultsPerPage", 2000) or 2000
+            start_index += per_page
+            if start_index >= total:
+                break
 
         return VersionExploitInfo(
             product=product, version=version,
-            cve_count=cve_count, kev_count=kev_count,
-            max_cvss=round(max_cvss, 1), cached=False,
-            cve_ids=cve_ids,
+            cve_count=len(cve_ids), kev_count=kev_count,
+            max_cvss=round(max_cvss, 1), cached=False, cve_ids=cve_ids,
         )
 
 
