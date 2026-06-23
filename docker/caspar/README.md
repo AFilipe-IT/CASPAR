@@ -47,7 +47,16 @@ docker run --rm -v "$(pwd)/httpd.conf:/scan/httpd.conf" \
 ```
 
 A versão do serviço é **auto-detectada** (tag → binário → texto da config) e
-usada para cruzar CVEs/exploits da base canónica e amplificar os *scores*.
+usada para cruzar CVEs/exploits e amplificar os *scores* (F1):
+
+- **Versão na base canónica** → cruzamento offline e determinístico (×1.0–×1.5
+  conforme CVEs/KEV).
+- **Versão fora da base** → o runtime tenta o NVD ao vivo (*online-first*, com
+  cache de 24 h). Com rede, pode amplificar; **sem rede ou sem versão, degrada
+  graciosamente para ×1.0** e o relatório assinala o estado («exploit check
+  unavailable» vs «checked clean»). Para um *scan* 100 % offline e reprodutível,
+  garante que a versão está na base (`caspar fetch-exploits`) ou não passes
+  versão.
 
 ### Scan com relatório persistente
 ```bash
@@ -142,9 +151,12 @@ em *build-time* (~85 MB, sendo o CIS SSH 78 MB) — não são lidos pelo *scan*.
 | `caspar:latest` | 0.44 s | 0.40 s | 0.45 s | 9.8/10 Critical |
 | `caspar:slim`   | 0.48 s | 0.44 s | 0.46 s | 9.8/10 Critical |
 
-O *scan* é determinístico e offline; o tempo é dominado pelo arranque do
-processo, não pela análise. As duas imagens produzem **resultado idêntico** — a
-vantagem da `slim` é o **tamanho** (≈3,4× menor), não a velocidade.
+A análise de configuração é determinística e offline; o tempo é dominado pelo
+arranque do processo, não pela análise. (A única excepção é o passo F1 quando a
+versão não está na base — aí pode haver uma consulta ao NVD; ver a nota em
+«Scan de ficheiro / directório local».) As duas imagens produzem **resultado
+idêntico** — a vantagem da `slim` é o **tamanho** (≈3,4× menor), não a
+velocidade.
 
 *(Medições em WSL2, Docker 29.x; valores ilustrativos para a secção de
 Performance da dissertação — reproduzíveis com o bloco abaixo.)*
@@ -168,6 +180,7 @@ done
 | `caspar build` / `caspar plugin add` | **Ollama** acessível em `OLLAMA_HOST` | Degrada graciosamente: o comando avisa que não há LLM e não corre. O *scan* continua a funcionar com a base canónica já incluída. |
 | `caspar scan docker://<img>` | *socket* Docker montado **+** `--group-add <gid>` | Erro claro «Docker não está disponível». Disponível só na `caspar:latest` (a `slim` não traz cliente Docker). |
 | Enriquecimento de exploits ao vivo | `searchsploit` (`SEARCHSPLOIT_BIN`) | Usa apenas os CVEs/exploits já persistidos na base canónica (offline). |
+| F1 para versão **fora da base** | Rede + (opcional) `NVD_API_KEY` | Consulta o NVD ao vivo (*online-first*, cache 24 h). Sem rede, a amplificação degrada para ×1.0 e o relatório assinala «exploit check unavailable». Para versões na base, é tudo offline. |
 
 A imagem **não inclui o Ollama** — é orquestrado à parte (ver
 `docker-compose.yml`, profile `full`). Esta separação mantém a imagem de
