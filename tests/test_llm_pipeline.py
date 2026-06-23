@@ -299,6 +299,52 @@ class TestLLMClient:
         client = OllamaClient(base_url="http://localhost:19999")  # wrong port
         assert client.is_available() is False
 
+    def test_404_fails_fast_with_model_hint(self, monkeypatch):
+        # A 404 means the server is up but the model isn't pulled. It must NOT
+        # be retried (permanent client error) and the message must name the
+        # model + how to fix it.
+        import urllib.error
+        import config_assessment.build.llm_client as lc
+
+        calls = {"n": 0}
+
+        def fake_urlopen(req, timeout=None):
+            calls["n"] += 1
+            raise urllib.error.HTTPError(
+                req.full_url, 404, "Not Found", hdrs=None, fp=None)
+
+        monkeypatch.setattr(lc.urllib.request, "urlopen", fake_urlopen)
+        client = OllamaClient(model="qwen2.5:14b")
+
+        with pytest.raises(RuntimeError) as exc:
+            client.complete("hi")
+
+        assert calls["n"] == 1                       # no retry on 404
+        assert "qwen2.5:14b" in str(exc.value)        # names the model
+        assert "ollama pull" in str(exc.value)        # tells you how to fix it
+
+    def test_5xx_is_retried(self, monkeypatch):
+        # A 5xx is transient → exhaust retries then raise the "unreachable" error.
+        import urllib.error
+        import config_assessment.build.llm_client as lc
+
+        calls = {"n": 0}
+
+        def fake_urlopen(req, timeout=None):
+            calls["n"] += 1
+            raise urllib.error.HTTPError(
+                req.full_url, 503, "Service Unavailable", hdrs=None, fp=None)
+
+        monkeypatch.setattr(lc.urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(lc.time, "sleep", lambda *_: None)  # no real backoff
+        client = OllamaClient(model="qwen2.5:14b", max_retries=3)
+
+        with pytest.raises(RuntimeError) as exc:
+            client.complete("hi")
+
+        assert calls["n"] == 3                        # retried up to max_retries
+        assert "unreachable" in str(exc.value).lower()
+
     def test_make_client_returns_stub_on_unavailable(self):
         client = make_client(
             backend="ollama",

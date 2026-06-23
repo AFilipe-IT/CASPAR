@@ -121,17 +121,42 @@ class OllamaClient(LLMClient):
                     body = json.loads(resp.read().decode("utf-8"))
                     return body["message"]["content"]
 
-            except urllib.error.URLError as e:
-                if attempt < self.max_retries - 1:
-                    wait = self.retry_delay * (2 ** attempt)
-                    logger.warning("Ollama request failed (attempt %d/%d): %s — retrying in %.1fs",
-                                   attempt + 1, self.max_retries, e, wait)
-                    time.sleep(wait)
-                else:
+            except urllib.error.HTTPError as e:
+                # A 4xx is a permanent client error — retrying is pointless and
+                # only hides the cause. The most common one is 404: the server
+                # is up but the model isn't pulled.
+                if 400 <= e.code < 500:
+                    if e.code == 404:
+                        raise RuntimeError(
+                            f"Ollama returned 404 for model '{self.model}'. The "
+                            f"server is running but the model is not installed.\n"
+                            f"Pull it:        ollama pull {self.model}\n"
+                            f"Or use another: --model <name>  (e.g. one from "
+                            f"`ollama list`)"
+                        ) from e
                     raise RuntimeError(
-                        f"Ollama unreachable after {self.max_retries} attempts: {e}\n"
-                        f"Is Ollama running? Try: ollama serve"
+                        f"Ollama rejected the request (HTTP {e.code}) for model "
+                        f"'{self.model}': {e.reason}"
                     ) from e
+                # 5xx — transient server error: fall through to the retry path.
+                self._retry_or_raise(e, attempt, wait_label="server error")
+
+            except urllib.error.URLError as e:
+                self._retry_or_raise(e, attempt, wait_label="connection error")
+
+    def _retry_or_raise(self, e: Exception, attempt: int, *, wait_label: str) -> None:
+        """Back off and retry transient failures; raise a clear error when the
+        attempts are exhausted."""
+        if attempt < self.max_retries - 1:
+            wait = self.retry_delay * (2 ** attempt)
+            logger.warning("Ollama request failed (%s, attempt %d/%d): %s — retrying in %.1fs",
+                           wait_label, attempt + 1, self.max_retries, e, wait)
+            time.sleep(wait)
+        else:
+            raise RuntimeError(
+                f"Ollama unreachable after {self.max_retries} attempts: {e}\n"
+                f"Is Ollama running? Try: ollama serve"
+            ) from e
 
 
 # ------------------------------------------------------------------ #
