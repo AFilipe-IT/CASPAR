@@ -28,9 +28,10 @@ __pycache__/
 *.pyd
 .Python
 
-# Build
-dist/
-build/
+# Build (Python packaging artifacts — anchored to repo root so they do NOT
+# match the config_assessment/build/ source package).
+/dist/
+/build/
 *.egg-info/
 *.egg
 
