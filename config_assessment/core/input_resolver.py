@@ -178,6 +178,9 @@ _ENTRY_POINTS = [
     "httpd.conf",
     "apache.conf",
     "httpd-ssl.conf",
+    "sshd_config",   # SSH (não é .conf — tem de estar explícito)
+    "mysqld.cnf",    # MySQL Debian (/etc/mysql/mysql.conf.d/)
+    "my.cnf",        # MySQL genérico
 ]
 
 # Config fragments that are NEVER a main entry point. Used to filter the
@@ -385,6 +388,26 @@ _DOCKER_CONFIG_DIRS = {
     "nginx":   ["/etc/nginx/"],
 }
 
+# Paths genéricos a tentar por ordem de prioridade, cobrindo TODOS os targets
+# registados. O resolver extrai cada path para um tmpdir e o plugin decide via
+# detect()/detection_confidence() — não é preciso saber o serviço de antemão.
+CONFIG_PATHS_TO_TRY = [
+    # Apache
+    "/etc/apache2/",
+    "/usr/local/apache2/conf/",
+    "/etc/httpd/conf/",
+    # Nginx
+    "/etc/nginx/",
+    "/usr/local/nginx/conf/",
+    # SSH
+    "/etc/ssh/",
+    # MySQL
+    "/etc/mysql/mysql.conf.d/",
+    "/etc/mysql/",
+    # PostgreSQL (para futuro)
+    "/etc/postgresql/",
+]
+
 
 def _docker_available() -> bool:
     """Verificar se o Docker está disponível."""
@@ -440,15 +463,13 @@ def _extract_config_from_image(image: str, tmpdir: str) -> str:
     """
     basename = _get_image_basename(image)
 
-    # Determinar o directório de config a extrair
-    config_dir_candidates = _DOCKER_CONFIG_DIRS.get(basename, [])
-    # Adicionar candidatos genéricos
-    config_dir_candidates += [
-        "/etc/apache2/",
-        "/usr/local/apache2/conf/",
-        "/etc/httpd/conf/",
-        "/etc/nginx/",
-    ]
+    # Determinar o directório de config a extrair: primeiro os candidatos
+    # específicos da imagem (por basename), depois a lista genérica que cobre
+    # todos os targets registados (Apache, Nginx, SSH, MySQL, …).
+    config_dir_candidates = list(_DOCKER_CONFIG_DIRS.get(basename, []))
+    for path in CONFIG_PATHS_TO_TRY:
+        if path not in config_dir_candidates:
+            config_dir_candidates.append(path)
 
     # Criar container temporário (sem correr)
     logger.info("Creating temporary container from %s", image)
@@ -478,8 +499,8 @@ def _extract_config_from_image(image: str, tmpdir: str) -> str:
 
         if not extracted_dir:
             raise FileNotFoundError(
-                f"No Apache config found in image {image}.\n"
-                f"Tried: {config_dir_candidates[:4]}"
+                f"No recognised service config found in image {image}.\n"
+                f"Tried: {config_dir_candidates}"
             )
 
         return extracted_dir
