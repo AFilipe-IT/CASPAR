@@ -179,6 +179,7 @@ _ENTRY_POINTS = [
     "apache.conf",
     "httpd-ssl.conf",
     "sshd_config",   # SSH (não é .conf — tem de estar explícito)
+    "mysql.cnf",     # MySQL Ubuntu 22.04+ main file (my.cnf é symlink p/ este)
     "mysqld.cnf",    # MySQL Debian (/etc/mysql/mysql.conf.d/)
     "my.cnf",        # MySQL genérico
 ]

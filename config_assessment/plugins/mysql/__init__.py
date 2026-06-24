@@ -19,7 +19,7 @@ from config_assessment.core.target import (
 from config_assessment.plugins.mysql.parser import parse_file
 from config_assessment.plugins.mysql.rules import infer_profile
 
-_FILENAMES = {'mysqld.cnf', 'my.cnf'}
+_FILENAMES = {'mysqld.cnf', 'my.cnf', 'mysql.cnf'}
 
 
 class MysqlPlugin(Target):
