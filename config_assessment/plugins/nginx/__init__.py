@@ -145,7 +145,7 @@ class NginxPlugin(Target):
             priority=100,
             version_exposing_directives=("server_tokens",),
             # Versions with public exploits in Exploit-DB.
-            prefetch_versions=("1.4.0", "1.11.1", "1.20.0"),
+            prefetch_versions=("1.4.0", "1.11.1", "1.20.0", "1.24.0"),
         )
 
     def detection_confidence(self, path: str) -> int:
