@@ -110,4 +110,4 @@ if __name__ == "__main__":
     print(f"{'='*50}")
     print(f"  Narratives {'previewed' if args.dry_run else 'written'}: {count}")
     print(f"\nNext step:")
-    print(f"  ccss scan /path/to/httpd.conf --report --format html")
+    print(f"  caspar scan /path/to/httpd.conf --report --format html")
