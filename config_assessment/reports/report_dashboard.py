@@ -396,7 +396,8 @@ def generate_dashboard(result, resolved=None):
         cls = _sev_class(issue.temporal_score)
         lbl = _sev_label(issue.temporal_score)
         cves = " ".join(_e(c) for c in issue.cves) if issue.cves else ""
-        metrics = f"{issue.av}{issue.au}{issue.ac}/{issue.c}{issue.i}{issue.a}"
+        metrics = (f"AV:{issue.av}/AC:{issue.ac}/Au:{issue.au}/"
+                   f"C:{issue.c}/I:{issue.i}/A:{issue.a}")
         rows += (f'<tr data-sev="{cls}" data-score="{issue.temporal_score}">'
                  f'<td class="t-score t-{cls}">{issue.temporal_score:.1f}</td>'
                  f'<td><span class="t-pill pill-{cls}">{lbl}</span></td>'
@@ -423,7 +424,7 @@ def generate_dashboard(result, resolved=None):
              f'<th data-sort="score">Score <span class="arr">\u2195</span></th>'
              f'<th data-sort="sev">Severity <span class="arr">\u2195</span></th>'
              f'<th data-sort="dir">Directive <span class="arr">\u2195</span></th>'
-             f'<th class="nosort">Value</th><th class="nosort">Metrics</th>'
+             f'<th class="nosort">Value</th><th class="nosort">CCSS Vector</th>'
              f'<th class="nosort">CVEs</th><th class="nosort"></th>'
              f'</tr></thead><tbody>{rows}</tbody></table></div>')
 
