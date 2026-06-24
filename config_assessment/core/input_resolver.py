@@ -258,6 +258,29 @@ _SERVICE_PATHS = {
     ],
 }
 
+# Maps a --live service name to (plugin_id, default config directory). The
+# plugin_id selects the right scanner; the directory is resolved with
+# resolve_directory(), which already knows each service's entry file
+# (nginx.conf, sshd_config, mysqld.cnf, …). Only apache-httpd uses the extra
+# apache2ctl -V probe to discover a non-standard ServerRoot.
+_LIVE_SERVICE_MAP = {
+    # Apache
+    "apache2": ("apache-httpd", "/etc/apache2/"),
+    "apache":  ("apache-httpd", "/etc/apache2/"),
+    "httpd":   ("apache-httpd", "/etc/httpd/conf/"),
+    "http":    ("apache-httpd", "/etc/apache2/"),
+    # Nginx
+    "nginx":   ("nginx", "/etc/nginx/"),
+    # SSH
+    "ssh":     ("ssh", "/etc/ssh/"),
+    "sshd":    ("ssh", "/etc/ssh/"),
+    "openssh": ("ssh", "/etc/ssh/"),
+    # MySQL / MariaDB
+    "mysql":   ("mysql", "/etc/mysql/"),
+    "mysqld":  ("mysql", "/etc/mysql/"),
+    "mariadb": ("mysql", "/etc/mysql/"),
+}
+
 
 def _get_apache_version(binary: str) -> str:
     """Obter versão do Apache via `apache2 -v` ou `httpd -v`."""
@@ -310,44 +333,60 @@ def _get_apache_config_path(binary: str) -> str | None:
 
 def resolve_live_service(service_name: str) -> ResolvedInput:
     """
-    Detectar o ficheiro de configuração de um serviço instalado localmente.
+    Detect the config of a service installed locally, routed by service name.
 
-    Tenta (por ordem):
-      1. apache2ctl/apachectl -V  (mais fiável)
-      2. Caminhos hard-coded por distro
+    The service name selects the plugin and a default config directory via
+    _LIVE_SERVICE_MAP. Apache additionally tries `apache2ctl -V` to discover a
+    non-standard ServerRoot; the others resolve their mapped directory.
     """
     service_lower = service_name.lower().strip()
 
-    # Alias comuns
-    aliases = {
-        "apache": "apache2",
-        "apache2": "apache2",
-        "httpd": "httpd",
-        "http": "httpd",
-    }
-    canonical = aliases.get(service_lower, service_lower)
+    mapping = _LIVE_SERVICE_MAP.get(service_lower)
+    if mapping is None:
+        raise ValueError(
+            f"Unknown live service: '{service_name}'.\n"
+            f"Supported: {', '.join(sorted(_LIVE_SERVICE_MAP))}"
+        )
+    plugin_id, default_dir = mapping
+    logger.info("Detecting live service: %s (plugin: %s)", service_name, plugin_id)
 
-    logger.info("Detecting live service: %s (canonical: %s)", service_name, canonical)
+    # Apache only: apache2ctl -V is the most reliable source of the real config.
+    if plugin_id == "apache-httpd":
+        for binary in [service_lower, "apache2", "httpd",
+                       f"/usr/sbin/{service_lower}", "/usr/sbin/apache2"]:
+            config_path = _get_apache_config_path(binary)
+            if config_path:
+                version = _get_apache_version(binary)
+                logger.info("Config via %s -V: %s (v%s)", binary, config_path, version)
+                return ResolvedInput(
+                    path=config_path,
+                    mode="live",
+                    metadata={
+                        "service": plugin_id,
+                        "version": version,
+                        "binary": binary,
+                        "config_path": config_path,
+                    },
+                )
 
-    # Tentar obter config via binário
-    for binary in [canonical, f"/usr/sbin/{canonical}", f"/usr/bin/{canonical}"]:
-        config_path = _get_apache_config_path(binary)
-        if config_path:
-            version = _get_apache_version(binary)
-            logger.info("Config via %s -V: %s (v%s)", binary, config_path, version)
-            return ResolvedInput(
-                path=config_path,
-                mode="live",
-                metadata={
-                    "service": canonical,
-                    "version": version,
-                    "binary": binary,
-                    "config_path": config_path,
-                },
-            )
+    # All services: resolve the mapped config directory (resolve_directory knows
+    # each service's entry file — nginx.conf, sshd_config, mysqld.cnf, …).
+    if Path(default_dir).is_dir():
+        try:
+            resolved = resolve_directory(default_dir)
+            resolved.mode = "live"
+            version = detect_version(plugin_id, resolved.path) or "unknown"
+            resolved.metadata.update({
+                "service": plugin_id,
+                "version": version,
+                "config_path": resolved.path,
+            })
+            return resolved
+        except FileNotFoundError:
+            pass  # fall through to the explicit-path candidates below
 
-    # Fallback: caminhos hard-coded
-    candidates = _SERVICE_PATHS.get(canonical, [])
+    # Fallback: hard-coded single-file paths.
+    candidates = _SERVICE_PATHS.get(service_lower, []) or _SERVICE_PATHS.get(plugin_id, [])
     for candidate in candidates:
         if Path(candidate).exists():
             logger.info("Config via hard-coded path: %s", candidate)
@@ -355,16 +394,16 @@ def resolve_live_service(service_name: str) -> ResolvedInput:
                 path=candidate,
                 mode="live",
                 metadata={
-                    "service": canonical,
-                    "version": "unknown",
+                    "service": plugin_id,
+                    "version": detect_version(plugin_id, candidate) or "unknown",
                     "config_path": candidate,
                 },
             )
 
     raise FileNotFoundError(
-        f"Serviço '{service_name}' não encontrado.\n"
-        f"Caminhos tentados: {candidates}\n"
-        f"Certifica-te que o serviço está instalado: sudo apt install {canonical}"
+        f"Service '{service_name}' not found.\n"
+        f"Tried: {default_dir} and {candidates}\n"
+        f"Make sure the service is installed."
     )
 
 
