@@ -140,13 +140,17 @@ def llm_extract_entry(section, llm) -> ExtractionResult | None:
 Remediation: {section.remediation[:400]}
 Default Value: {section.default_value[:200]}
 
-If this describes a config DIRECTIVE with a concrete BAD VALUE and GOOD VALUE, extract them.
+If this describes a config DIRECTIVE with a concrete BAD VALUE and GOOD VALUE, extract a value rule.
+If it requires a directive to be PRESENT/ENABLED (e.g. "X must be set", "enable Y", "ensure Z is configured")
+without a specific bad value, extract an ABSENCE rule with bad_value="" and good_value=<the required value>.
 If it's about file permissions, system state, or service management, output extract=false.
 
 Output JSON only:
 {{"extract": true, "directive": "name", "bad_value": "insecure", "good_value": "secure", "rule_type": "value"}}
+or, for a mandatory-presence control:
+{{"extract": true, "directive": "name", "bad_value": "", "good_value": "on", "rule_type": "absence"}}
 or
-{{"extract": false, "reason": "procedure/absence/unknown"}}'''
+{{"extract": false, "reason": "procedure/unknown"}}'''
 
     try:
         raw = llm.complete(prompt, system="You extract CIS config directives. Output JSON only.")
