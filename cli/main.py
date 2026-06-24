@@ -1,11 +1,11 @@
 """
-cli/main.py — CCSS-Scan CLI com 4 modos de scan e relatório HTML.
+cli/main.py — CASPAR CLI with 4 scan modes and HTML reporting.
 
-  ccss scan /tmp/httpd.conf
-  ccss scan /etc/apache2/
-  ccss scan --live apache2
-  ccss scan docker://httpd:2.4
-  ccss scan docker://ccss-test-apache:vulnerable --report --format html
+  caspar scan /tmp/httpd.conf
+  caspar scan /etc/apache2/
+  caspar scan --live apache2
+  caspar scan docker://httpd:2.4
+  caspar scan docker://ccss-test-apache:vulnerable --report --format html
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ def _discover_plugins() -> None:
             try:
                 importlib.import_module(f"config_assessment.plugins.{plugin_dir.name}")
             except Exception as exc:
-                logger.warning("Plugin '%s' não carregado: %s", plugin_dir.name, exc)
+                logger.warning("Plugin '%s' not loaded: %s", plugin_dir.name, exc)
 
 
 # ── Relatório terminal ─────────────────────────────────────────────
@@ -109,7 +109,7 @@ def _print_result(result, resolved=None) -> None:
     click.echo()
 
     # Modo e input
-    mode_labels = {"file": "ficheiro", "directory": "directório", "live": "serviço", "docker": "Docker"}
+    mode_labels = {"file": "file", "directory": "directory", "live": "service", "docker": "Docker"}
     input_str = result.input_path
     mode_str = ""
     if resolved:
@@ -139,7 +139,7 @@ def _print_result(result, resolved=None) -> None:
     click.echo()
 
     if not result.issues:
-        click.echo(click.style("  ✓  Nenhum problema detectado.", fg="green", bold=True))
+        click.echo(click.style("  ✓  No issues detected.", fg="green", bold=True))
         click.echo()
         click.echo(click.style("  ══════════════════════════════════════════════════════════════", dim=True))
         click.echo()
@@ -201,7 +201,7 @@ def _print_issue_compact(g: dict) -> None:
             click.echo(f"       {click.style(locs[0], dim=True)}")
         else:
             preview = " | ".join(locs[:2]) + ("  ..." if len(locs) > 2 else "")
-            click.echo(f"       {click.style(f'{len(locs)} ocorrências: {preview}', dim=True)}")
+            click.echo(f"       {click.style(f'{len(locs)} occurrences: {preview}', dim=True)}")
     if issue.justification:
         just = issue.justification[:120] + ("…" if len(issue.justification) > 120 else "")
         click.echo(f"       {click.style(just, dim=True)}")
@@ -254,7 +254,7 @@ def _to_sarif(result) -> dict:
     return {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{"tool": {"driver": {"name": "CCSS-Scan", "version": "0.1.0", "rules": rules}}, "results": results}],
+        "runs": [{"tool": {"driver": {"name": "CASPAR", "version": "0.1.0", "rules": rules}}, "results": results}],
     }
 
 
@@ -267,7 +267,7 @@ def _to_sarif(result) -> dict:
 def cli(ctx: click.Context, db: str, verbose: bool) -> None:
     """CASPAR — Configuration Assessment and Security Posture Automated Review.
 
-    Framework de scoring de configurações de segurança (baseado em CCSS).
+    Security configuration scoring framework based on CCSS/NISTIR 7502.
     """
     if verbose:
         logging.getLogger().setLevel(logging.INFO)
@@ -278,9 +278,9 @@ def cli(ctx: click.Context, db: str, verbose: bool) -> None:
 @cli.command()
 @click.argument("input_path", metavar="CONFIG")
 @click.option("--live", "-l", is_flag=True, default=False,
-              help="Detectar serviço instalado (ex: --live apache2).")
+              help="Detect an installed service (e.g. --live apache2).")
 @click.option("--report", "-r", is_flag=True, default=False,
-              help="Guardar relatório em ficheiro.")
+              help="Save the report to a file.")
 @click.option("--format", "-f", "fmt", default="html",
               type=click.Choice(["html", "dashboard", "json", "sarif"], case_sensitive=False),
               show_default=True)
@@ -289,20 +289,21 @@ def cli(ctx: click.Context, db: str, verbose: bool) -> None:
 @click.option("--online", is_flag=True, default=False,
               help="Use online charts (ECharts via CDN) for the dashboard format.")
 @click.option("--threshold", "-t", default=0.0, type=float,
-              help="Exit 1 se score > threshold (CI/CD).")
+              help="Exit 1 if score > threshold (CI/CD).")
 @click.option("--service-version", "service_version", default=None,
-              help="Versão do serviço (ex: 2.4.58) para cruzar com CVEs/exploits. "
-                   "Se omitida, é auto-detectada (tag Docker, binário, config).")
+              help="Service version (e.g. 2.4.58) to cross-reference with "
+                   "CVEs/exploits. If omitted, it is auto-detected (Docker tag, "
+                   "binary, config).")
 @click.pass_context
 def scan(ctx, input_path, live, report, fmt, output, threshold, online,
          service_version) -> None:
-    """Analisar configurações Apache — 4 modos.
+    """Analyse service configurations — 4 modes.
 
     \b
-    Modo 1 — ficheiro:      ccss scan /tmp/httpd.conf
-    Modo 2 — directório:    ccss scan /etc/apache2/
-    Modo 3 — serviço live:  ccss scan --live apache2
-    Modo 4 — Docker:        ccss scan docker://httpd:2.4
+    Mode 1 — file:        caspar scan /tmp/httpd.conf
+    Mode 2 — directory:   caspar scan /etc/apache2/
+    Mode 3 — live service: caspar scan --live apache2
+    Mode 4 — Docker:      caspar scan docker://httpd:2.4
     """
     from config_assessment.core.db.database import Database
     from config_assessment.core.input_resolver import resolve
@@ -313,8 +314,8 @@ def scan(ctx, input_path, live, report, fmt, output, threshold, online,
 
     if not Path(db_path).exists():
         click.echo(
-            click.style(f"DB '{db_path}' não encontrada.\n", fg="yellow") +
-            "Corre: " + click.style("ccss build --benchmark <pdf>", bold=True),
+            click.style(f"DB '{db_path}' not found.\n", fg="yellow") +
+            "Run: " + click.style("caspar build --benchmark <pdf>", bold=True),
             err=True,
         )
         sys.exit(2)
@@ -322,18 +323,18 @@ def scan(ctx, input_path, live, report, fmt, output, threshold, online,
     try:
         resolved = resolve(input_path, live=live)
     except (FileNotFoundError, RuntimeError, ValueError) as e:
-        click.echo(click.style(f"Erro: {e}", fg="red"), err=True)
+        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
         sys.exit(2)
 
-    # Mostrar o que foi detectado
+    # Show what was detected
     if resolved.mode == "live":
         v = resolved.metadata.get("version", "")
         vs = f" {v}" if v and v != "unknown" else ""
-        click.echo(click.style(f"  Serviço: {resolved.metadata.get('service', '')}{vs}", fg="cyan"))
+        click.echo(click.style(f"  Service: {resolved.metadata.get('service', '')}{vs}", fg="cyan"))
         click.echo(click.style(f"  Config: {resolved.path}", dim=True))
         click.echo()
     elif resolved.mode == "docker":
-        click.echo(click.style(f"  Imagem: {resolved.metadata.get('image', '')}", fg="cyan"))
+        click.echo(click.style(f"  Image: {resolved.metadata.get('image', '')}", fg="cyan"))
         click.echo()
     elif resolved.mode == "directory":
         click.echo(click.style(
@@ -423,15 +424,15 @@ def scan(ctx, input_path, live, report, fmt, output, threshold, online,
 @click.option("--dry-run", is_flag=True)
 @click.pass_context
 def build(ctx, benchmark, model, ollama_url, target, dry_run) -> None:
-    """Popular a base de dados com LLM local (Ollama).
+    """Populate the database using a local LLM (Ollama).
 
     \b
-    Exemplo:
-      ccss build --benchmark plugins/apache_httpd/Benchmark.pdf
+    Example:
+      caspar build --benchmark plugins/apache_httpd/Benchmark.pdf
     """
     if target == "apache-httpd":
         from config_assessment.plugins.apache_httpd.build_llm import run_build
-        click.echo(f"  A construir '{target}' com {model}...")
+        click.echo(f"  Building '{target}' with {model}...")
         count = run_build(
             benchmark_path=benchmark,
             db_path=ctx.obj["db_path"],
@@ -442,7 +443,7 @@ def build(ctx, benchmark, model, ollama_url, target, dry_run) -> None:
         click.echo(click.style(f"  Concluído: {count} misconfigurations.", fg="green"))
     elif target == "nginx":
         from config_assessment.plugins.nginx.build_nginx import run_build
-        click.echo(f"  A construir '{target}' com {model}...")
+        click.echo(f"  Building '{target}' with {model}...")
         count = run_build(
             benchmark_path=benchmark,
             db_path=ctx.obj["db_path"],
@@ -452,7 +453,7 @@ def build(ctx, benchmark, model, ollama_url, target, dry_run) -> None:
         )
         click.echo(click.style(f"  Concluído: {count} misconfigurations.", fg="green"))
     else:
-        click.echo(f"Target '{target}' não implementado.", err=True)
+        click.echo(f"Target '{target}' not implemented.", err=True)
         sys.exit(1)
 
 
@@ -467,9 +468,9 @@ def fetch_exploits(ctx, product, versions) -> None:
 
     \b
     Runs the network lookups once, at build time, so scans stay offline.
-      ccss fetch-exploits                          # all plugins, curated versions
-      ccss fetch-exploits -p apache-httpd          # one product, curated versions
-      ccss fetch-exploits -p apache-httpd -V 2.4.49
+      caspar fetch-exploits                        # all plugins, curated versions
+      caspar fetch-exploits -p apache-httpd        # one product, curated versions
+      caspar fetch-exploits -p apache-httpd -V 2.4.49
     """
     _discover_plugins()
     from config_assessment.core.runtime import registered_plugins
@@ -487,22 +488,22 @@ def fetch_exploits(ctx, product, versions) -> None:
             plan[m.name] = vlist
 
     if not plan:
-        click.echo("Nada a buscar (nenhuma versão curada; usa -p/-V).", err=True)
+        click.echo("Nothing to fetch (no curated versions; use -p/-V).", err=True)
         return
 
     with Database(ctx.obj["db_path"]) as db:
         for prod, vlist in plan.items():
-            click.echo(f"\n  {prod} — {len(vlist)} versão(ões)")
+            click.echo(f"\n  {prod} — {len(vlist)} version(s)")
             click.echo("  " + "─" * 50)
             results = fetch_versions(db, prod, vlist)
             for r in results:
                 if not r["ok"] and r.get("empty"):
                     click.echo(click.style(
-                        f"  ? {r['version']:<10} 0 CVEs (inconclusivo — CPE ou "
-                        f"NVD vazio; não gravado)", fg="yellow"))
+                        f"  ? {r['version']:<10} 0 CVEs (inconclusive — empty CPE "
+                        f"or NVD; not stored)", fg="yellow"))
                 elif not r["ok"]:
                     click.echo(click.style(
-                        f"  ✗ {r['version']:<10} NVD indisponível (tenta de novo)",
+                        f"  ✗ {r['version']:<10} NVD unavailable (try again)",
                         fg="yellow"))
                 elif r["exploit_count"] > 0:
                     click.echo(click.style(
@@ -511,13 +512,13 @@ def fetch_exploits(ctx, product, versions) -> None:
                 else:
                     click.echo(click.style(
                         f"  ✓ {r['version']:<10} {r['cve_count']} CVEs, "
-                        f"sem exploits", fg="green"))
+                        f"no exploits", fg="green"))
     click.echo()
 
 
 @cli.group("plugin")
 def plugin_group():
-    """Manage CCSS-Scan config_assessment.plugins."""
+    """Manage CASPAR plugins."""
 
 
 @plugin_group.command("add")
@@ -655,20 +656,20 @@ def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
     click.echo(f"  Misconfigs: {stats['misconfigs']} | Chains: {stats['chains']} "
                f"| Narratives: {stats['narratives']}/{stats['misconfigs']}")
     cf = info["config_paths"][0] if info["config_paths"] else info["config_filenames"][0]
-    click.echo(f"\nRun: ccss scan {cf}")
+    click.echo(f"\nRun: caspar scan {cf}")
 
 
 @cli.command()
 def targets() -> None:
-    """Listar plugins disponíveis."""
+    """List available plugins."""
     _discover_plugins()
     from config_assessment.core.runtime import registered_plugins
     plugins = registered_plugins()
     if not plugins:
-        click.echo("Nenhum plugin registado.")
+        click.echo("No plugins registered.")
         return
     click.echo()
-    click.echo(f"  {'PLUGIN':<22}  {'VERSÃO':<10}  BENCHMARK")
+    click.echo(f"  {'PLUGIN':<22}  {'VERSION':<10}  BENCHMARK")
     click.echo("  " + "─" * 65)
     for p in plugins:
         m = p.metadata()
@@ -678,16 +679,16 @@ def targets() -> None:
 
 @cli.command()
 @click.option("--target", "-t", default="apache-httpd", show_default=True)
-@click.option("--nvd-key", default="", help="NVD API key (sobrepõe .env).")
+@click.option("--nvd-key", default="", help="NVD API key (overrides .env).")
 @click.option("--dry-run", is_flag=True)
 @click.pass_context
 def refresh(ctx, target, nvd_key, dry_run) -> None:
-    """Actualizar GEL/GRL com NVD + CISA KEV.
+    """Update GEL/GRL scores with NVD + CISA KEV data.
 
     \b
-    Exemplo:
-      ccss refresh
-      ccss refresh --dry-run
+    Example:
+      caspar refresh
+      caspar refresh --dry-run
     """
     from config_assessment.plugins.apache_httpd.refresh_cve import refresh_cve
     stats = refresh_cve(
@@ -700,14 +701,14 @@ def refresh(ctx, target, nvd_key, dry_run) -> None:
     click.echo(f"  CVE Refresh {'(dry-run) ' if dry_run else ''}— {target}")
     click.echo(f"  {'─' * 40}")
     click.echo(f"  Total:        {stats.get('total', 0)}")
-    click.echo(f"  Actualizados: {stats.get('updated', 0)}")
+    click.echo(f"  Updated:      {stats.get('updated', 0)}")
     click.echo(f"  GEL=High:     {stats.get('gel_h', 0)}  (CISA KEV)")
     click.echo(f"  GEL=Medium:   {stats.get('gel_m', 0)}")
     click.echo(f"  GEL=Low:      {stats.get('gel_l', 0)}")
     click.echo()
     if stats.get("gel_h", 0) > 0:
         click.echo(click.style(
-            f"  ⚠  {stats['gel_h']} entrada(s) na CISA KEV!",
+            f"  ⚠  {stats['gel_h']} entry/entries in CISA KEV!",
             fg="bright_red", bold=True,
         ))
         click.echo()

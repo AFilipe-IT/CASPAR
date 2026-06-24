@@ -353,10 +353,10 @@ function filterIssues(s,btn){
     return (
         "<!DOCTYPE html>\n<html lang=\"en\"><head>\n" +
         "<meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n" +
-        f"<title>CCSS-Scan &#8212; {_e(result.target_name)} &#8212; {score:.1f} {result.severity}</title>\n" +
+        f"<title>CASPAR &#8212; {_e(result.target_name)} &#8212; {score:.1f} {result.severity}</title>\n" +
         f"<style>{CSS}</style></head><body>\n<div class=\"page\">\n" +
         '<div class="header"><div>\n' +
-        f'<h1>CCSS-Scan Security Report</h1>\n' +
+        f'<h1>CASPAR Security Report</h1>\n' +
         f'<p class="muted" style="margin-top:4px">{_e(result.target_name)} &nbsp;&#183;&nbsp; {scan_time}</p>\n' +
         f'<p class="muted">{mode_label}: <code>{_e(input_src)}</code></p>\n' +
         f'<div style="margin-top:12px;max-width:360px">{_bar(score)}</div>\n' +

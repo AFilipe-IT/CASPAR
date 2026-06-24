@@ -602,9 +602,9 @@ def resolve(
 
     if not p.exists():
         raise FileNotFoundError(
-            f"Não encontrado: {input_path}\n"
-            f"Dica: usa --live para serviços instalados: ccss scan --live apache2\n"
-            f"      usa docker:// para imagens: ccss scan docker://httpd:2.4"
+            f"Not found: {input_path}\n"
+            f"Hint: use --live for installed services: caspar scan --live apache2\n"
+            f"      use docker:// for images:        caspar scan docker://httpd:2.4"
         )
 
     if p.is_dir():
