@@ -1,0 +1,35 @@
+[
+  {
+    "chain_id": "ldap-password-exposure",
+    "target_name": "tomcat",
+    "misconfig_directives": [
+      "com.sun.management.jmxremote.ssl",
+      "connectionURL"
+    ],
+    "amplification": 1.2,
+    "justification": "Step 1 (com.sun.management.jmxremote.ssl=false) disables SSL for JMX connections, making them vulnerable to interception. Step 2 (connectionURL=ldap://localhost:389) exposes the LDAP server's location and port number, enabling an attacker to perform a man-in-the-middle attack and potentially gain access to sensitive data.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "tomcat-user-info-disclosure",
+    "target_name": "tomcat",
+    "misconfig_directives": [
+      "showServerInfo",
+      "showReport"
+    ],
+    "amplification": 1.2,
+    "justification": "Step 1 (showServerInfo=true) discloses server information, potentially revealing sensitive details about the Tomcat installation. Step 2 (showReport=true) provides additional information about the server's configuration, aiding an attacker in identifying vulnerabilities.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "tomcat-session-exposure",
+    "target_name": "tomcat",
+    "misconfig_directives": [
+      "session-timeout",
+      "failureCount"
+    ],
+    "amplification": 1.2,
+    "justification": "Step 1 (session-timeout=insecure_value) does not set a session timeout, potentially allowing an attacker to maintain an active session for an extended period. Step 2 (failureCount=insecure_value) does not limit the number of failed login attempts, making brute-force attacks easier.",
+    "cross_target": false
+  }
+]
