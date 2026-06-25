@@ -1,0 +1,57 @@
+[
+  {
+    "chain_id": "file-permissions-escalation",
+    "target_name": "redis",
+    "misconfig_directives": [
+      "/etc/opt/redislabs/permissions",
+      "directory_permissions"
+    ],
+    "amplification": 1.2,
+    "justification": "The misconfiguration of file permissions (704) for the RedisLabs directory allows an attacker to read sensitive files. Combined with the misconfiguration of directory permissions (701), an attacker can escalate privileges and potentially gain access to other protected directories.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "tls-version-exploit",
+    "target_name": "redis",
+    "misconfig_directives": [
+      "tls_version",
+      "min_data_TLS_version"
+    ],
+    "amplification": 1.2,
+    "justification": "The misconfiguration of TLS versions (< v1.2) and minimum data TLS version (1.0) allows an attacker to use older, insecure protocols for communication with the server. This can lead to exploitation by downgrade attacks.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "fips-bypass",
+    "target_name": "redis",
+    "misconfig_directives": [
+      "fips",
+      "/proc/sys/crypto/fips_enabled"
+    ],
+    "amplification": 1.4,
+    "justification": "The misconfiguration of FIPS mode (insecure_value) and the setting of fips_enabled to 0 allows an attacker to bypass FIPS restrictions on cryptographic algorithms, potentially leading to the use of weak or insecure algorithms.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "certificate-exploit",
+    "target_name": "redis",
+    "misconfig_directives": [
+      "certificate",
+      "persistence"
+    ],
+    "amplification": 1.4,
+    "justification": "The misconfiguration of the server certificate (insecure_value) and persistence settings allows an attacker to potentially intercept or manipulate SSL/TLS communications. This can lead to man-in-the-middle attacks or data theft.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "lua-scripts-privilege-escalation",
+    "target_name": "redis",
+    "misconfig_directives": [
+      "lua_scripts_enabled",
+      "user_role"
+    ],
+    "amplification": 1.2,
+    "justification": "The misconfiguration of Lua scripts (true) allows an attacker to execute arbitrary code on the server. Combined with the misconfiguration of user role (viewer), an attacker can potentially escalate privileges and gain access to sensitive data.",
+    "cross_target": false
+  }
+]
