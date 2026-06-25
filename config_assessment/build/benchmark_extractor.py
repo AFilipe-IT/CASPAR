@@ -212,3 +212,184 @@ def extract_all(index, llm=None) -> list[ExtractionResult]:
     _rank = {"high": 0, "medium": 1, "low": 2}
     results.sort(key=lambda x: (_rank.get(x.confidence, 3), x.section_id))
     return results
+
+
+# ------------------------------------------------------------------ #
+# XCCDF (DISA STIG) support                                            #
+# ------------------------------------------------------------------ #
+
+def detect_source_format(path: str) -> Literal["pdf", "xccdf", "unknown"]:
+    """Best-effort source-format detection by extension + (for XML) root tag."""
+    import xml.etree.ElementTree as ET
+
+    low = path.lower()
+    if low.endswith(".pdf"):
+        return "pdf"
+    if low.endswith(".xml"):
+        try:
+            root = ET.parse(path).getroot()
+            tag = root.tag.lower()
+            if "benchmark" in tag or "xccdf" in tag:
+                return "xccdf"
+        except ET.ParseError:
+            pass
+    return "unknown"
+
+
+# Map STIG severity → extraction confidence. High-severity rules are the most
+# important; we still send them through the LLM (the heuristics are PDF-shaped),
+# but mark their confidence so the CLI can report a "High severity" count.
+_SEVERITY_CONFIDENCE = {"high": "high", "medium": "medium", "low": "low"}
+
+# Signals in a STIG fixtext that a control is about *presence* (absence rule)
+# rather than a concrete bad→good value swap.
+_ABSENCE_SIGNALS = ("enable", "configure", "ensure", "must be set", "set the",
+                    "add the", "must be present", "must be configured")
+
+
+# Vendor words that prefix a STIG title before the actual product name, e.g.
+# "Apache Tomcat", "Oracle MySQL", "Microsoft IIS". Skipped when deriving the
+# service identity so the target_id is the product, not the vendor.
+VENDOR_WORDS = {
+    "apache", "microsoft", "oracle", "vmware", "red", "ibm",
+    "crunchy", "enterprisedb", "splunk", "tanium",
+}
+
+
+def extract_service_name(title: str) -> str:
+    """Derive the service name from a benchmark/STIG title.
+
+    Skips a leading vendor word: "Apache Tomcat ..." → "tomcat",
+    "Oracle MySQL ..." → "mysql", "Microsoft IIS ..." → "iis".
+    """
+    words = title.lower().split()
+    if words and words[0] in VENDOR_WORDS and len(words) > 1:
+        return words[1]
+    return words[0] if words else "unknown"
+
+
+class XCCDFExtractor:
+    """Parse a DISA STIG XCCDF XML and extract misconfiguration entries.
+
+    Mirrors the PDF flow: high-severity rules first, then the LLM resolves the
+    directive/values from the structured <fixtext>. Output is a list of
+    ExtractionResult — identical to extract_all() — so the CLI is format-agnostic.
+    """
+
+    NAMESPACES = [
+        "http://checklists.nist.gov/xccdf/1.1",
+        "http://checklists.nist.gov/xccdf/1.2",
+    ]
+
+    XCCDF_LLM_PROMPT = '''You are extracting a security misconfiguration from a DISA STIG rule.
+
+STIG Rule ID: {rule_id}
+Severity: {severity}
+Title: {title}
+Fix Text: {fixtext}
+Check Content: {check_content}
+
+Extract the configuration directive and values. Return JSON only:
+{{"extract": true, "directive": "name", "bad_value": "insecure_value", "good_value": "secure_value", "rule_type": "value"}}
+or, for a control that requires a directive to be PRESENT/enabled:
+{{"extract": true, "directive": "name", "bad_value": "", "good_value": "secure_value", "rule_type": "absence"}}
+or, if not extractable (procedural/manual):
+{{"extract": false, "reason": "procedural/manual"}}
+
+Rules:
+- directive: the exact config parameter name (e.g. "maxclients", "ssl")
+- bad_value: literal insecure value, or "" for absence rules
+- rule_type: "absence" if the fix says "enable/configure/ensure present"'''
+
+    def _ns_for(self, root) -> str:
+        """Return the XCCDF namespace URI actually used by this document."""
+        if root.tag.startswith("{"):
+            return root.tag[1:root.tag.find("}")]
+        return self.NAMESPACES[0]
+
+    def load(self, xml_path: str) -> tuple[str, list[dict]]:
+        """Return (benchmark_title, rules). Each rule:
+        {id, severity, title, fixtext, check_content}."""
+        import xml.etree.ElementTree as ET
+
+        root = ET.parse(xml_path).getroot()
+        ns = {"x": self._ns_for(root)}
+
+        title_el = root.find("x:title", ns)
+        benchmark_title = (title_el.text or "").strip() if title_el is not None else ""
+
+        rules: list[dict] = []
+        for r in root.findall(".//x:Rule", ns):
+            t = r.find("x:title", ns)
+            fix = r.find("x:fixtext", ns)
+            chk = r.find(".//x:check-content", ns)
+            rules.append({
+                "id": r.get("id", ""),
+                "severity": (r.get("severity") or "medium").lower(),
+                "title": (t.text or "").strip() if t is not None else "",
+                "fixtext": "".join(fix.itertext()).strip() if fix is not None else "",
+                "check_content": "".join(chk.itertext()).strip() if chk is not None else "",
+            })
+        return benchmark_title, rules
+
+    def extract(self, xml_path: str, llm_client=None) -> list[ExtractionResult]:
+        """Extract one ExtractionResult per rule (LLM-resolved). Rules the LLM
+        cannot resolve (procedural/manual) are skipped."""
+        _, rules = self.load(xml_path)
+        results: list[ExtractionResult] = []
+
+        for rule in rules:
+            conf = _SEVERITY_CONFIDENCE.get(rule["severity"], "medium")
+
+            if llm_client is None:
+                # No LLM: we cannot resolve directive/values from free-form
+                # fixtext deterministically — mark for review with the rule id.
+                results.append(ExtractionResult(
+                    directive="", rule_type="value", confidence=conf,
+                    method="xccdf-no-llm", section_id=rule["id"], needs_review=True,
+                ))
+                continue
+
+            r = self._llm_extract_rule(rule, llm_client, conf)
+            if r is not None:
+                results.append(r)
+
+        _rank = {"high": 0, "medium": 1, "low": 2}
+        results.sort(key=lambda x: (_rank.get(x.confidence, 3), x.section_id))
+        return results
+
+    def _llm_extract_rule(self, rule: dict, llm, confidence: str) -> ExtractionResult | None:
+        prompt = self.XCCDF_LLM_PROMPT.format(
+            rule_id=rule["id"], severity=rule["severity"],
+            title=rule["title"][:200], fixtext=rule["fixtext"][:600],
+            check_content=rule["check_content"][:400],
+        )
+        try:
+            raw = llm.complete(prompt, system="You extract STIG config directives. Output JSON only.")
+        except Exception:
+            return None
+
+        data = _extract_json(raw)
+        if not data or not data.get("extract"):
+            return None
+        directive = str(data.get("directive", "")).strip()
+        if not directive:
+            return None
+
+        rule_type = data.get("rule_type", "value")
+        if rule_type not in ("value", "absence"):
+            rule_type = "value"
+        bad_value = str(data.get("bad_value", "")).strip()
+        # Absence heuristic fallback: if the LLM said "value" but the fixtext
+        # clearly asks for presence and gave no bad_value, treat it as absence.
+        if rule_type == "value" and not bad_value:
+            low = rule["fixtext"].lower()
+            if any(s in low for s in _ABSENCE_SIGNALS):
+                rule_type = "absence"
+
+        return ExtractionResult(
+            directive=directive, bad_value=bad_value,
+            good_value=str(data.get("good_value", "")).strip(),
+            rule_type=rule_type, confidence=confidence,
+            method="LLM", section_id=rule["id"],
+        )

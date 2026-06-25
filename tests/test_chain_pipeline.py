@@ -383,6 +383,25 @@ class TestGenerateChainsLLMBootstrap:
         assert "recon-to-rce" in ids
         assert "root-privilege-escalation" in ids
 
+    def test_bootstrap_writes_chains_json_for_review(self, sample_misconfigs, tmp_path):
+        # Correção 3: an LLM-bootstrapped build must persist chains.json so the
+        # next build is deterministic and the human can review it.
+        out = tmp_path / "plugins" / "demo" / "chains.json"
+        assert not out.exists()
+        chains = generate_chains(sample_misconfigs,
+                                 StubLLMClient(fixed_response=VALID_LLM_RESPONSE),
+                                 chains_json_path=out)
+        assert chains and out.exists()
+
+        # The written file round-trips and a second build is JSON-first (offline).
+        reloaded = _load_curated_chains(out)
+        assert {c.chain_id for c in reloaded} == {c.chain_id for c in chains}
+        # Second call with a StubLLM that would error proves JSON short-circuits.
+        again = generate_chains(sample_misconfigs,
+                                StubLLMClient(fixed_response="garbage no json"),
+                                chains_json_path=out)
+        assert {c.chain_id for c in again} == {c.chain_id for c in chains}
+
     def test_amplification_values_in_range(self, sample_misconfigs):
         llm = StubLLMClient(fixed_response=VALID_LLM_RESPONSE)
         chains = generate_chains(sample_misconfigs, llm, chains_json_path=_NO_JSON)

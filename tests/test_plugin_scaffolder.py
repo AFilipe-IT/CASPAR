@@ -45,6 +45,34 @@ def test_scaffold_generates_valid_python(tmp_path):
         ast.parse(f.read_text(encoding="utf-8"))  # no SyntaxError
 
 
+def test_absence_rules_written_to_rules_py(tmp_path):
+    spec = _spec()
+    spec.absence_rules = [("ssl", "on", "6.1"), ("logging", "enabled", "7.2")]
+    plugin_dir = scaffold_plugin(spec, tmp_path / "plugins", benchmark_pdf=None)
+
+    rules_src = (plugin_dir / "rules.py").read_text(encoding="utf-8")
+    ast.parse(rules_src)  # still valid Python
+
+    # Exec it and assert ABSENCE_RULES carries both entries with the right shape.
+    ns: dict = {}
+    exec(compile(rules_src, "rules.py", "exec"), ns)
+    rules = ns["ABSENCE_RULES"]
+    assert {r["directive"] for r in rules} == {"ssl", "logging"}
+    ssl = next(r for r in rules if r["directive"] == "ssl")
+    assert ssl["good_value"] == "on"
+    assert ssl["cis_section"] == "6.1"
+    assert ssl["required_when"] == "always"
+
+
+def test_no_absence_rules_leaves_empty_list(tmp_path):
+    spec = _spec()  # absence_rules=[]
+    plugin_dir = scaffold_plugin(spec, tmp_path / "plugins", benchmark_pdf=None)
+    rules_src = (plugin_dir / "rules.py").read_text(encoding="utf-8")
+    ns: dict = {}
+    exec(compile(rules_src, "rules.py", "exec"), ns)
+    assert ns["ABSENCE_RULES"] == []   # commented placeholder only → empty list
+
+
 def test_scaffold_plugin_importable():
     """Scaffold into the real plugins/ package (the actual target), import it,
     confirm auto-registration, then clean up so no test pollution remains."""

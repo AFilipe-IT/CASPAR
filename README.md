@@ -8,7 +8,14 @@
 
 O CCSS-Scan lê uma configuração de serviço (ficheiro, directório, serviço instalado, ou imagem Docker), analisa cada directiva contra o CIS Benchmark usando um LLM local, e atribui um score de segurança CCSS (0–10) a cada problema — com narrativa técnica completa, cenário de exploração, justificação de cada submétrica, recomendação de remediação, enriquecimento por CVE real (NVD + CISA KEV), e detecção de attack chains.
 
-Não é um scanner Apache específico. É uma metodologia replicável para qualquer serviço com CIS Benchmark disponível. O Apache HTTP Server 2.4 é o target de referência porque é o único com ground truth CCE disponível para calibração.
+Não é um scanner Apache específico. É uma metodologia replicável para qualquer serviço com **CIS Benchmark (PDF)** ou **DISA STIG (XCCDF XML)** disponível — `caspar plugin add` auto-detecta o formato da fonte. O Apache HTTP Server 2.4 é o target de referência porque é o único com ground truth CCE disponível para calibração.
+
+As fontes vivem em `sources/`: `sources/benchmarks/` (PDFs CIS) e `sources/stigs/` (XML DISA STIG). Os STIGs alargam a cobertura a 50+ produtos sem CIS Benchmark (Redis, Tomcat, MongoDB, Kubernetes, VMware, Splunk, …).
+
+```bash
+caspar plugin add --source sources/benchmarks/CIS_PostgreSQL_13.pdf       # PDF  (CIS)
+caspar plugin add --source sources/stigs/U_Redis_Enterprise_6-x_STIG.xml  # XCCDF (DISA STIG)
+```
 
 A decisão de design central é a separação entre **build time** (LLM + CVE lookup + RAG, corre uma vez) e **runtime** (determinístico, zero LLM, corre em cada scan). Scores idênticos para inputs idênticos — sempre.
 

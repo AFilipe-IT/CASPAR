@@ -265,6 +265,29 @@ def _load_curated_chains(chains_path) -> list[AttackChain]:
         return []
 
 
+def _write_curated_chains(chains: list[AttackChain], chains_path) -> None:
+    """Persist chains to *chains_path* in the same schema _load_curated_chains
+    reads, so an LLM-bootstrapped build becomes a deterministic curated source.
+    """
+    import json as _json
+    from pathlib import Path
+
+    chains_path = Path(chains_path)
+    chains_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = [
+        {
+            "chain_id": c.chain_id,
+            "target_name": c.target_name,
+            "misconfig_directives": list(c.misconfig_directives),
+            "amplification": c.amplification,
+            "justification": c.justification,
+            "cross_target": c.cross_target,
+        }
+        for c in chains
+    ]
+    chains_path.write_text(_json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 # ------------------------------------------------------------------ #
 # Main stage function                                                   #
 # ------------------------------------------------------------------ #
@@ -376,9 +399,16 @@ def generate_chains(
             logger.warning("Chain generation attempt %d failed: %s", attempt + 1, e)
 
     # This point is only reached when there was no curated chains.json (the
-    # bootstrap path), so there is no JSON to fall back to. Curate the LLM
-    # output into chains.json to make subsequent builds deterministic.
-    if not chains:
+    # bootstrap path). Persist the LLM output to chains.json so subsequent
+    # builds are deterministic (curated-JSON path) and the human can review it.
+    if chains:
+        try:
+            _write_curated_chains(chains, chains_json_path)
+            logger.info("Wrote %d bootstrapped chain(s) to %s for review.",
+                        len(chains), chains_json_path)
+        except OSError as e:
+            logger.warning("Could not write %s: %s", chains_json_path, e)
+    else:
         logger.error(
             "All %d LLM attempts failed (%s) and no curated chains.json exists.",
             max_retries, last_error,

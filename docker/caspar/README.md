@@ -111,7 +111,7 @@ docker compose run --rm caspar scan /scan
 docker compose --profile full up -d ollama
 docker compose --profile full exec ollama ollama pull qwen2.5:14b
 docker compose --profile full run --rm caspar plugin add \
-  --source /home/caspar/app/benchmarks/CIS_PostgreSQL_13.pdf
+  --source /home/caspar/app/sources/benchmarks/CIS_PostgreSQL_13.pdf
 ```
 
 ---
