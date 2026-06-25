@@ -536,7 +536,8 @@ def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
     """Install a new plugin from a CIS Benchmark PDF."""
     from pathlib import Path as _Path
     from config_assessment.build.plugin_detector import detect_service_from_pdf
-    from config_assessment.build.benchmark_extractor import extract_all
+    from config_assessment.build.benchmark_extractor import (
+        extract_all, detect_source_format, XCCDFExtractor)
     from config_assessment.build.rag import BenchmarkIndex
     from config_assessment.build.plugin_scaffolder import PluginSpec, scaffold_plugin
     from config_assessment.build.llm_client import make_client
@@ -547,7 +548,85 @@ def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
     llm = None if no_llm else make_client(
         backend="ollama", model=model, fallback_to_stub=True)
 
-    # ── Peça 4: detect service ─────────────────────────────────────────
+    src_format = detect_source_format(source)
+
+    # ── XCCDF (DISA STIG) branch ───────────────────────────────────────
+    if src_format == "xccdf":
+        candidates, info, src_label, n_sections, sev_counts = _plugin_add_xccdf(
+            source, src_name, llm, XCCDFExtractor)
+    else:
+        candidates, info, src_label, n_sections, sev_counts = _plugin_add_pdf(
+            source, src_name, llm, detect_service_from_pdf, BenchmarkIndex,
+            extract_all, yes)
+        if candidates is None:   # user aborted at the "proceed anyway?" prompt
+            return
+
+    n_high = sum(1 for c in candidates if c.confidence == "high" and not c.needs_review)
+    n_llm = sum(1 for c in candidates if c.method == "LLM")
+    usable = [c for c in candidates if c.directive and not c.needs_review]
+    value_rules = [c for c in usable if c.rule_type != "absence"]
+    absence_rules = [c for c in usable if c.rule_type == "absence"]
+    n_skipped = n_sections - len(usable)
+
+    if src_format == "xccdf":
+        click.echo(f"  High severity:     {n_high:3}")
+    else:
+        click.echo(f"  Heuristic (high):  {n_high:3}")
+    if not no_llm:
+        click.echo(f"  LLM (medium/low):  {n_llm:3}")
+    click.echo(f"  Absence-rules:     {len(absence_rules):3}")
+    click.echo(f"  Skipped:           {n_skipped:3}    ({'procedural/manual' if src_format == 'xccdf' else 'procedures/out-of-scope'})")
+    click.echo(f"  Total:             {len(usable):3} controls\n")
+
+    _plugin_add_finish(
+        ctx, info, src_name, usable, value_rules, absence_rules,
+        PluginSpec, scaffold_plugin, dry_run, yes, verbose_list, no_llm,
+        source, model)
+    return
+
+
+def _plugin_add_xccdf(source, src_name, llm, XCCDFExtractor):
+    """Identify the service and extract controls from a DISA STIG XCCDF file."""
+    from pathlib import Path as _Path
+    extractor = XCCDFExtractor()
+    title, rules = extractor.load(source)
+
+    sev = {"high": 0, "medium": 0, "low": 0}
+    for r in rules:
+        sev[r["severity"]] = sev.get(r["severity"], 0) + 1
+
+    # Derive a STIG version label (e.g. "V2R2") from the filename, if present.
+    import re as _re
+    m = _re.search(r"V(\d+)R(\d+)", src_name)
+    ver_label = f"V{m.group(1)}R{m.group(2)}" if m else ""
+    click.echo(f"Source format: XCCDF (DISA STIG{(' ' + ver_label) if ver_label else ''})")
+
+    # Service identity from the STIG title, skipping a leading vendor word
+    # ("Apache Tomcat" → tomcat, "Oracle MySQL" → mysql).
+    from config_assessment.build.benchmark_extractor import extract_service_name
+    svc = extract_service_name(title) if title else _Path(source).stem.split("_")[1].lower()
+    target_id = _re.sub(r"[^a-z0-9]+", "", svc) or "service"
+    info = {
+        "target_id": target_id, "service_name": target_id.capitalize(),
+        "config_format": "key_value", "config_paths": [],
+        "config_filenames": [f"{target_id}.conf"], "bind_directive": None,
+        "version_exposing": [],
+    }
+    click.echo(f"Identified: {info['service_name']} "
+               f"({info['config_format']} — {info['config_filenames'][0]})")
+    click.echo(f"STIG rules: {len(rules)} ({sev['high']} high · "
+               f"{sev['medium']} medium · {sev['low']} low)\n")
+
+    click.echo("Extracting controls...")
+    candidates = extractor.extract(source, llm_client=llm)
+    return candidates, info, title, len(rules), sev
+
+
+def _plugin_add_pdf(source, src_name, llm, detect_service_from_pdf,
+                    BenchmarkIndex, extract_all, yes):
+    """Identify the service and extract controls from a CIS Benchmark PDF."""
+    from pathlib import Path as _Path
+    click.echo("Source format: PDF (CIS Benchmark)")
     info = detect_service_from_pdf(source, llm=llm)
     if info is None:
         click.echo(click.style(
@@ -570,20 +649,16 @@ def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
     # ── Peça 1+3: index + extract ──────────────────────────────────────
     idx = BenchmarkIndex(source)
     click.echo(f"Indexing benchmark sections: {len(idx.sections)} sections found\n")
-
     click.echo("Extracting controls...")
     candidates = extract_all(idx, llm=llm)
-    n_high = sum(1 for c in candidates if c.confidence == "high" and not c.needs_review)
-    n_llm = sum(1 for c in candidates if c.method == "LLM")
-    n_review = sum(1 for c in candidates if c.needs_review)
-    usable = [c for c in candidates if c.directive and not c.needs_review]
-    n_skipped = len(idx.sections) - len(usable)
+    return candidates, info, src_name, len(idx.sections), {}
 
-    click.echo(f"  Heuristic (high):  {n_high:3}")
-    if not no_llm:
-        click.echo(f"  LLM (medium/low):  {n_llm:3}")
-    click.echo(f"  Skipped:           {n_skipped:3}    (procedures/out-of-scope)")
-    click.echo(f"  Total:             {len(usable):3} controls\n")
+
+def _plugin_add_finish(ctx, info, src_name, usable, value_rules, absence_rules,
+                       PluginSpec, scaffold_plugin, dry_run, yes, verbose_list,
+                       no_llm, source, model):
+    """Shared tail for both formats: preview → spec → confirm → scaffold → build."""
+    from pathlib import Path as _Path
 
     if not usable:
         click.echo(click.style("  No controls extracted — nothing to install.",
@@ -602,20 +677,26 @@ def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
 
     click.echo(f"\nPlugin: {info['target_id']} | Format: {info['config_format']} "
                f"| Config: {info['config_filenames'][0]}")
-    click.echo(f"Benchmark: {idx.sections[0].title[:40] if idx.sections else src_name}")
 
     # ── build the spec ─────────────────────────────────────────────────
-    entries = [(c.directive, c.bad_value, c.good_value, c.section_id) for c in usable]
+    # Value rules drive ENTRIES (concrete bad→good). Absence rules (a directive
+    # that must be present) go to absence_rules → ABSENCE_RULES in rules.py.
+    entries = [(c.directive, c.bad_value, c.good_value, c.section_id) for c in value_rules]
+    absence = [(c.directive, c.good_value, c.section_id) for c in absence_rules]
     spec = PluginSpec(
         service_name=info["service_name"], target_id=info["target_id"],
         config_format=info["config_format"], config_paths=info["config_paths"],
         config_filenames=info["config_filenames"],
         bind_directive=info["bind_directive"],
         version_exposing=info["version_exposing"], entries=entries,
-        benchmark_source=src_name.replace(".pdf", "").replace("_", " "),
+        absence_rules=absence,
+        benchmark_source=src_name.rsplit(".", 1)[0].replace("_", " "),
     )
 
     if dry_run:
+        click.echo(f"  Value rules:       {len(entries):3}")
+        click.echo(f"  Absence-rules:     {len(absence):3}")
+        click.echo("  Chains (auto):     generated at build (chains.json bootstrap)")
         click.echo(click.style("\n[dry-run] No files created.", fg="cyan"))
         return
 
@@ -648,7 +729,7 @@ def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
     stats = run_generic_build(
         target_id=info["target_id"], service_name=info["service_name"],
         benchmark_source=spec.benchmark_source,
-        benchmark_path=str(plugin_dir / src_name),
+        benchmark_path=str(plugin_dir / _Path(source).name),
         entries=mentries, db_path=ctx.obj["db_path"], model=model,
     )
     click.echo(click.style(

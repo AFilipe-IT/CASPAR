@@ -489,7 +489,7 @@ def build(report: Report):
         "│   └── plugins/         # apache_httpd, nginx, ssh, mysql, dummy\n"
         "├── cli/main.py          # interface CLI (comando «caspar»)\n"
         "├── tests/               # 347 testes\n"
-        "├── benchmarks/          # PDFs CIS\n"
+        "├── sources/             # benchmarks/ (PDFs CIS) + stigs/ (XML DISA)\n"
         "├── data/                # base canónica (ccss_canonical.sql)\n"
         "└── scripts/             # utilitários e patches históricos")
 
