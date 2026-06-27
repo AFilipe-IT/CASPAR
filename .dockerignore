@@ -51,3 +51,5 @@ htmlcov/
 
 # The docker dir itself (Dockerfiles are passed via -f; no need in context).
 docker/
+# Exception: caspar:full needs the entrypoint script in the build context.
+!docker/caspar/entrypoint_full.sh

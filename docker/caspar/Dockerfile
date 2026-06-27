@@ -50,6 +50,9 @@ RUN mkdir -p /home/caspar/reports && chown -R caspar:caspar /home/caspar
 
 USER caspar
 ENV OLLAMA_HOST=http://ollama:11434
+# Absolute DB path so the canonical DB is found regardless of the working
+# directory (e.g. when the caspar wrapper sets -w /workspace).
+ENV CASPAR_DB=/home/caspar/app/ccss.db
 
 ENTRYPOINT ["caspar"]
 CMD ["--help"]
