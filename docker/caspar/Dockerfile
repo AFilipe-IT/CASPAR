@@ -13,11 +13,13 @@ FROM python:3.12-slim
 #   git     — used by some build-time tooling
 #   curl    — health checks / online enrichment, fetch the docker client
 #   ca-certificates — TLS for the above
+#   poppler-utils — pdftotext, used to extract CIS Benchmark PDFs in plugin add
 RUN apt-get update && apt-get install -y --no-install-recommends \
         sqlite3 \
         git \
         curl \
         ca-certificates \
+        poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Docker *client* only (not the engine) — required for `caspar scan
