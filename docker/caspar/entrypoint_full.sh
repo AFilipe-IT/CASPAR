@@ -3,6 +3,11 @@
 # necessário para comandos de build-time, e delega no caspar.
 set -e
 
+# Forçar Ollama local — ignorar qualquer OLLAMA_HOST externo (a imagem base
+# define OLLAMA_HOST=http://ollama:11434 para o docker-compose, que não se
+# aplica nesta imagem onde o Ollama corre dentro do próprio container).
+export OLLAMA_HOST=http://localhost:11434
+
 MODEL="${CASPAR_MODEL:-mistral:7b}"
 
 # Iniciar o Ollama em background
@@ -18,8 +23,10 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# Para plugin add / build, garantir que o modelo está disponível
-if echo "$*" | grep -qE "plugin add|build"; then
+# Para plugin add / build, garantir que o modelo está disponível — exceto quando
+# o LLM não vai ser usado (--no-llm) ou nada vai ser gerado (--dry-run).
+if echo "$*" | grep -qE "plugin add|build" \
+   && ! echo "$*" | grep -qE -- "--no-llm|--dry-run"; then
     if ! ollama list 2>/dev/null | grep -q "$MODEL"; then
         echo "📥 A descarregar o modelo $MODEL (primeira utilização, pode demorar)..."
         ollama pull "$MODEL"
