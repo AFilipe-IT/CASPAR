@@ -371,6 +371,62 @@ class TestApacheEndToEnd:
 
         assert len(set(scores)) == 1, f"Non-deterministic: {scores}"
 
+    def test_scan_is_reproducible_sha256_100_runs(self, populated_db):
+        """100 consecutive scans of the same file produce a bit-for-bit identical
+        report digest (SHA-256 over the global score + the ordered set of issues
+        and active attack chains).
+
+        This is the experiment reported in the paper (Sec. Reproducibility):
+        the runtime is fully deterministic, so the canonical digest must be
+        unique across all runs.
+        """
+        import hashlib
+
+        from config_assessment.plugins.apache_httpd import ApachePlugin
+        runtime.register_plugin(ApachePlugin())
+
+        config = write_conf("""
+            ServerTokens Full
+            ServerSignature On
+            TraceEnable On
+            User root
+            Group root
+            SSLProtocol All
+            AllowOverride All
+            Options Indexes FollowSymLinks
+        """)
+
+        def report_digest(result) -> str:
+            """Canonical, order-independent SHA-256 of a scan result."""
+            issues = sorted(
+                (i.directive, i.bad_value, f"{i.base_score:.1f}", f"{i.temporal_score:.1f}")
+                for i in result.issues
+            )
+            chains = sorted(
+                (getattr(c, "name", str(c)), f"{getattr(c, 'score', 0.0):.1f}")
+                for c in getattr(result, "chains", [])
+                if getattr(c, "active", True)
+            )
+            canonical = repr({
+                "score": f"{result.global_temporal_score:.1f}",
+                "severity": result.severity,
+                "issues": issues,
+                "chains": chains,
+            })
+            return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+        digests = []
+        for _ in range(100):
+            with Database(populated_db) as db:
+                r = runtime.scan(config, db)
+            digests.append(report_digest(r))
+
+        unique = set(digests)
+        assert len(digests) == 100
+        assert len(unique) == 1, (
+            f"Non-reproducible: {len(unique)} distinct digests across 100 runs"
+        )
+
     def test_attack_chain_fires_for_compound_misconfigs(self, populated_db):
         """ServerTokens Full + ServerSignature On should fire info-disclosure-chain."""
         from config_assessment.plugins.apache_httpd import ApachePlugin
