@@ -30,6 +30,8 @@ if echo "$*" | grep -qE "plugin add|build" \
     if ! ollama list 2>/dev/null | grep -q "$MODEL"; then
         echo "📥 A descarregar o modelo $MODEL (primeira utilização, pode demorar)..."
         ollama pull "$MODEL"
+        # Aguardar que o modelo fique disponível antes de invocar o caspar
+        sleep 2
     fi
 fi
 
