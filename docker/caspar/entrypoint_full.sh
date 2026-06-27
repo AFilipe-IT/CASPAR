@@ -23,15 +23,30 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# Para plugin add / build, garantir que o modelo está disponível — exceto quando
-# o LLM não vai ser usado (--no-llm) ou nada vai ser gerado (--dry-run).
+# Para plugin add / build, garantir que o modelo está disponível e funcional —
+# exceto quando o LLM não vai ser usado (--no-llm) ou nada vai ser gerado
+# (--dry-run).
 if echo "$*" | grep -qE "plugin add|build" \
    && ! echo "$*" | grep -qE -- "--no-llm|--dry-run"; then
+
+    # Verificar se o modelo está listado; descarregar se necessário.
     if ! ollama list 2>/dev/null | grep -q "$MODEL"; then
         echo "📥 A descarregar o modelo $MODEL (primeira utilização, pode demorar)..."
         ollama pull "$MODEL"
-        # Aguardar que o modelo fique disponível antes de invocar o caspar
         sleep 2
+    fi
+
+    # Verificar se o modelo responde de facto (teste real, não só listado).
+    echo "🔍 A verificar o modelo $MODEL..."
+    TEST_RESPONSE=$(curl -sf -X POST http://localhost:11434/api/chat \
+        -H "Content-Type: application/json" \
+        -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}" \
+        2>/dev/null | head -c 100)
+
+    if [ -z "$TEST_RESPONSE" ]; then
+        echo "⚠️ O modelo não responde — a recarregar..."
+        ollama pull "$MODEL"
+        sleep 3
     fi
 fi
 
