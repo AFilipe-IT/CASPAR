@@ -1,0 +1,27 @@
+# docker/caspar/Dockerfile.full — CASPAR com Ollama integrado
+# Para utilizadores que precisam de `caspar plugin add` / `caspar build`.
+#
+# Build: docker build -t caspar/caspar:full -f docker/caspar/Dockerfile.full .
+# Uso:   caspar plugin add --source benchmark.pdf
+#
+# Nota: parte da imagem runtime (caspar:latest). O Ollama é instalado como root
+# (escreve em /usr/local/bin e em /root/.ollama); o entrypoint arranca o serviço
+# Ollama em background antes de invocar o caspar.
+
+FROM caspar:latest
+
+# A imagem base termina como utilizador não-root (caspar); o Ollama precisa de root.
+USER root
+
+# Dependências do instalador do Ollama (extração com zstd) e instalação do Ollama.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends zstd ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://ollama.com/install.sh | sh
+
+# Entrypoint inteligente (arranca Ollama, garante o modelo, executa caspar)
+COPY docker/caspar/entrypoint_full.sh /entrypoint_full.sh
+RUN chmod +x /entrypoint_full.sh
+
+ENTRYPOINT ["/entrypoint_full.sh"]
+CMD []

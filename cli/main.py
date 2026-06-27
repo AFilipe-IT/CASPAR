@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -261,7 +262,8 @@ def _to_sarif(result) -> dict:
 # ── CLI ────────────────────────────────────────────────────────────
 
 @click.group()
-@click.option("--db", default="ccss.db", show_default=True)
+@click.option("--db", default=lambda: os.environ.get("CASPAR_DB", "ccss.db"),
+              show_default="ccss.db (or $CASPAR_DB)")
 @click.option("--verbose", "-v", is_flag=True)
 @click.pass_context
 def cli(ctx: click.Context, db: str, verbose: bool) -> None:
