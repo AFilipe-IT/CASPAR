@@ -27,6 +27,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from config_assessment.core.ccss import base_score, temporal_score
@@ -394,17 +395,51 @@ class LLMBuildPipeline:
         llm: LLMClient,
         max_retries: int = 3,
     ) -> None:
-        logger.info("Loading CIS Benchmark index from: %s", benchmark_path)
-        self.index = BenchmarkIndex(benchmark_path)
-        logger.info("Indexed %d sections", len(self.index.sections))
+        # A PDF index is only meaningful for CIS Benchmark PDFs. XCCDF (DISA
+        # STIG) sources — and any source whose file is absent — are handled
+        # without an index: the section context is synthesised per entry from
+        # the already-extracted directive/value pair.
+        self.index = None
+        is_pdf = str(benchmark_path).lower().endswith(".pdf")
+        if is_pdf and Path(benchmark_path).exists():
+            logger.info("Loading CIS Benchmark index from: %s", benchmark_path)
+            self.index = BenchmarkIndex(benchmark_path)
+            logger.info("Indexed %d sections", len(self.index.sections))
+        else:
+            logger.info("No PDF index for %s — using per-entry section context",
+                        benchmark_path)
         self.llm = llm
         self.max_retries = max_retries
+
+    def _synthetic_section(self, entry: MisconfigEntry) -> Section:
+        """Build a minimal Section from the entry itself, for index-less sources
+        (e.g. XCCDF/DISA STIG) where there is no CIS Benchmark PDF to query."""
+        title = f"Ensure {entry.directive} is configured securely"
+        full = (f"{entry.directive} insecure value: {entry.bad_value}; "
+                f"recommended: {entry.good_value}")
+        return Section(
+            section_id=entry.cis_section or "",
+            title=title,
+            level="Level 1",
+            description=full,
+            rationale="",
+            remediation=f"Set {entry.directive} to {entry.good_value}.",
+            default_value=entry.bad_value or "",
+            full_text=full,
+            directives=[entry.directive],
+        )
 
     def _get_section(self, entry: MisconfigEntry) -> Section | None:
         """
         Get the most relevant CIS section for this misconfiguration.
         Priority: exact section ID > directive search > TF-IDF query.
+
+        With no PDF index (XCCDF and other index-less sources), synthesise a
+        Section from the entry so metric inference can still run.
         """
+        if self.index is None:
+            return self._synthetic_section(entry)
+
         if entry.cis_section:
             sec = self.index.get_by_section_id(entry.cis_section)
             if sec:
