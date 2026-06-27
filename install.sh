@@ -14,8 +14,8 @@ echo "🔍 A verificar dependências..."
 command -v docker >/dev/null 2>&1 || { echo "❌ Docker não encontrado. Instala em https://docs.docker.com/get-docker/"; exit 1; }
 
 echo "📦 A descarregar imagens CASPAR..."
-docker pull caspar/caspar:latest
-docker pull caspar/caspar:full
+docker pull alfilipe/caspar:latest
+docker pull alfilipe/caspar:full
 
 echo "📝 A instalar wrapper..."
 mkdir -p "$INSTALL_DIR"
@@ -26,9 +26,9 @@ cat > "$WRAPPER" << 'WRAPPER_EOF'
 
 # Detectar se o comando precisa de build-time (Ollama)
 BUILDTIME_CMDS="plugin add|build"
-IMAGE="caspar/caspar:latest"
+IMAGE="alfilipe/caspar:latest"
 if echo "$*" | grep -qE "$BUILDTIME_CMDS"; then
-    IMAGE="caspar/caspar:full"
+    IMAGE="alfilipe/caspar:full"
 fi
 
 # Montar o directório actual para scan de ficheiros locais
