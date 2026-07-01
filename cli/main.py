@@ -80,16 +80,32 @@ def _dedup_chains(chains: list) -> list:
 
 # ── Auto-descoberta de plugins ─────────────────────────────────────
 
+def _plugin_dirs() -> list[Path]:
+    """Directories to scan for plugins: the built-in package dir, plus the
+    external $CASPAR_PLUGINS_DIR (a mounted volume) when set, so fetched
+    plugins persist outside the image."""
+    dirs = [Path(__file__).parent.parent / "config_assessment" / "plugins"]
+    external = os.environ.get("CASPAR_PLUGINS_DIR")
+    if external:
+        dirs.append(Path(external))
+    return dirs
+
+
 def _discover_plugins() -> None:
-    plugins_dir = Path(__file__).parent.parent / "config_assessment" / "plugins"
-    if not plugins_dir.exists():
-        return
-    for plugin_dir in sorted(plugins_dir.iterdir()):
-        if plugin_dir.is_dir() and (plugin_dir / "__init__.py").exists():
-            try:
-                importlib.import_module(f"config_assessment.plugins.{plugin_dir.name}")
-            except Exception as exc:
-                logger.warning("Plugin '%s' not loaded: %s", plugin_dir.name, exc)
+    seen: set[str] = set()
+    for plugins_dir in _plugin_dirs():
+        if not plugins_dir.exists():
+            continue
+        for plugin_dir in sorted(plugins_dir.iterdir()):
+            name = plugin_dir.name
+            if name in seen:
+                continue  # built-in dir wins on a name clash
+            if plugin_dir.is_dir() and (plugin_dir / "__init__.py").exists():
+                seen.add(name)
+                try:
+                    importlib.import_module(f"config_assessment.plugins.{name}")
+                except Exception as exc:
+                    logger.warning("Plugin '%s' not loaded: %s", name, exc)
 
 
 # ── Relatório terminal ─────────────────────────────────────────────
@@ -703,7 +719,14 @@ def _plugin_add_finish(ctx, info, src_name, usable, value_rules, absence_rules,
         return
 
     # ── confirm ────────────────────────────────────────────────────────
-    plugins_dir = _Path(__file__).resolve().parent.parent / "config_assessment" / "plugins"
+    # Write to the external plugins dir ($CASPAR_PLUGINS_DIR, a mounted volume)
+    # when set, so a fetched plugin survives a --rm container; otherwise use the
+    # in-package dir. Either way it imports as config_assessment.plugins.<id>,
+    # because the package __path__ spans both (see plugins/__init__.py).
+    _external_plugins = os.environ.get("CASPAR_PLUGINS_DIR")
+    plugins_dir = (_Path(_external_plugins) if _external_plugins
+                   else _Path(__file__).resolve().parent.parent
+                   / "config_assessment" / "plugins")
     target_dir = plugins_dir / info["target_id"]
     if target_dir.exists() and not yes:
         if not click.confirm(
