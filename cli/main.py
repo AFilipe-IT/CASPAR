@@ -810,9 +810,12 @@ def plugin_fetch(ctx, service, list_only, output, then_install, yes, model) -> N
         return
 
     # Hand off to the existing 'plugin add' flow on the downloaded file.
+    # --then-install is a non-interactive pipeline (often run in the container
+    # entrypoint), so always auto-confirm plugin add — otherwise it blocks on
+    # the [y/N] "Generate plugin?" prompt with no TTY to answer it.
     click.echo()
     ctx.invoke(plugin_add, source=path, dry_run=False, no_llm=False,
-               yes=yes, verbose_list=False, model=model)
+               yes=True, verbose_list=False, model=model)
 
 
 @cli.command()
