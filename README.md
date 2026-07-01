@@ -17,13 +17,17 @@ caspar plugin add --source sources/benchmarks/CIS_PostgreSQL_13.pdf       # PDF 
 caspar plugin add --source sources/stigs/U_Redis_Enterprise_6-x_STIG.xml  # XCCDF (DISA STIG)
 ```
 
-Para descobrir e descarregar o benchmark automaticamente (sem procurar o ficheiro à mão), usa `caspar plugin fetch`. Descarrega o STIG do serviço a partir de fonte pública (stigviewer.com), converte-o para XCCDF e — com `--then-install` — instala o plugin de imediato. `caspar plugin fetch --list` mostra os serviços catalogados (`config_assessment/fetch/catalog.json`).
+Para descobrir e descarregar o benchmark automaticamente (sem procurar o ficheiro à mão), usa `caspar plugin fetch`. Descarrega o STIG do serviço a partir de fonte pública (stigviewer.com, via `/stigs/<slug>/export/json`), converte-o para XCCDF e — com `--then-install` — instala o plugin de imediato. `caspar plugin fetch --list` mostra os serviços catalogados (`config_assessment/fetch/catalog.json`).
 
 ```bash
 caspar plugin fetch --list                     # serviços disponíveis
 caspar plugin fetch nginx --then-install       # descarrega + instala
 caspar plugin fetch mysql -o ~/benchmarks/     # só descarrega
 ```
+
+O catálogo cobre **13 serviços** (nginx, mysql, postgresql, epas, apache, apache-windows, tomcat, redis, mongodb, kubernetes, iis, iis-site, cisco-ios). Alguns têm **fonte de fallback**: se a fonte primária falhar (ex. HTTP 500), o fetcher passa automaticamente à seguinte. Adicionar um serviço é só acrescentar uma entrada `{ "slug": "..." }` ao catálogo — o slug é o que aparece no URL de stigviewer.com.
+
+> Nota: `plugin fetch --then-install` corre a extracção por LLM (Ollama), tal como `plugin add`. Na imagem Docker isto é encaminhado automaticamente para `caspar:full` (com Ollama embutido). Fetch só-download (sem `--then-install`) não precisa de LLM.
 
 A decisão de design central é a separação entre **build time** (LLM + CVE lookup + RAG, corre uma vez) e **runtime** (determinístico, zero LLM, corre em cada scan). Scores idênticos para inputs idênticos — sempre.
 
@@ -80,6 +84,32 @@ Requisitos: Python 3.11+, `pdftotext` (poppler-utils) para ler o PDF do benchmar
 
 ```bash
 sudo apt-get install poppler-utils   # Ubuntu / Debian / WSL2
+```
+
+### Instalação via Docker (recomendado para máquinas de teste)
+
+Um one-liner instala as imagens e um wrapper `caspar` no PATH — sem clonar o repo, sem ambiente Python:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
+```
+
+Existem duas imagens: **`alfilipe/caspar:latest`** (leve, para scan/runtime) e **`alfilipe/caspar:full`** (com Ollama embutido, para build-time: `plugin add` / `plugin fetch --then-install`). O wrapper escolhe a imagem certa consoante o comando.
+
+**Persistência.** Plugins instalados via `plugin add` / `plugin fetch --then-install` e a base de dados que eles populam são gravados num volume Docker (`caspar_data`, montado em `/home/caspar/data`), pelo que **sobrevivem entre execuções** apesar do `--rm`. Na primeira utilização a DB é semeada a partir da versão canónica embutida na imagem (idempotente, nunca sobrepõe uma DB existente).
+
+```bash
+# instalar mongodb (usa o modelo por omissão, mistral:7b)
+caspar plugin fetch mongodb --then-install
+
+# um container novo e separado continua a ver o plugin instalado
+caspar targets            # mongodb aparece na lista
+```
+
+Para acelerar testes (à custa de qualidade de extracção), passa um modelo mais leve:
+
+```bash
+CASPAR_MODEL=qwen2.5:1.5b caspar plugin fetch mongodb --then-install
 ```
 
 ### Configurar a NVD API key (opcional mas recomendado)
@@ -315,8 +345,12 @@ ccss_scan/
 │       ├── refresh_cve.py         # CVE enrichment standalone
 │       └── validate_mae.py        # Validação vs CCE XLS
 │
+├── fetch/
+│   ├── catalog.json             # serviço → STIG (slug stigviewer + fallback)
+│   └── benchmark_fetcher.py     # descarrega STIG e converte para XCCDF
+│
 ├── cli/
-│   └── main.py                   # scan, build, targets, refresh
+│   └── main.py                   # scan, build, targets, refresh, plugin add/fetch
 │
 ├── tests/
 │   ├── test_ccss.py               # 27 testes — fórmulas
