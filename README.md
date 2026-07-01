@@ -25,7 +25,15 @@ caspar plugin fetch nginx --then-install       # descarrega + instala
 caspar plugin fetch mysql -o ~/benchmarks/     # só descarrega
 ```
 
-O catálogo cobre **13 serviços** (nginx, mysql, postgresql, epas, apache, apache-windows, tomcat, redis, mongodb, kubernetes, iis, iis-site, cisco-ios). Alguns têm **fonte de fallback**: se a fonte primária falhar (ex. HTTP 500), o fetcher passa automaticamente à seguinte. Adicionar um serviço é só acrescentar uma entrada `{ "slug": "..." }` ao catálogo — o slug é o que aparece no URL de stigviewer.com.
+O catálogo cobre **43 alvos**, agrupados por categoria:
+
+- **Web / app servers:** nginx, apache, apache-windows, tomcat, iis, iis-site, jboss
+- **Bases de dados:** mysql, mariadb, postgresql, epas, oracle-db, sqlserver, db2, mongodb, redis
+- **Contentores / orquestração:** kubernetes, openshift, rke2
+- **Sistemas operativos:** rhel8/9, oracle-linux-8/9, ubuntu2004/2204/2404, sles12/15, solaris11, aix, macos-sonoma, windows-server-2019/2022/2025, windows-10/11
+- **Equipamento de rede:** cisco-asa-ndm, cisco-asa-fw, cisco-ios, palo-alto-ndm, juniper-srx-alg, f5-bigip-ndm, arista-ndm
+
+Alguns têm **fonte de fallback**: se a primária falhar (ex. HTTP 500), o fetcher passa automaticamente à seguinte. Adicionar um alvo é só acrescentar uma entrada `{ "slug": "..." }` ao catálogo — o slug é o segmento que aparece no URL de stigviewer.com. Corre `caspar plugin fetch --list` para a lista completa e atualizada.
 
 > Nota: `plugin fetch --then-install` corre a extracção por LLM (Ollama), tal como `plugin add`. Na imagem Docker isto é encaminhado automaticamente para `caspar:full` (com Ollama embutido). Fetch só-download (sem `--then-install`) não precisa de LLM.
 
