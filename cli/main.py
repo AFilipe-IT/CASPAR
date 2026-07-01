@@ -746,8 +746,9 @@ def _plugin_add_finish(ctx, info, src_name, usable, value_rules, absence_rules,
 @click.argument("service", required=False)
 @click.option("--list", "list_only", is_flag=True,
               help="List services available for automatic fetch.")
-@click.option("--output", "-o", default=".", show_default=True,
-              help="Destination directory for the downloaded benchmark.")
+@click.option("--output", "-o", default="/tmp", show_default=True,
+              help="Destination directory for the downloaded benchmark "
+                   "(default /tmp: the container mounts /workspace read-only).")
 @click.option("--then-install", is_flag=True,
               help="Run 'plugin add' on the downloaded benchmark afterwards.")
 @click.option("--yes", "-y", is_flag=True,
