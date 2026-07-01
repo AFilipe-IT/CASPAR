@@ -16,9 +16,11 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# Decidir se este comando precisa do LLM (plugin add/build sem --no-llm).
+# Decidir se este comando precisa do LLM (plugin add/build/fetch sem --no-llm).
+# 'plugin fetch --then-install' corre 'plugin add' internamente, logo precisa
+# igualmente do modelo pré-carregado.
 NEEDS_LLM=0
-if echo "$*" | grep -qE "plugin add|build" && \
+if echo "$*" | grep -qE "plugin add|plugin fetch|build" && \
    ! echo "$*" | grep -q -- "--no-llm"; then
     NEEDS_LLM=1
 fi
