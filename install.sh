@@ -24,10 +24,14 @@ cat > "$WRAPPER" << 'WRAPPER_EOF'
 #!/usr/bin/env bash
 # CASPAR wrapper — abstrai Docker transparentemente
 
-# Detectar se o comando precisa de build-time (Ollama)
+# Detectar se o comando precisa de build-time (Ollama).
+# 'plugin fetch --then-install' corre 'plugin add' internamente, por isso
+# precisa igualmente da imagem :full (com Ollama) — mas só com --then-install;
+# um fetch simples (só download) fica na imagem leve.
 BUILDTIME_CMDS="plugin add|build"
 IMAGE="alfilipe/caspar:latest"
-if echo "$*" | grep -qE "$BUILDTIME_CMDS"; then
+if echo "$*" | grep -qE "$BUILDTIME_CMDS" \
+   || { echo "$*" | grep -q "plugin fetch" && echo "$*" | grep -q "\-\-then-install"; }; then
     IMAGE="alfilipe/caspar:full"
 fi
 
