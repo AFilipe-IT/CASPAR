@@ -215,6 +215,7 @@ def test_cli_then_install_invokes_plugin_add(tmp_path):
 
     def fake_add(source, dry_run, no_llm, yes, verbose_list, model):
         seen["source"] = source
+        seen["yes"] = yes
 
     with patch("config_assessment.fetch.benchmark_fetcher._http_get",
                return_value=payload), \
@@ -224,3 +225,22 @@ def test_cli_then_install_invokes_plugin_add(tmp_path):
                   "--then-install", "--yes"])
     assert res.exit_code == 0, res.output
     assert seen.get("source", "").endswith(".xml")
+
+
+def test_cli_then_install_auto_confirms_without_yes_flag(tmp_path):
+    """--then-install must auto-confirm plugin add even when -y is not passed,
+    so the non-interactive pipeline never blocks on the [y/N] prompt."""
+    payload = json.dumps(_fake_stig_json())
+    seen = {}
+
+    def fake_add(source, dry_run, no_llm, yes, verbose_list, model):
+        seen["yes"] = yes
+
+    with patch("config_assessment.fetch.benchmark_fetcher._http_get",
+               return_value=payload), \
+         patch("cli.main.plugin_add.callback", side_effect=fake_add):
+        res = CliRunner().invoke(
+            cli, ["plugin", "fetch", "nginx", "-o", str(tmp_path),
+                  "--then-install"])  # deliberately no --yes
+    assert res.exit_code == 0, res.output
+    assert seen.get("yes") is True
