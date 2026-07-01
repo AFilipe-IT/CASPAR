@@ -1,0 +1,66 @@
+{
+  "_comment": "Maps a CASPAR service name to public benchmark sources. Type 'stigviewer' downloads the structured STIG JSON from stigviewer.com (/stigs/<slug>/export/json) and converts it to XCCDF XML that 'caspar plugin add' consumes. Slugs and rule counts verified 2026-07-01.",
+  "nginx": {
+    "service_name": "NGINX",
+    "sources": [
+      { "type": "stigviewer", "slug": "f5_nginx", "format": "xccdf",
+        "title": "F5 NGINX STIG" }
+    ]
+  },
+  "mysql": {
+    "service_name": "MySQL",
+    "sources": [
+      { "type": "stigviewer", "slug": "oracle_mysql_80", "format": "xccdf",
+        "title": "Oracle MySQL 8.0 STIG" }
+    ]
+  },
+  "postgresql": {
+    "service_name": "PostgreSQL",
+    "sources": [
+      { "type": "stigviewer", "slug": "crunchy_data_postgresql", "format": "xccdf",
+        "title": "Crunchy Data PostgreSQL STIG" }
+    ]
+  },
+  "apache": {
+    "service_name": "Apache HTTP Server 2.4",
+    "sources": [
+      { "type": "stigviewer", "slug": "apache_server_24_unix_server", "format": "xccdf",
+        "title": "Apache 2.4 Server for Unix STIG" }
+    ]
+  },
+  "tomcat": {
+    "service_name": "Apache Tomcat 9",
+    "sources": [
+      { "type": "stigviewer", "slug": "apache_tomcat_application_server_9", "format": "xccdf",
+        "title": "Apache Tomcat Application Server 9 STIG" }
+    ]
+  },
+  "redis": {
+    "service_name": "Redis Enterprise 6.x",
+    "sources": [
+      { "type": "stigviewer", "slug": "redis_enterprise_6x", "format": "xccdf",
+        "title": "Redis Enterprise 6.x STIG" }
+    ]
+  },
+  "mongodb": {
+    "service_name": "MongoDB Enterprise Advanced 8.x",
+    "sources": [
+      { "type": "stigviewer", "slug": "mongodb_enterprise_advanced_8x", "format": "xccdf",
+        "title": "MongoDB Enterprise Advanced 8.x STIG" }
+    ]
+  },
+  "kubernetes": {
+    "service_name": "Kubernetes",
+    "sources": [
+      { "type": "stigviewer", "slug": "kubernetes", "format": "xccdf",
+        "title": "Kubernetes STIG" }
+    ]
+  },
+  "iis": {
+    "service_name": "Microsoft IIS 10.0 Server",
+    "sources": [
+      { "type": "stigviewer", "slug": "microsoft_iis_100_server", "format": "xccdf",
+        "title": "Microsoft IIS 10.0 Server STIG" }
+    ]
+  }
+}

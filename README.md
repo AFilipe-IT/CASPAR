@@ -17,6 +17,14 @@ caspar plugin add --source sources/benchmarks/CIS_PostgreSQL_13.pdf       # PDF 
 caspar plugin add --source sources/stigs/U_Redis_Enterprise_6-x_STIG.xml  # XCCDF (DISA STIG)
 ```
 
+Para descobrir e descarregar o benchmark automaticamente (sem procurar o ficheiro à mão), usa `caspar plugin fetch`. Descarrega o STIG do serviço a partir de fonte pública (stigviewer.com), converte-o para XCCDF e — com `--then-install` — instala o plugin de imediato. `caspar plugin fetch --list` mostra os serviços catalogados (`config_assessment/fetch/catalog.json`).
+
+```bash
+caspar plugin fetch --list                     # serviços disponíveis
+caspar plugin fetch nginx --then-install       # descarrega + instala
+caspar plugin fetch mysql -o ~/benchmarks/     # só descarrega
+```
+
 A decisão de design central é a separação entre **build time** (LLM + CVE lookup + RAG, corre uma vez) e **runtime** (determinístico, zero LLM, corre em cada scan). Scores idênticos para inputs idênticos — sempre.
 
 ---
