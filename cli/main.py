@@ -742,6 +742,78 @@ def _plugin_add_finish(ctx, info, src_name, usable, value_rules, absence_rules,
     click.echo(f"\nRun: caspar scan {cf}")
 
 
+@plugin_group.command("fetch")
+@click.argument("service", required=False)
+@click.option("--list", "list_only", is_flag=True,
+              help="List services available for automatic fetch.")
+@click.option("--output", "-o", default=".", show_default=True,
+              help="Destination directory for the downloaded benchmark.")
+@click.option("--then-install", is_flag=True,
+              help="Run 'plugin add' on the downloaded benchmark afterwards.")
+@click.option("--yes", "-y", is_flag=True,
+              help="Skip confirmation prompts during --then-install.")
+@click.option("--model", "-m", default="qwen2.5:14b", show_default=True,
+              help="LLM model used by --then-install.")
+@click.pass_context
+def plugin_fetch(ctx, service, list_only, output, then_install, yes, model) -> None:
+    """Download a benchmark from a public source and optionally install it.
+
+    \b
+    Discovery uses the catalog in config_assessment/fetch/catalog.json, which
+    maps a service to a public STIG (via stigviewer.com). The download is a
+    DISA-style XCCDF file that 'plugin add' consumes directly.
+
+    \b
+    See what's available:   caspar plugin fetch --list
+    Download + install:     caspar plugin fetch nginx --then-install
+    Download only:          caspar plugin fetch nginx -o ~/benchmarks/
+    """
+    from config_assessment.fetch.benchmark_fetcher import BenchmarkFetcher, FetchError
+
+    fetcher = BenchmarkFetcher()
+
+    if list_only:
+        rows = fetcher.list_available()
+        click.echo()
+        click.echo(f"  {'SERVICE':<12}  {'BENCHMARK':<36}  SOURCE")
+        click.echo("  " + "─" * 68)
+        for r in rows:
+            src = r["sources"][0] if r["sources"] else {"type": "-"}
+            click.echo(f"  {r['service']:<12}  {r['service_name']:<36}  {src['type']}")
+        click.echo()
+        click.echo(click.style(
+            f"  {len(rows)} services. "
+            "Fetch with: caspar plugin fetch <service> --then-install", dim=True))
+        click.echo()
+        return
+
+    if not service:
+        click.echo(click.style(
+            "Error: give a SERVICE, or use --list to see what's available.",
+            fg="red"), err=True)
+        sys.exit(2)
+
+    click.echo(f"\nFetching benchmark for '{service}'...")
+    try:
+        path = fetcher.fetch(service, output)
+    except FetchError as exc:
+        click.echo(click.style(f"  {exc}", fg="red"), err=True)
+        sys.exit(1)
+
+    click.echo(click.style(f"  ✓ Downloaded: {path}", fg="green"))
+
+    if not then_install:
+        click.echo(f"\nInstall with: "
+                   f"{click.style(f'caspar plugin add --source {path}', bold=True)}")
+        click.echo()
+        return
+
+    # Hand off to the existing 'plugin add' flow on the downloaded file.
+    click.echo()
+    ctx.invoke(plugin_add, source=path, dry_run=False, no_llm=False,
+               yes=yes, verbose_list=False, model=model)
+
+
 @cli.command()
 def targets() -> None:
     """List available plugins."""
