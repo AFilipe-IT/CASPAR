@@ -52,6 +52,10 @@ OLLAMA_VOL="-v caspar_ollama_models:/root/.ollama"
 # Montar volume persistente para relatórios
 REPORTS_VOL="-v caspar_reports:/reports"
 
+# Montar volume persistente para dados (DB + plugins instalados via
+# 'plugin add'/'plugin fetch --then-install'), para que sobrevivam ao --rm.
+DATA_VOL="-v caspar_data:/home/caspar/data"
+
 # Passar a variável de modelo, se definida
 MODEL_ENV=""
 if [ -n "$CASPAR_MODEL" ]; then
@@ -62,6 +66,7 @@ exec docker run --rm \
     $MOUNT_ARGS \
     $OLLAMA_VOL \
     $REPORTS_VOL \
+    $DATA_VOL \
     $MODEL_ENV \
     -w /workspace \
     "$IMAGE" "$@"

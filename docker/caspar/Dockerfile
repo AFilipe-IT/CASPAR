@@ -45,16 +45,26 @@ COPY . .
 RUN pip install --no-cache-dir -e . --no-deps
 
 # --- Canonical database: restored from SQL, never copied as a .db -----------
-RUN sqlite3 /home/caspar/app/ccss.db < data/ccss_canonical.sql
+# Baked at a fixed *seed* path. At runtime the entrypoint copies it into the
+# data dir (a volume) on first use, so the working DB persists across --rm.
+RUN sqlite3 /home/caspar/app/ccss.seed.db < data/ccss_canonical.sql
 
-# --- Persistent reports directory -------------------------------------------
-RUN mkdir -p /home/caspar/reports && chown -R caspar:caspar /home/caspar
+# --- Persistent data dir (DB + fetched plugins) and reports -----------------
+# CASPAR_DATA_DIR is meant to be a mounted volume so fetched plugins and the
+# DB they write to survive a --rm container. Defaults keep zero-config runs
+# working (the dir just lives inside the container when no volume is mounted).
+ENV CASPAR_DATA_DIR=/home/caspar/data
+ENV CASPAR_DB=/home/caspar/data/ccss.db
+ENV CASPAR_PLUGINS_DIR=/home/caspar/data/plugins
+RUN mkdir -p /home/caspar/data/plugins /home/caspar/reports \
+    && chown -R caspar:caspar /home/caspar
+
+COPY docker/caspar/seed_data.sh /usr/local/bin/caspar-seed
+RUN chmod +x /usr/local/bin/caspar-seed
 
 USER caspar
 ENV OLLAMA_HOST=http://ollama:11434
-# Absolute DB path so the canonical DB is found regardless of the working
-# directory (e.g. when the caspar wrapper sets -w /workspace).
-ENV CASPAR_DB=/home/caspar/app/ccss.db
 
-ENTRYPOINT ["caspar"]
+# Seed the data dir (idempotent) then run caspar.
+ENTRYPOINT ["/usr/local/bin/caspar-seed", "caspar"]
 CMD ["--help"]

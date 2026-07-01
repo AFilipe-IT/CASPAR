@@ -4,6 +4,17 @@ set -e
 export OLLAMA_HOST=http://localhost:11434
 MODEL="${CASPAR_MODEL:-mistral:7b}"
 
+# Seed the persistent data dir (DB + plugins volume) before anything else, so
+# fetched plugins survive a --rm container. Idempotent.
+DATA_DIR="${CASPAR_DATA_DIR:-/home/caspar/data}"
+DB="${CASPAR_DB:-$DATA_DIR/ccss.db}"
+PLUGINS_DIR="${CASPAR_PLUGINS_DIR:-$DATA_DIR/plugins}"
+SEED_DB="/home/caspar/app/ccss.seed.db"
+mkdir -p "$DATA_DIR" "$PLUGINS_DIR"
+if [ ! -f "$DB" ] && [ -f "$SEED_DB" ]; then
+    cp "$SEED_DB" "$DB"
+fi
+
 # Iniciar Ollama em background
 ollama serve &
 OLLAMA_PID=$!
