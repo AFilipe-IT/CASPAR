@@ -64,12 +64,19 @@ def fetcher():
 def test_catalog_loads_and_lists_services(fetcher):
     rows = fetcher.list_available()
     services = {r["service"] for r in rows}
-    assert {"nginx", "mysql", "postgresql"} <= services
+    # Services and OS across categories: web/app, DB, container, OS, network.
+    assert {"nginx", "mysql", "postgresql", "rhel9", "windows-server-2022",
+            "kubernetes", "cisco-asa-ndm"} <= services
+    # A broad catalog (services + operating systems).
+    assert len(rows) >= 40
     # Documentation keys (leading underscore) must be filtered out.
     assert not any(r["service"].startswith("_") for r in rows)
-    # Each service exposes at least one source with a type.
+    # Each source is a well-formed stigviewer entry with a non-empty slug.
     for r in rows:
-        assert r["sources"] and r["sources"][0]["type"]
+        assert r["sources"]
+        for s in r["sources"]:
+            assert s["type"] == "stigviewer"
+            assert s["format"] == "xccdf"
 
 
 def test_shipped_catalog_has_fallback_sources(fetcher):
