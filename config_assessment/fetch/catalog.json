@@ -1,5 +1,5 @@
 {
-  "_comment": "Maps a CASPAR service name to public benchmark sources. Type 'stigviewer' downloads the structured STIG JSON from stigviewer.com (/stigs/<slug>/export/json) and converts it to XCCDF XML that 'caspar plugin add' consumes. Slugs and rule counts verified 2026-07-01.",
+  "_comment": "Maps a CASPAR service name to public benchmark sources. Type 'stigviewer' downloads the structured STIG JSON from stigviewer.com (/stigs/<slug>/export/json) and converts it to XCCDF XML that 'caspar plugin add' consumes. When an entry lists more than one source, they are tried in order (fallback). Slugs and rule counts verified 2026-07-02.",
   "nginx": {
     "service_name": "NGINX",
     "sources": [
@@ -18,14 +18,32 @@
     "service_name": "PostgreSQL",
     "sources": [
       { "type": "stigviewer", "slug": "crunchy_data_postgresql", "format": "xccdf",
-        "title": "Crunchy Data PostgreSQL STIG" }
+        "title": "Crunchy Data PostgreSQL STIG" },
+      { "type": "stigviewer", "slug": "crunchy_data_postgres_16", "format": "xccdf",
+        "title": "Crunchy Data PostgreSQL 16 STIG (fallback)" }
+    ]
+  },
+  "epas": {
+    "service_name": "EnterpriseDB Postgres Advanced Server",
+    "sources": [
+      { "type": "stigviewer", "slug": "enterprisedb_postgres_advanced_server_epas",
+        "format": "xccdf", "title": "EnterpriseDB Postgres Advanced Server (EPAS) STIG" }
     ]
   },
   "apache": {
     "service_name": "Apache HTTP Server 2.4",
     "sources": [
       { "type": "stigviewer", "slug": "apache_server_24_unix_server", "format": "xccdf",
-        "title": "Apache 2.4 Server for Unix STIG" }
+        "title": "Apache 2.4 Server for Unix STIG" },
+      { "type": "stigviewer", "slug": "apache_server_24_unix_site", "format": "xccdf",
+        "title": "Apache 2.4 Site for Unix STIG (fallback)" }
+    ]
+  },
+  "apache-windows": {
+    "service_name": "Apache HTTP Server 2.4 (Windows)",
+    "sources": [
+      { "type": "stigviewer", "slug": "apache_server_24_windows_server", "format": "xccdf",
+        "title": "Apache 2.4 Server for Windows STIG" }
     ]
   },
   "tomcat": {
@@ -46,7 +64,9 @@
     "service_name": "MongoDB Enterprise Advanced 8.x",
     "sources": [
       { "type": "stigviewer", "slug": "mongodb_enterprise_advanced_8x", "format": "xccdf",
-        "title": "MongoDB Enterprise Advanced 8.x STIG" }
+        "title": "MongoDB Enterprise Advanced 8.x STIG" },
+      { "type": "stigviewer", "slug": "mongodb_enterprise_advanced_7x", "format": "xccdf",
+        "title": "MongoDB Enterprise Advanced 7.x STIG (fallback)" }
     ]
   },
   "kubernetes": {
@@ -61,6 +81,20 @@
     "sources": [
       { "type": "stigviewer", "slug": "microsoft_iis_100_server", "format": "xccdf",
         "title": "Microsoft IIS 10.0 Server STIG" }
+    ]
+  },
+  "iis-site": {
+    "service_name": "Microsoft IIS 10.0 Site",
+    "sources": [
+      { "type": "stigviewer", "slug": "microsoft_iis_100_site", "format": "xccdf",
+        "title": "Microsoft IIS 10.0 Site STIG" }
+    ]
+  },
+  "cisco-ios": {
+    "service_name": "Cisco IOS XE Router",
+    "sources": [
+      { "type": "stigviewer", "slug": "cisco_ios_xe_router_ndm", "format": "xccdf",
+        "title": "Cisco IOS XE Router NDM STIG" }
     ]
   }
 }

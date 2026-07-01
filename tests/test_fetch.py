@@ -72,6 +72,33 @@ def test_catalog_loads_and_lists_services(fetcher):
         assert r["sources"] and r["sources"][0]["type"]
 
 
+def test_shipped_catalog_has_fallback_sources(fetcher):
+    """Some services must carry more than one source so a failed primary
+    falls back to a secondary (postgresql/apache/mongodb)."""
+    by_svc = {r["service"]: r for r in fetcher.list_available()}
+    assert len(by_svc["postgresql"]["sources"]) >= 2
+    assert any(len(r["sources"]) >= 2 for r in by_svc.values())
+
+
+def test_real_catalog_fallback_on_primary_failure(fetcher, tmp_path):
+    """Using the shipped postgresql entry (2 sources), a failing first source
+    must fall through to the second — exercising the real catalog, not a stub."""
+    payload = json.dumps(_fake_stig_json(title="PostgreSQL STIG", version="V3R1"))
+    calls = []
+
+    def fake_get(url, binary=False):
+        calls.append(url)
+        if len(calls) == 1:
+            raise FetchError("HTTP 500 (simulated primary outage)")
+        return payload
+
+    with patch("config_assessment.fetch.benchmark_fetcher._http_get",
+               side_effect=fake_get):
+        path = fetcher.fetch("postgresql", tmp_path)
+    assert len(calls) == 2                       # primary failed, fallback used
+    assert detect_source_format(path) == "xccdf"
+
+
 def test_unknown_service_raises(fetcher, tmp_path):
     with pytest.raises(FetchError, match="Unknown service"):
         fetcher.fetch("does-not-exist", tmp_path)
