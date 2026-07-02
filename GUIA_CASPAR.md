@@ -447,7 +447,7 @@ A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql
 | Version-exploits pré-computados | **19** (mapeamento versão → CVEs/exploits) |
 | Alvos disponíveis via `plugin fetch` | **43** (stigviewer.com) |
 | Versão da DB base (para o reseed) | **2** (`caspar_meta.base_db_version`) |
-| Testes automatizados | **464** (a passar) |
+| Testes automatizados | **493** (a passar) |
 
 Distribuição das 228 misconfigs pelos 7 targets: **docker 57 · tomcat 49 · apache-httpd 35 ·
 redis 29 · mysql 23 · nginx 18 · ssh 17**. Estes números são **verificáveis** — inspeciona a DB com
@@ -559,6 +559,51 @@ programático em vez de SARIF, troca por `-f json`.
 
 Além do `scan`, o CASPAR tem comandos que operam sobre os resultados — úteis em CI, hardening
 iterativo e gestão de risco.
+
+**`fix` — remediação assistida (detetar → corrigir).** Gera as correções de config a partir do
+`good_value` que já está na DB. Só aplica valores **literais e seguros** (ex.: `keepalive_timeout 65`
+→ `10`); orientações em prosa e regras de ausência ficam como passos manuais — nunca corrompe a config.
+
+```bash
+caspar fix nginx.conf --dry-run     # mostra o diff, não escreve
+caspar fix nginx.conf               # escreve nginx.conf.fixed (original intacto)
+caspar fix nginx.conf --in-place
+```
+
+**`promote` — ensinar directivas novas ao CASPAR.** Corre a avaliação LLM das directivas desconhecidas
+(§17, Camada 3) e **promove** as candidatas a regras permanentes na DB, para scans futuros as
+detetarem deterministicamente. O impacto estimado pelo LLM alimenta as métricas; o score é depois
+calculado pelas fórmulas CCSS normais. Marca a regra como promovida (revê o `good_value` a seguir).
+
+```bash
+caspar promote nginx.conf           # promove as candidatas confirmadas
+caspar promote nginx.conf -d flag   # só uma directiva
+```
+
+**`report` — resumo executivo de vários scans.** Junta vários JSON (ex.: todos os serviços de um host)
+numa vista única: pior ofensor, scores por target, totais.
+
+```bash
+caspar report reports/*.json
+```
+
+**`doctor` — integridade da base de dados.** Valida regras órfãs, chains a apontar para directivas
+inexistentes, scores fora de gama, metadata de reseed. Com `--strict`, audita também as narrativas que
+afirmam impacto forte (RCE, escalada de privilégios…) **sem** linguagem condicional — para revisão
+humana, nunca reescreve.
+
+```bash
+caspar doctor            # integridade estrutural (exit 1 se houver erro)
+caspar doctor --strict   # + auditoria de narrativas exageradas
+```
+
+**`--profile` — baseline por ambiente de deployment.** No `scan`, ajusta a exposição (Access Vector)
+usada no scoring: `production`=Network (por omissão), `internal`=Adjacent, `dev`=Local. Um serviço
+interno pontua menos que um exposto à internet (ex.: nginx 5.7 production / 4.2 internal / 3.2 dev).
+
+```bash
+caspar scan nginx.conf --profile internal
+```
 
 **`diff` — comparar dois scans no tempo.** Reutiliza o JSON; mostra resolvidas, novas e o delta de
 score. Sai com código 1 se o score **piorou** (bom para bloquear PRs que degradam a config):
@@ -766,7 +811,9 @@ determinística e auditável.
   apache-httpd tem CCE para calibração).
 
 *(Já implementado nesta linha:* `diff`, `suppress`, `history`, `explain`, `watch`, `badge`,
-`fetch --search`, exit codes diferenciados — ver §16.)*
+`fetch --search`, exit codes diferenciados, `fix` (remediação), `promote` (aprender directivas),
+`report` (merge), `doctor` (integridade + auditoria de narrativas), `--profile` (baseline de
+ambiente) — ver §16.)*
 
 ---
 
@@ -779,6 +826,9 @@ determinística e auditável.
 | Mudar a extracção de benchmarks | `config_assessment/build/benchmark_extractor.py` |
 | Regras de deteção de directivas desconhecidas | `config_assessment/core/unknown_directives.py` |
 | Mexer nas fórmulas CCSS / cap de impacto das chains | `config_assessment/core/ccss.py` |
+| Perfis de ambiente (production/internal/dev) | `config_assessment/core/runtime.py` (`ENV_PROFILES`) |
+| Remediação assistida (`caspar fix`) | `config_assessment/reports/remediation.py` |
+| Integridade da DB / auditoria de narrativas | `config_assessment/core/db/doctor.py` |
 | Moderar justificações de chains do apache | `config_assessment/plugins/apache_httpd/chains.json` |
 | Adicionar um comando CLI | `cli/main.py` |
 | Mudar um relatório (HTML/dashboard/SARIF) | `config_assessment/reports/` |
