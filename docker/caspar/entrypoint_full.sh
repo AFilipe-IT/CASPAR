@@ -25,6 +25,13 @@ fi
 if [ ! -f "$DB" ] && [ -f "$SEED_DB" ]; then
     cp "$SEED_DB" "$DB"
 fi
+# Refresh built-in knowledge base in an existing volume if the image is newer,
+# preserving user-installed plugins (no-op on fresh seed / when up to date).
+CASPAR_DB="$DB" python3 - "$DB" "$SEED_DB" <<'PY' 2>/dev/null || true
+import sys
+from config_assessment.core.db.reseed import refresh_builtins_if_stale
+refresh_builtins_if_stale(sys.argv[1], sys.argv[2])
+PY
 
 # Iniciar Ollama em background
 ollama serve &

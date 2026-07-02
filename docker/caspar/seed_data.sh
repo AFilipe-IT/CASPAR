@@ -38,4 +38,13 @@ if [ ! -f "$DB" ] && [ -f "$SEED_DB" ]; then
     cp "$SEED_DB" "$DB"
 fi
 
+# Refresh the built-in knowledge base in an EXISTING volume when the image ships
+# a newer base-DB version (e.g. corrected chain justifications), preserving any
+# user-installed plugins. No-op on a fresh seed or when already current.
+CASPAR_DB="$DB" python3 - "$DB" "$SEED_DB" <<'PY' 2>/dev/null || true
+import sys
+from config_assessment.core.db.reseed import refresh_builtins_if_stale
+refresh_builtins_if_stale(sys.argv[1], sys.argv[2])
+PY
+
 exec "$@"
