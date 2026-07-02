@@ -456,6 +456,18 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
 
     logger.info("[scan] %d total issues before scoring", len(issues))
 
+    # 4c. Unknown-directive detection (deterministic, Layers 1-2). Surface every
+    # parsed directive the knowledge base has no rule for, with heuristic risk
+    # triage. This is NOT scored — it flags coverage gaps (e.g. a directive new
+    # in a later service version) so they are no longer invisible.
+    from config_assessment.core.unknown_directives import surface_and_triage
+    known_names = {m.directive for m in db.get_all_misconfigurations(meta.name)}
+    unknown_directives = surface_and_triage(directives, known_names)
+    if unknown_directives:
+        logger.info("[scan] %d unknown directive(s) surfaced (%d suspicious)",
+                    len(unknown_directives),
+                    sum(1 for u in unknown_directives if u.suspicious))
+
     # 5. Score — adjust AV/Au, recompute scores with system profile
     issues = _score_issues(issues, profile)
 
@@ -504,6 +516,7 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
         version_exploits=version_exploits,
         exploit_lookup_failed=exploit_lookup_failed,
         version_cves_checked=version_cves_checked,
+        unknown_directives=unknown_directives,
     )
 
     logger.info(
