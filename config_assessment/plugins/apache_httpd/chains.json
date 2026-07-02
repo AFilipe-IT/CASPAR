@@ -7,7 +7,7 @@
       "AllowOverride"
     ],
     "amplification": 1.5,
-    "justification": "Options FollowSymLinks or Indexes combined with AllowOverride All allows user-controlled .htaccess to escalate privileges and enable directory traversal or execution of arbitrary scripts.",
+    "justification": "AllowOverride All lets a user-controlled .htaccess override server configuration, and Options FollowSymLinks/Indexes widens what that config can reach — enabling symlink-based path traversal and directory listing. Whether this reaches code execution depends on which handlers the .htaccess is allowed to enable, so it is a strong path-exposure and config-override risk rather than guaranteed RCE.",
     "cross_target": false
   },
   {
@@ -52,7 +52,7 @@
       "User"
     ],
     "amplification": 1.6,
-    "justification": "Loading the status_module and setting User to root allows an attacker to access detailed server statistics via /server-status, which can be exploited for further reconnaissance or privilege escalation.",
+    "justification": "The status_module exposes runtime internals via /server-status, and Apache running as root means any process compromise inherits root. Combined, reconnaissance is easier and the blast radius of any other flaw is maximal — running as a non-root user would contain that impact. This chain raises exposure and severity of a separate flaw rather than granting escalation on its own.",
     "cross_target": false
   },
   {
@@ -97,7 +97,7 @@
       "LimitRequestFieldSize"
     ],
     "amplification": 1.4,
-    "justification": "Overly permissive request size limits across line, fields, and field size create compounding HTTP request smuggling and buffer overflow risk when multiple limits are misconfigured together.",
+    "justification": "Overly permissive limits on request line, field count and field size together let a client send abnormally large or malformed requests, raising exposure to HTTP request smuggling and resource-exhaustion parsing issues, especially behind a proxy that parses lengths differently. (Modern Apache manages its own buffers, so this is a protocol/parsing risk, not a buffer overflow.)",
     "cross_target": false
   },
   {

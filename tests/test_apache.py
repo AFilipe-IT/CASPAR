@@ -458,3 +458,40 @@ class TestApacheEndToEnd:
                 default=0.0,
             )
             assert chain.amplified_score >= max_individual
+
+
+def test_apache_chains_do_not_overreach():
+    """Regression: the curated apache chains.json must not claim impacts that
+    require an unverified precondition — no 'privilege escalation' from a mere
+    status+root combo, no 'buffer overflow' from permissive request limits, no
+    guaranteed 'arbitrary script' execution from .htaccess override. These were
+    LLM overreach that a reviewer would (rightly) challenge for lack of evidence.
+    """
+    import json
+    from pathlib import Path
+
+    import re
+    chains = json.loads(
+        (Path("config_assessment/plugins/apache_httpd/chains.json"))
+        .read_text(encoding="utf-8"))
+    by_id = {c["chain_id"]: c["justification"].lower() for c in chains}
+
+    def _claims(text, phrase):
+        """True if `text` ASSERTS `phrase`, not merely negates it — 'this is
+        not a buffer overflow' must not count as claiming one."""
+        for m in re.finditer(re.escape(phrase), text):
+            before = text[max(0, m.start() - 24):m.start()]
+            if not re.search(r"\b(not|rather than|than)\b\s*(a |an )?$", before):
+                return True
+        return False
+
+    # status_module + User=root: reconnaissance / blast radius, not asserted privesc.
+    assert not _claims(by_id["load-module-status-userdir"], "privilege escalation")
+    # permissive request limits: parsing/smuggling risk, not asserted buffer overflow.
+    assert not _claims(by_id["request-smuggling-chain"], "buffer overflow")
+    # .htaccess override: config override + traversal, not guaranteed RCE.
+    assert "arbitrary scripts" not in by_id["directory-traversal-chain"]
+
+    # The legitimate User+Group=root chain keeps its (conditional) escalation
+    # framing — it is the real precondition for escalation.
+    assert "escalate their privileges" in by_id["privilege-escalation"]
