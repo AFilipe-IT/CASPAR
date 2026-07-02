@@ -100,7 +100,17 @@ if [ -n "$CASPAR_MODEL" ]; then
     MODEL_ENV="-e CASPAR_MODEL=$CASPAR_MODEL"
 fi
 
-exec docker run --rm \
+# 'watch' é um daemon (loop até Ctrl-C). Dá-lhe um nome previsível para o poderes
+# parar com 'docker stop caspar-watch', e permite só uma instância de cada vez.
+# --init garante que Ctrl-C/kill/docker-stop chegam ao processo dentro do
+# container e o param de imediato (sem --init o loop fica órfão).
+NAME_ARG=""
+if echo "$*" | grep -qE "(^| )watch( |$)"; then
+    NAME_ARG="--name caspar-watch"
+    docker rm -f caspar-watch >/dev/null 2>&1 || true
+fi
+
+exec docker run --rm --init $NAME_ARG \
     $MOUNT_ARGS \
     $OLLAMA_VOL \
     $REPORTS_VOL \
