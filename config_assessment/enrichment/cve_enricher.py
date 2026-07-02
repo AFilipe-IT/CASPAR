@@ -59,7 +59,13 @@ CPE_TEMPLATES: dict[str, str] = {
 }
 
 # Persistent cache of version→exploitability lookups (F1, online-first).
-VERSION_CACHE_DIR = Path(".ccss_cache")
+# Prefer $CASPAR_DATA_DIR (a writable volume in Docker) over the cwd, which the
+# container mounts read-only — writing there raised a noisy warning.
+def _cache_root() -> Path:
+    base = os.environ.get("CASPAR_DATA_DIR")
+    return Path(base) / ".ccss_cache" if base else Path(".ccss_cache")
+
+VERSION_CACHE_DIR = _cache_root()
 VERSION_CACHE_FILE = VERSION_CACHE_DIR / "version_exploits.json"
 VERSION_CACHE_TTL = 24 * 60 * 60  # seconds
 
