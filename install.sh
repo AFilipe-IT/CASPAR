@@ -49,8 +49,16 @@ fi
 # Montar volume persistente para modelos Ollama
 OLLAMA_VOL="-v caspar_ollama_models:/root/.ollama"
 
-# Montar volume persistente para relatórios
-REPORTS_VOL="-v caspar_reports:/reports"
+# Relatórios: quando o comando usa --report, montar uma pasta ./reports do host
+# em /reports (escrevível), para os ficheiros aparecerem DIRETAMENTE na máquina
+# do utilizador — sem precisar de os extrair de um volume Docker. Fora de
+# --report, usa o volume persistente (não polui o cwd com uma pasta vazia).
+if echo "$*" | grep -q "\-\-report"; then
+    mkdir -p "$(pwd)/reports"
+    REPORTS_VOL="-v $(pwd)/reports:/reports"
+else
+    REPORTS_VOL="-v caspar_reports:/reports"
+fi
 
 # Montar volume persistente para dados (DB + plugins instalados via
 # 'plugin add'/'plugin fetch --then-install'), para que sobrevivam ao --rm.
