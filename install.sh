@@ -46,6 +46,34 @@ if echo "$*" | grep -q "\-\-live"; then
     MOUNT_ARGS="$MOUNT_ARGS -v /etc:/etc:ro"
 fi
 
+# --- Injeção de versão no modo --live --------------------------------------
+# O container está isolado e não tem o binário do serviço, por isso não pode
+# correr 'httpd -v'. Corremo-lo AQUI (no host, onde o serviço está instalado) e
+# passamos --service-version ao container, para o cross-reference de CVEs/
+# exploits funcionar. Só se o utilizador não tiver já indicado a versão.
+VERSION_ENV=""
+if echo "$*" | grep -q "\-\-live" \
+   && ! echo "$*" | grep -qE "\-\-service-version"; then
+    _svc=$(echo "$*" | sed -n 's/.*--live[= ]*\([^ ]*\).*/\1/p')
+    _ver=""
+    case "$_svc" in
+        apache2|httpd|apache-httpd)
+            _ver=$( { apache2 -v 2>/dev/null || httpd -v 2>/dev/null; } \
+                    | sed -n 's#.*Apache/\([0-9][0-9.]*\).*#\1#p' | head -n1 ) ;;
+        nginx)
+            _ver=$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9][0-9.]*\).*#\1#p' | head -n1) ;;
+        sshd|ssh|openssh)
+            _ver=$(sshd -V 2>&1 | sed -n 's#.*OpenSSH_\([0-9][0-9.]*\).*#\1#p' | head -n1) ;;
+        mysql|mysqld|mariadb)
+            _ver=$( { mysqld --version 2>/dev/null || mysql --version 2>/dev/null; } \
+                    | sed -n 's#.*Ver \([0-9][0-9.]*\).*#\1#p' | head -n1 ) ;;
+    esac
+    if [ -n "$_ver" ]; then
+        set -- "$@" --service-version "$_ver"
+        echo "🔎 Versão detetada no host: $_svc $_ver (passada ao scan)" >&2
+    fi
+fi
+
 # Montar volume persistente para modelos Ollama
 OLLAMA_VOL="-v caspar_ollama_models:/root/.ollama"
 
