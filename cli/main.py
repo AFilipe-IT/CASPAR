@@ -144,6 +144,16 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
         f"{mode_str}  {click.style(input_str, dim=True)}"
     )
     click.echo(f"  {_bar(score, 30)}")
+    # Explain WHAT drives the overall score, so a high overall from a chain is
+    # not mistaken for a high individual issue.
+    hi, hc = result.highest_issue_score, result.highest_chain_score
+    if hi or hc:
+        driver = "attack chain" if result.overall_driver == "chain" else "issue"
+        click.echo(
+            f"  {click.style('Highest issue', dim=True)} {hi:.1f}   "
+            f"{click.style('Highest chain', dim=True)} {hc:.1f}   "
+            f"{click.style(f'(overall driven by {driver})', dim=True)}"
+        )
     click.echo()
 
     # Perfil numa linha

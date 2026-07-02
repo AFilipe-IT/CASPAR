@@ -222,6 +222,34 @@ def amplified_score(temporal: float, amplification: float) -> float:
     return min(round(temporal * amplification, 1), 10.0)
 
 
+# Score below which "Critical" is not reached — a pure information-disclosure
+# chain (no Integrity or Availability impact) should not be labelled Critical.
+_NON_CRITICAL_CAP = 8.9
+
+
+def impact_capped_score(amplified: float, impacts: list[tuple[str, str, str]]) -> float:
+    """Cap a chain's amplified score by the *kind* of impact it actually has.
+
+    A chain amplifies risk, but its severity ceiling should reflect what the
+    combined misconfigurations can do. Reserve the Critical band (>= 9.0) for
+    chains that touch Integrity or Availability (tampering, RCE, DoS); a chain
+    whose combined impact is only Confidentiality — i.e. information disclosure
+    / fingerprinting — is capped at High (8.9), no matter the LLM amplification.
+
+    `impacts` is the list of (c, i, a) tuples of the constituent misconfigs
+    (values "N"/"P"/"C"). Deterministic and auditable — the ceiling follows a
+    rule, not a per-chain human judgement.
+
+    Returns the (possibly lowered) score.
+    """
+    has_integrity = any(i != "N" for _, i, _ in impacts)
+    has_availability = any(a != "N" for _, _, a in impacts)
+    if has_integrity or has_availability:
+        return amplified                      # may legitimately be Critical
+    # Confidentiality-only (or no impact recorded): cannot be Critical.
+    return min(amplified, _NON_CRITICAL_CAP)
+
+
 # ------------------------------------------------------------------ #
 # Convenience: recompute all scores from raw metrics                   #
 # ------------------------------------------------------------------ #

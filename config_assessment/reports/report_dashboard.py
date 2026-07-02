@@ -367,6 +367,9 @@ def generate_dashboard(result, resolved=None):
   <div class="hero-info">
     <div class="hero-title"><h1>Security Configuration Audit {exploit_badge}</h1><div class="target">{_e(result.target_name)}{(" · v" + _e(ver)) if ver else ""}</div></div>
     <div class="hero-grid">
+      <div class="info-cell"><div class="k">Highest Issue</div><div class="v t-{_sev_class(result.highest_issue_score)}">{result.highest_issue_score:.1f}</div></div>
+      <div class="info-cell"><div class="k">Highest Chain</div><div class="v t-{_sev_class(result.highest_chain_score)}">{result.highest_chain_score:.1f}</div></div>
+      <div class="info-cell"><div class="k">Overall (from {result.overall_driver})</div><div class="v t-{scls}">{score:.1f}</div></div>
       <div class="info-cell"><div class="k">Mode</div><div class="v">{mode_label}</div></div>
       <div class="info-cell"><div class="k">Access Vector</div><div class="v">{_AV_DESC.get(result.profile.av, "?")}</div></div>
       <div class="info-cell"><div class="k">Auth</div><div class="v">{_AU_DESC.get(result.profile.au, "?")}</div></div>
@@ -477,10 +480,12 @@ def generate_dashboard(result, resolved=None):
         n = result.version_cves_checked
         exploits_section = (
             f'<div class="exploits-panel exploits-clean">'
-            f'<div class="panel-title">No Public Exploits Found</div>'
-            f'<div class="exploit-note">Checked {n} CVE{"s" if n != 1 else ""} '
-            f'affecting {_e(result.target_name)} {_e(ver)} against Exploit-DB — '
-            f'<b>no public exploit</b> is currently available for this version.'
+            f'<div class="panel-title">Exploit Availability</div>'
+            f'<div class="exploit-note">No public exploit currently indexed in '
+            f'Exploit-DB for {_e(result.target_name)} {_e(ver)}. '
+            f'<b>{n} known CVE{"s" if n != 1 else ""}</b> '
+            f'{"were" if n != 1 else "was"} evaluated. '
+            f'This reflects public exploit indexing, not the absence of risk.'
             f'</div></div>'
         )
     elif not ver:

@@ -283,15 +283,17 @@ def _amplify_chains(
     for chain in chains:
         if not chain.active:
             continue
-        constituent_scores = [
-            issue_map[d].temporal_score
-            for d in chain.misconfig_directives
-            if d in issue_map
-        ]
-        if constituent_scores:
-            chain.amplified_score = ccss.amplified_score(
-                max(constituent_scores), chain.amplification
+        constituents = [issue_map[d] for d in chain.misconfig_directives
+                        if d in issue_map]
+        if constituents:
+            amplified = ccss.amplified_score(
+                max(m.temporal_score for m in constituents), chain.amplification
             )
+            # Cap by impact kind: a pure information-disclosure chain (only
+            # Confidentiality across its misconfigs) cannot reach Critical.
+            # Deterministic, auditable ceiling — not a per-chain human call.
+            impacts = [(m.c, m.i, m.a) for m in constituents]
+            chain.amplified_score = ccss.impact_capped_score(amplified, impacts)
     return chains
 
 

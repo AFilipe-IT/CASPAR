@@ -190,6 +190,24 @@ class ScanResult:
     # optional llm_* fields only when the caller opts in.
     unknown_directives: list = field(default_factory=list)
 
+    @property
+    def highest_issue_score(self) -> float:
+        """Top individual misconfiguration score (0.0 if none)."""
+        return max((m.temporal_score for m in self.issues), default=0.0)
+
+    @property
+    def highest_chain_score(self) -> float:
+        """Top active attack-chain amplified score (0.0 if none)."""
+        return max((c.amplified_score for c in self.chains
+                    if getattr(c, "active", True)), default=0.0)
+
+    @property
+    def overall_driver(self) -> str:
+        """Whether the global score is driven by an 'issue' or a 'chain' — lets
+        the report say *what* produced the headline number, so a 9.9 overall
+        with a 7.1 top issue is explained (it came from a chain), not confusing."""
+        return "chain" if self.highest_chain_score > self.highest_issue_score else "issue"
+
     def model_dump_json(self, indent: int = 2) -> str:
         """Compatibility shim — matches Pydantic's .model_dump_json() API."""
         import json

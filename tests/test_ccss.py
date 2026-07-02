@@ -167,6 +167,32 @@ class TestAmplifiedScore:
         assert amplified_score(6.0, 1.0) == 6.0
 
 
+class TestImpactCappedScore:
+    """A pure information-disclosure chain (only Confidentiality) cannot reach
+    Critical; chains touching Integrity or Availability can."""
+
+    def test_confidentiality_only_capped_below_critical(self):
+        from config_assessment.core.ccss import impact_capped_score
+        # ServerTokens + ServerSignature: both C:P, no I/A → amplified 9.9 capped.
+        score = impact_capped_score(9.9, [("P", "N", "N"), ("P", "N", "N")])
+        assert score == 8.9
+        assert severity_label(score) == "High"
+
+    def test_integrity_impact_allows_critical(self):
+        from config_assessment.core.ccss import impact_capped_score
+        # WebDAV RCE: has Integrity/Availability → not capped.
+        assert impact_capped_score(9.9, [("P", "C", "C")]) == 9.9
+
+    def test_availability_impact_allows_critical(self):
+        from config_assessment.core.ccss import impact_capped_score
+        assert impact_capped_score(9.5, [("N", "N", "P")]) == 9.5
+
+    def test_below_cap_unchanged(self):
+        from config_assessment.core.ccss import impact_capped_score
+        # A C-only chain already below the cap is left as-is.
+        assert impact_capped_score(6.6, [("P", "N", "N")]) == 6.6
+
+
 class TestFullScore:
     def test_returns_tuple(self):
         bs, ts = full_score("N", "N", "L", "P", "P", "P")
