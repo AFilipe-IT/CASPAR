@@ -1689,5 +1689,62 @@ def promote(ctx, input_path, only_directive, docs_path, yes) -> None:
     click.echo()
 
 
+@cli.command()
+@click.argument("input_path", metavar="CONFIG")
+@click.option("--interval", "-i", default=1.0, type=float, show_default=True,
+              help="Seconds between checks for a config change.")
+@click.option("--profile", "env_profile", default=None,
+              type=click.Choice(["production", "internal", "dev"]),
+              help="Environment baseline for scoring (as in scan).")
+@click.pass_context
+def watch(ctx, input_path, interval, env_profile) -> None:
+    """Continuously audit a config: re-scan whenever it changes.
+
+    Watches the file (or directory) and, on every change, re-runs the
+    deterministic scan and shows the misconfigurations found and their impact —
+    data already in the DB. Runs until Ctrl-C. No baseline, no files written.
+
+    \b
+    caspar watch /etc/nginx/nginx.conf
+    caspar watch /etc/apache2/ --profile production
+    """
+    from config_assessment.core.db.database import Database
+    from config_assessment.core.input_resolver import resolve
+    from config_assessment.core import runtime
+    from config_assessment.core.watch import watch as watch_loop
+
+    _discover_plugins()
+    db_path: str = ctx.obj["db_path"]
+    if not Path(db_path).exists():
+        click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
+        sys.exit(2)
+
+    # Resolve once to fail fast on a bad path and to reuse scan's renderer.
+    # Watch is for static configs on disk, not --live/docker sources.
+    try:
+        resolved = resolve(input_path, live=False)
+    except (FileNotFoundError, RuntimeError, ValueError) as e:
+        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        sys.exit(2)
+
+    click.echo(click.style(f"  Watching {resolved.path}", fg="cyan") +
+               click.style(f"  (every {interval:g}s · Ctrl-C to stop)", dim=True))
+
+    def _rescan() -> None:
+        with Database(db_path) as db:
+            result = runtime.scan(resolved.path, db, env_profile=env_profile)
+        _print_result(result, resolved=resolved)
+
+    try:
+        for event in watch_loop(resolved.path, interval=interval):
+            if event.previous is not None:
+                click.echo(click.style(
+                    f"\n  ⟳ Change detected in {event.path} — re-auditing…",
+                    fg="yellow", bold=True))
+            _rescan()
+    except KeyboardInterrupt:
+        click.echo(click.style("\n  Stopped.", dim=True))
+
+
 if __name__ == "__main__":
     cli()

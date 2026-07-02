@@ -587,6 +587,17 @@ numa vista única: pior ofensor, scores por target, totais.
 caspar report reports/*.json
 ```
 
+**`watch` — auditoria contínua.** Vigia um ficheiro (ou diretório) de configuração e, sempre que o
+conteúdo muda, **re-corre o scan** e mostra as misconfigurations detetadas e o seu impacto (dados já na
+DB). Deteção determinística por hash de conteúdo — funciona em Linux nativo, WSL2 e volumes montados em
+Docker. Corre até `Ctrl-C`; não guarda baseline nem escreve ficheiros. Aceita `--profile` como o `scan`.
+
+```bash
+caspar watch /etc/nginx/nginx.conf              # audita ao arrancar e a cada alteração
+caspar watch /etc/apache2/ --profile production # diretório inteiro, baseline de produção
+caspar watch nginx.conf -i 2                     # verifica a cada 2s (por omissão 1s)
+```
+
 **`doctor` — integridade da base de dados.** Valida regras órfãs, chains a apontar para directivas
 inexistentes, scores fora de gama, metadata de reseed. Com `--strict`, audita também as narrativas que
 afirmam impacto forte (RCE, escalada de privilégios…) **sem** linguagem condicional — para revisão
