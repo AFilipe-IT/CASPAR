@@ -1400,5 +1400,113 @@ def watch(ctx, input_path, interval) -> None:
         click.echo("\n  Stopped.")
 
 
+# ── fix (#1: assisted remediation) ─────────────────────────────────────
+
+@cli.command()
+@click.argument("input_path", metavar="CONFIG")
+@click.option("--live", "-l", is_flag=True, default=False,
+              help="Fix an installed service's config (e.g. --live apache2).")
+@click.option("--dry-run", is_flag=True, default=False,
+              help="Show the diff without writing anything.")
+@click.option("--in-place", is_flag=True, default=False,
+              help="Rewrite the file in place (default: write <file>.fixed).")
+@click.option("--output", "-o", default=None,
+              help="Write the fixed file here (instead of <file>.fixed).")
+@click.pass_context
+def fix(ctx, input_path, live, dry_run, in_place, output) -> None:
+    """Generate config fixes from a scan's findings (detect → remediate).
+
+    \b
+    Rewrites directives with an insecure value to their secure value, using the
+    good_value already in the DB. Only literal, safe values are applied; prose
+    guidance and absence rules are listed as manual steps. Nothing is written
+    with --dry-run.
+
+      caspar fix nginx.conf --dry-run
+      caspar fix nginx.conf                 # writes nginx.conf.fixed
+      caspar fix nginx.conf --in-place
+    """
+    from config_assessment.core.db.database import Database
+    from config_assessment.core.input_resolver import resolve
+    from config_assessment.core import runtime
+    from config_assessment.reports.remediation import (
+        build_fix_plan, render_diff, apply_plan)
+
+    _discover_plugins()
+    db_path = ctx.obj["db_path"]
+    if not Path(db_path).exists():
+        click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
+        sys.exit(2)
+
+    try:
+        resolved = resolve(input_path, live=live)
+    except (FileNotFoundError, RuntimeError, ValueError) as e:
+        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        sys.exit(2)
+
+    with Database(db_path) as db:
+        result = runtime.scan(resolved.path, db)
+    plan = build_fix_plan(result)
+
+    if not plan.edits and not plan.manual:
+        click.echo(click.style("  Nothing to fix — no issues found.", fg="green"))
+        return
+
+    click.echo()
+    if plan.edits:
+        click.echo(f"  {click.style('AUTOMATIC FIXES', bold=True)} "
+                   f"{click.style(f'({len(plan.edits)})', dim=True)}")
+        click.echo()
+        click.echo(render_diff(plan))
+        click.echo()
+    if plan.manual:
+        click.echo(f"  {click.style('MANUAL STEPS', bold=True)} "
+                   f"{click.style(f'({len(plan.manual)})', dim=True)}  "
+                   + click.style("(not auto-applied — see reason)", dim=True))
+        click.echo()
+        for m in sorted(plan.manual, key=lambda x: -x["score"]):
+            score_str = click.style(f"{m['score']:.1f}", dim=True)
+            click.echo(f"  {score_str}  "
+                       f"{click.style(m['directive'], bold=True)} → "
+                       f"{m['good_value'] or '(see recommendation)'}")
+            click.echo(click.style(f"       {m['reason']}", dim=True))
+            if m.get("recommendation"):
+                click.echo(click.style(f"       → {m['recommendation'][:100]}", fg="green"))
+        click.echo()
+
+    if dry_run or not plan.edits:
+        if dry_run:
+            click.echo(click.style("  [dry-run] nothing written.", fg="cyan"))
+        return
+
+    if output:
+        # Single-file scans only for an explicit output path.
+        if len(plan.files) != 1:
+            click.echo(click.style(
+                "  --output needs a single target file; use --in-place for "
+                "multi-file configs.", fg="yellow"), err=True)
+            sys.exit(2)
+        edits = plan.edits
+        src = Path(next(iter(plan.files)))
+        lines = src.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+        for e in edits:
+            i = e.line_number - 1
+            if 0 <= i < len(lines):
+                nl = "\n" if lines[i].endswith("\n") else ""
+                lines[i] = e.new_line + nl
+        Path(output).write_text("".join(lines), encoding="utf-8")
+        written = [output]
+    else:
+        written = apply_plan(plan, in_place=in_place)
+
+    for w in written:
+        click.echo(f"  {click.style('✓ written:', fg='green')} {w}")
+    if not in_place:
+        click.echo(click.style(
+            "  (originals untouched — review the .fixed file before replacing)",
+            dim=True))
+    click.echo()
+
+
 if __name__ == "__main__":
     cli()
