@@ -567,3 +567,36 @@ class TestVersionExploitsE2E:
         issue = next(m for m in result.issues if m.directive == "DangerousOption")
         assert issue.version_amplification == 1.0       # no amplification
         assert len(result.version_exploits) == 1        # but exploit listed
+
+
+class TestEnvProfile:
+    """Environment profiles cap the Access Vector downward: an internal/dev
+    deployment lowers exposure and thus the score; production keeps worst case."""
+
+    def test_dev_profile_lowers_score_vs_production(self, dummy_config_file, db):
+        from config_assessment.plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+        prod = runtime.scan(dummy_config_file, db, env_profile="production")
+        dev = runtime.scan(dummy_config_file, db, env_profile="dev")
+        assert dev.global_temporal_score < prod.global_temporal_score
+
+    def test_internal_between_dev_and_production(self, dummy_config_file, db):
+        from config_assessment.plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+        prod = runtime.scan(dummy_config_file, db, env_profile="production").global_temporal_score
+        internal = runtime.scan(dummy_config_file, db, env_profile="internal").global_temporal_score
+        dev = runtime.scan(dummy_config_file, db, env_profile="dev").global_temporal_score
+        assert dev <= internal <= prod
+
+    def test_cap_av_helper(self):
+        from config_assessment.core.runtime import _cap_av
+        assert _cap_av("N", "A") == "A"     # capped down
+        assert _cap_av("L", "N") == "L"     # already below ceiling, unchanged
+        assert _cap_av("A", "A") == "A"
+
+    def test_no_profile_is_worst_case(self, dummy_config_file, db):
+        from config_assessment.plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+        default = runtime.scan(dummy_config_file, db).global_temporal_score
+        prod = runtime.scan(dummy_config_file, db, env_profile="production").global_temporal_score
+        assert default == prod            # production == the default worst case

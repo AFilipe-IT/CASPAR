@@ -457,10 +457,14 @@ def cli(ctx: click.Context, db: str, verbose: bool) -> None:
 @click.option("--show-uncovered", "show_uncovered", is_flag=True, default=False,
               help="List every uncovered directive, not just the suspicious "
                    "ones (a real config has hundreds of benign unknowns).")
+@click.option("--profile", "env_profile", default=None,
+              type=click.Choice(["production", "internal", "dev"]),
+              help="Deployment profile — adjusts exposure (AV) used for scoring: "
+                   "production=Network (default), internal=Adjacent, dev=Local.")
 @click.pass_context
 def scan(ctx, input_path, live, report, fmt, output, threshold,
          differentiated_exit, suppress_file, online, service_version,
-         assess_unknown, docs_path, show_uncovered) -> None:
+         assess_unknown, docs_path, show_uncovered, env_profile) -> None:
     """Analyse service configurations — 4 modes.
 
     \b
@@ -518,7 +522,7 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
                 detected_version = None
             image_hint = resolved.metadata.get("image")
             result = runtime.scan(resolved.path, db, version=detected_version,
-                                  image=image_hint)
+                                  image=image_hint, env_profile=env_profile)
             # Record the scan for history/trending (#4). Best-effort — a failure
             # to persist history must never break the scan itself.
             try:

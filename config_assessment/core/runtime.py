@@ -248,13 +248,29 @@ def _detect_chains(
 # Score adjustment and chain amplification                             #
 # ------------------------------------------------------------------ #
 
+# Access Vector ordering, most exposed → least. Used to cap AV downward for an
+# environment profile (an internal service cannot be scored as Network-facing).
+_AV_ORDER = {"N": 3, "A": 2, "L": 1}
+
+
+def _cap_av(av: str, ceiling: str) -> str:
+    """Return the less-exposed of `av` and `ceiling` (cap AV at the ceiling)."""
+    return av if _AV_ORDER.get(av, 3) <= _AV_ORDER.get(ceiling, 3) else ceiling
+
+
 def _score_issues(
     issues: list[Misconfiguration],
     profile: SystemProfile,
+    av_ceiling: str | None = None,
 ) -> list[Misconfiguration]:
     """
     Adjust AV/Au on each issue using the system profile (worst-case),
     then recompute BaseScore and TemporalScore.
+
+    When `av_ceiling` is set (an explicit environment profile), the effective
+    Access Vector is *capped* at that level afterwards — so an 'internal' or
+    'dev' deployment lowers exposure instead of the worst-case default. Without
+    it, the original worst-case behaviour is unchanged.
     """
     for issue in issues:
         adj_av, adj_au = ccss.adjust_av_au(
@@ -263,6 +279,8 @@ def _score_issues(
             system_av=profile.av,
             system_au=profile.au,
         )
+        if av_ceiling:
+            adj_av = _cap_av(adj_av, av_ceiling)
         issue.av = adj_av
         issue.au = adj_au
         issue.base_score = ccss.base_score(adj_av, adj_au, issue.ac, issue.c, issue.i, issue.a)
@@ -383,8 +401,20 @@ def _version_risk_note(product: str, version: str, info) -> str:
             f"CVE{'s' if info.cve_count != 1 else ''} detected")
 
 
+# Environment profiles: override the system exposure (AV/Au) the scoring uses.
+# The default (None) keeps the plugin's inferred profile (worst case). A named
+# profile reflects how the service is actually deployed, which changes the
+# Access Vector — an internal service is Adjacent, a dev box is Local.
+ENV_PROFILES = {
+    "production": ("N", "N"),   # internet-facing, no auth boundary (== default worst case)
+    "internal":   ("A", "N"),   # reachable only from an adjacent/internal network
+    "dev":        ("L", "N"),   # local/dev only, not network-exposed
+}
+
+
 def scan(input_path: str, db: Database, *, version: str | None = None,
-         auto_detect_version: bool = True, image: str | None = None) -> ScanResult:
+         auto_detect_version: bool = True, image: str | None = None,
+         env_profile: str | None = None) -> ScanResult:
     """
     Run a full scan of *input_path* and return a ScanResult.
 
@@ -436,6 +466,14 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
 
     # 3. Profile
     profile: SystemProfile = plugin.get_profile(directives)
+    # An explicit environment profile overrides the inferred exposure (AV/Au):
+    # e.g. an 'internal' deployment is Adjacent, not Network-facing.
+    if env_profile:
+        override = ENV_PROFILES.get(env_profile)
+        if override:
+            profile = SystemProfile(av=override[0], au=override[1])
+            logger.info("[scan] Env profile '%s' → AV:%s Au:%s",
+                        env_profile, profile.av, profile.au)
     logger.info("[scan] Profile — AV:%s Au:%s", profile.av, profile.au)
 
     # 4. Scan — lookup each directive in the DB
@@ -471,7 +509,11 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
                     sum(1 for u in unknown_directives if u.suspicious))
 
     # 5. Score — adjust AV/Au, recompute scores with system profile
-    issues = _score_issues(issues, profile)
+    # An env profile caps the AV downward (internal=A, dev=L); production/None
+    # keep the worst-case behaviour.
+    _av_ceiling = ENV_PROFILES[env_profile][0] if env_profile in (
+        "internal", "dev") else None
+    issues = _score_issues(issues, profile, av_ceiling=_av_ceiling)
 
     # 5b. Version-aware amplification + exploit lookup (F1). No-op without a
     # version. The plugin declares which directives expose the version, so the
