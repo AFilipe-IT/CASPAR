@@ -365,7 +365,7 @@ A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql
 | Attack chains | **26** (combinações que amplificam o risco) |
 | Version-exploits pré-computados | **19** (mapeamento versão → CVEs/exploits) |
 | Alvos disponíveis via `plugin fetch` | **43** (stigviewer.com) |
-| Testes automatizados | **410** (a passar) |
+| Testes automatizados | **436** (a passar) |
 
 Distribuição das 228 misconfigs pelos 7 targets: **docker 57 · tomcat 49 · apache-httpd 35 ·
 redis 29 · mysql 23 · nginx 18 · ssh 17**. Estes números são **verificáveis** — inspeciona a DB com
