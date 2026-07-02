@@ -195,3 +195,46 @@ def test_cli_fetch_search():
 def test_cli_fetch_search_no_match():
     res = CliRunner().invoke(cli, ["plugin", "fetch", "--search", "zzzznope"])
     assert res.exit_code == 1
+
+
+# ── merge (#5) ─────────────────────────────────────────────────────────
+
+def test_merge_aggregates_and_finds_worst():
+    from config_assessment.reports.scan_features import merge_scans
+    a = {"target_name": "nginx", "global_temporal_score": 5.7, "severity": "Medium",
+         "issues": [1, 2], "chains": []}
+    b = {"target_name": "apache-httpd", "global_temporal_score": 9.2,
+         "severity": "Critical", "issues": [1], "chains": [{"active": True}]}
+    m = merge_scans([a, b])
+    assert m.worst_score == 9.2 and m.worst_target == "apache-httpd"
+    assert m.total_issues == 3 and m.total_chains == 1
+    assert m.average_score == 7.4      # (5.7 + 9.2) / 2, banker's rounding
+    # Worst-first ordering.
+    assert m.scans[0]["target"] == "apache-httpd"
+
+
+def test_merge_empty():
+    from config_assessment.reports.scan_features import merge_scans
+    m = merge_scans([])
+    assert m.average_score == 0.0 and m.worst_score == 0.0
+
+
+def test_merge_counts_only_active_chains():
+    from config_assessment.reports.scan_features import merge_scans
+    d = {"target_name": "x", "global_temporal_score": 4.0, "severity": "Medium",
+         "issues": [], "chains": [{"active": True}, {"active": False}]}
+    assert merge_scans([d]).total_chains == 1
+
+
+def test_cli_report_merge(tmp_path):
+    import json
+    from click.testing import CliRunner
+    from cli.main import cli
+    for i, score in enumerate([5.7, 9.2]):
+        (tmp_path / f"s{i}.json").write_text(json.dumps(
+            {"target_name": f"svc{i}", "input_path": f"/c{i}",
+             "global_temporal_score": score, "severity": "Medium", "issues": [], "chains": []}))
+    res = CliRunner().invoke(cli, ["report", str(tmp_path / "s0.json"),
+                                   str(tmp_path / "s1.json")])
+    assert res.exit_code == 0
+    assert "MERGED REPORT" in res.output and "9.2" in res.output

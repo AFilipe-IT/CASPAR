@@ -1400,6 +1400,50 @@ def watch(ctx, input_path, interval) -> None:
         click.echo("\n  Stopped.")
 
 
+# ── report --merge (#5: executive multi-scan summary) ──────────────────
+
+@cli.command()
+@click.argument("scan_jsons", nargs=-1, required=True,
+                type=click.Path(exists=True))
+@click.option("--merge", "do_merge", is_flag=True, default=True,
+              help="Merge the given scan JSONs into one summary (default).")
+def report(scan_jsons, do_merge) -> None:
+    """Combine several scan JSONs into one executive summary.
+
+    \b
+    Useful to see every service on a host at a glance — worst offender,
+    per-target scores, totals:
+      caspar report reports/*.json
+    """
+    from config_assessment.reports.scan_features import load_scan, merge_scans
+
+    try:
+        scans = [load_scan(p) for p in scan_jsons]
+    except (ValueError, KeyError) as e:
+        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        sys.exit(2)
+
+    m = merge_scans(scans)
+    click.echo()
+    click.echo(f"  {click.style('MERGED REPORT', bold=True)}  "
+               f"{click.style(f'{len(m.scans)} scans', dim=True)}")
+    click.echo()
+    click.echo(f"  Average score: {click.style(f'{m.average_score:.1f}', bold=True)}"
+               f"   Worst: {click.style(f'{m.worst_score:.1f}', fg=_sev_color(m.worst_score), bold=True)}"
+               f" ({m.worst_target})")
+    click.echo(f"  Totals: {m.total_issues} issues · {m.total_chains} attack chains")
+    click.echo()
+    click.echo(f"  {'SCORE':>6}  {'SEV':<9}  {'ISSUES':>6}  {'CHAINS':>6}  TARGET")
+    click.echo("  " + "─" * 60)
+    for s in m.scans:
+        col = _sev_color(s["score"])
+        score_cell = click.style(f"{s['score']:>6.1f}", fg=col, bold=True)
+        click.echo(f"  {score_cell}  "
+                   f"{s['severity']:<9}  {s['issues']:>6}  {s['chains']:>6}  "
+                   f"{s['target']}  {click.style(s['input'], dim=True)}")
+    click.echo()
+
+
 # ── doctor (#6: DB integrity) ──────────────────────────────────────────
 
 @cli.command()
