@@ -13,17 +13,17 @@
 *Utilização:* 5. [Modos de scan](#5-os-quatro-modos-de-scan) · 6. [Formatos de relatório](#6-os-quatro-formatos-de-relatório) ·
 7. [`add` vs `fetch`](#7-dois-modos-de-instalar-um-plugin-add-vs-fetch) ·
 8. [Demonstração prática](#8-demonstração-prática) · 9. [Docker](#9-demonstração-via-docker-máquina-limpa-sem-clonar-o-repo) ·
-10. [Fontes dos benchmarks](#10-de-onde-vêm-os-benchmarks-plugin-fetch)
+**10. [Guião de validação na VM](#10-guião-de-validação-na-máquina-de-teste)** · 11. [Fontes dos benchmarks](#11-de-onde-vêm-os-benchmarks-plugin-fetch)
 
-*Aprofundamento:* 11. [Números do projeto](#11-números-do-projeto-a-base-de-conhecimento) ·
-12. [Requisitos e tempos](#12-requisitos-de-sistema-e-tempos-esperados) · 13. [Attack chains em detalhe](#13-attack-chains-em-detalhe-exemplo-real) ·
-14. [CI/CD](#14-integração-cicd-github-actions) · 15. [Comandos de produtividade](#15-comandos-de-produtividade) ·
-16. [Directivas desconhecidas](#16-deteção-de-directivas-desconhecidas) ·
-17. [Criar um plugin do zero](#17-criar-um-plugin-do-zero-utilizadores-avançados) ·
-18. [Troubleshooting](#18-troubleshooting--erros-comuns) · 19. [vs outras ferramentas](#19-posicionamento-vs-outras-ferramentas) ·
-20. [Roadmap](#20-roadmap--trabalho-futuro)
+*Aprofundamento:* 12. [Números do projeto](#12-números-do-projeto-a-base-de-conhecimento) ·
+13. [Requisitos e tempos](#13-requisitos-de-sistema-e-tempos-esperados) · 14. [Attack chains em detalhe](#14-attack-chains-em-detalhe-exemplo-real) ·
+15. [CI/CD](#15-integração-cicd-github-actions) · 16. [Comandos de produtividade](#16-comandos-de-produtividade) ·
+17. [Directivas desconhecidas](#17-deteção-de-directivas-desconhecidas) ·
+18. [Criar um plugin do zero](#18-criar-um-plugin-do-zero-utilizadores-avançados) ·
+19. [Troubleshooting](#19-troubleshooting--erros-comuns) · 20. [vs outras ferramentas](#20-posicionamento-vs-outras-ferramentas) ·
+21. [Roadmap](#21-roadmap--trabalho-futuro)
 
-*Referência:* 21. [Onde mexer](#21-onde-mexer-mapa-rápido) · 22. [Resumo](#22-resumo-executivo)
+*Referência:* 22. [Onde mexer](#22-onde-mexer-mapa-rápido) · 23. [Resumo](#23-resumo-executivo)
 
 ---
 
@@ -336,7 +336,77 @@ para produção.)
 
 ---
 
-## 10. De onde vêm os benchmarks (`plugin fetch`)
+## 10. Guião de validação na máquina de teste
+
+Um roteiro para confirmar, numa máquina limpa, que **cada** funcionalidade funciona
+*end-to-end*. Cada passo indica o **critério de sucesso**. Só precisas de Docker.
+
+**0 — Instalar** (imagens + wrapper `caspar` no PATH; sem clonar o repo):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
+```
+✓ *Sucesso:* `caspar --help` lista os comandos (scan, targets, plugin, diff, badge, explain, history, suppress, watch).
+
+**1 — Scan básico + relatórios.** Cria um `nginx.conf` de teste e corre:
+
+```bash
+caspar scan nginx.conf                          # terminal
+caspar scan nginx.conf --report -f dashboard    # painel visual → volume caspar_reports
+```
+✓ *Sucesso:* score 0–10 com issues por severidade; o dashboard é gerado.
+
+**2 — Deteção de directivas desconhecidas** (determinístico). No mesmo scan:
+
+✓ *Sucesso:* aparece o painel `UNCOVERED DIRECTIVES` com as directivas sem regra; as arriscadas
+(ex. `listen 0.0.0.0`, `debug ... on`) vêm marcadas `⚠ suspicious`. O score **não** as inclui.
+
+**3 — Descoberta e catálogo (`fetch`).**
+
+```bash
+caspar plugin fetch --list                 # 43 alvos
+caspar plugin fetch --search postgres      # fuzzy → postgresql, epas
+```
+✓ *Sucesso:* a lista mostra 43 alvos; a busca sugere os relevantes.
+
+**4 — Instalar um plugin + persistência** (a prova decisiva):
+
+```bash
+CASPAR_MODEL=qwen2.5:1.5b caspar plugin fetch mongodb --then-install   # modelo leve p/ testar
+caspar targets                                                         # noutro container
+```
+✓ *Sucesso:* o `mongodb` aparece em `caspar targets` — instalado num container, visível noutro,
+porque persiste no volume `caspar_data`. (Sem `--then-install`, o fetch só descarrega.)
+
+**5 — Comandos de produtividade.**
+
+```bash
+caspar explain keepalive_timeout --target nginx    # origem da regra, sem scan
+caspar scan nginx.conf --report -f json -o /tmp/a
+# … edita o nginx.conf …
+caspar scan nginx.conf --report -f json -o /tmp/b
+caspar diff /tmp/a/ccss_*.json /tmp/b/ccss_*.json  # o que mudou + delta
+caspar badge /tmp/b/ccss_*.json                    # markdown para README
+caspar history                                     # scores ao longo do tempo
+```
+✓ *Sucesso:* `explain` mostra CCSS/CVEs/narrativa; `diff` mostra resolvidas/novas/delta;
+`badge` imprime markdown shields.io; `history` lista os scans anteriores.
+
+**6 — Avaliação LLM de directivas desconhecidas** (opt-in, precisa de Ollama → imagem `:full`):
+
+```bash
+caspar scan nginx.conf --assess-unknown --docs manual_nginx.txt
+```
+✓ *Sucesso:* as directivas `UNCOVERED` ganham um veredicto LLM de **baixa confiança** (separado,
+nunca no score).
+
+> **Notas:** o volume `caspar_data` guarda DB+plugins e `caspar_ollama_models` guarda o modelo (o
+> `install.sh` monta-os). Usa `qwen2.5:1.5b` para testes rápidos; `mistral:7b` (por omissão) para
+> qualidade. Se algo falhar, vê a §19 (Troubleshooting).
+
+---
+
+## 11. De onde vêm os benchmarks (`plugin fetch`)
 
 O CASPAR descobre benchmarks a partir do **stigviewer.com**, que expõe cada STIG como JSON estruturado
 em `/stigs/<slug>/export/json`. O fetcher converte esse JSON num ficheiro XCCDF (o formato DISA STIG
@@ -355,7 +425,7 @@ ao catálogo.
 
 ---
 
-## 11. Números do projeto (a base de conhecimento)
+## 12. Números do projeto (a base de conhecimento)
 
 A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql`) contém:
 
@@ -374,7 +444,7 @@ redis 29 · mysql 23 · nginx 18 · ssh 17**. Estes números são **verificávei
 
 ---
 
-## 12. Requisitos de sistema e tempos esperados
+## 13. Requisitos de sistema e tempos esperados
 
 O **runtime** (scan) é leve; o **build-time** (extração por LLM) é que pesa, por causa do Ollama.
 
@@ -403,7 +473,7 @@ O **runtime** (scan) é leve; o **build-time** (extração por LLM) é que pesa,
 
 ---
 
-## 13. Attack chains em detalhe (exemplo real)
+## 14. Attack chains em detalhe (exemplo real)
 
 Uma *attack chain* é um conjunto de misconfigs que, **combinadas**, valem mais do que a soma das
 partes: o score da chain é amplificado por um fator. Exemplo real da DB (chain
@@ -427,7 +497,7 @@ embutido no resultado. As 26 chains da DB são geradas no build-time por LLM (co
 
 ---
 
-## 14. Integração CI/CD (GitHub Actions)
+## 15. Integração CI/CD (GitHub Actions)
 
 O formato SARIF integra diretamente com o *Security tab* do GitHub. Exemplo de workflow:
 
@@ -460,7 +530,7 @@ programático em vez de SARIF, troca por `-f json`.
 
 ---
 
-## 15. Comandos de produtividade
+## 16. Comandos de produtividade
 
 Além do `scan`, o CASPAR tem comandos que operam sobre os resultados — úteis em CI, hardening
 iterativo e gestão de risco.
@@ -529,7 +599,7 @@ caspar scan nginx.conf --exit-code --threshold 7.0
 
 ---
 
-## 16. Deteção de directivas desconhecidas
+## 17. Deteção de directivas desconhecidas
 
 **O problema:** o CASPAR só deteta misconfigurations que estão na base de conhecimento (o benchmark).
 Uma directiva nova — introduzida numa versão mais recente do serviço, de um módulo de terceiros, ou
@@ -577,7 +647,7 @@ caspar scan nginx.conf --assess-unknown --docs manual_nginx_2.6.txt   # + docs p
 
 ---
 
-## 17. Criar um plugin do zero (utilizadores avançados)
+## 18. Criar um plugin do zero (utilizadores avançados)
 
 Além de `add` (de ficheiro) e `fetch` (descoberta), podes escrever um plugin à mão — útil para um
 serviço não catalogado, um formato de config invulgar, ou um benchmark proprietário. Um plugin é um
@@ -610,7 +680,7 @@ key-value — na maioria dos casos é só delegar. O `rules.py` define como o se
 
 ---
 
-## 18. Troubleshooting — erros comuns
+## 19. Troubleshooting — erros comuns
 
 | Sintoma | Causa provável | Solução |
 |---------|----------------|---------|
@@ -624,7 +694,7 @@ key-value — na maioria dos casos é só delegar. O `rules.py` define como o se
 
 ---
 
-## 19. Posicionamento vs outras ferramentas
+## 20. Posicionamento vs outras ferramentas
 
 > **Nota:** esta tabela é *posicionamento conceptual*, não um benchmark. Reflete o desenho do CASPAR;
 > as colunas de terceiros são a nossa leitura de alto nível, não um teste comparativo. Confirma sempre
@@ -643,7 +713,7 @@ determinística e auditável.
 
 ---
 
-## 20. Roadmap / trabalho futuro
+## 21. Roadmap / trabalho futuro
 
 > Visão de direção, sujeita a validação. Não são compromissos.
 
@@ -659,11 +729,11 @@ determinística e auditável.
   apache-httpd tem CCE para calibração).
 
 *(Já implementado nesta linha:* `diff`, `suppress`, `history`, `explain`, `watch`, `badge`,
-`fetch --search`, exit codes diferenciados — ver §15.)*
+`fetch --search`, exit codes diferenciados — ver §16.)*
 
 ---
 
-## 21. Onde mexer (mapa rápido)
+## 22. Onde mexer (mapa rápido)
 
 | Quero… | Ficheiro |
 |--------|----------|
@@ -679,7 +749,7 @@ determinística e auditável.
 
 ---
 
-## 22. Resumo executivo
+## 23. Resumo executivo
 
 O CASPAR transforma um benchmark de segurança (CIS/STIG) num scanner de configuração com scoring de
 risco reproduzível. A separação **build-time (LLM, uma vez) / runtime (determinístico, sempre)** dá-lhe
