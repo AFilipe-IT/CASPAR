@@ -17,11 +17,12 @@
 
 *Aprofundamento:* 11. [Números do projeto](#11-números-do-projeto-a-base-de-conhecimento) ·
 12. [Requisitos e tempos](#12-requisitos-de-sistema-e-tempos-esperados) · 13. [Attack chains em detalhe](#13-attack-chains-em-detalhe-exemplo-real) ·
-14. [CI/CD](#14-integração-cicd-github-actions) · 15. [Criar um plugin do zero](#15-criar-um-plugin-do-zero-utilizadores-avançados) ·
-16. [Troubleshooting](#16-troubleshooting--erros-comuns) · 17. [vs outras ferramentas](#17-posicionamento-vs-outras-ferramentas) ·
-18. [Roadmap](#18-roadmap--trabalho-futuro)
+14. [CI/CD](#14-integração-cicd-github-actions) · 15. [Comandos de produtividade](#15-comandos-de-produtividade) ·
+16. [Criar um plugin do zero](#16-criar-um-plugin-do-zero-utilizadores-avançados) ·
+17. [Troubleshooting](#17-troubleshooting--erros-comuns) · 18. [vs outras ferramentas](#18-posicionamento-vs-outras-ferramentas) ·
+19. [Roadmap](#19-roadmap--trabalho-futuro)
 
-*Referência:* 19. [Onde mexer](#19-onde-mexer-mapa-rápido) · 20. [Resumo](#20-resumo-executivo)
+*Referência:* 20. [Onde mexer](#20-onde-mexer-mapa-rápido) · 21. [Resumo](#21-resumo-executivo)
 
 ---
 
@@ -458,7 +459,76 @@ programático em vez de SARIF, troca por `-f json`.
 
 ---
 
-## 15. Criar um plugin do zero (utilizadores avançados)
+## 15. Comandos de produtividade
+
+Além do `scan`, o CASPAR tem comandos que operam sobre os resultados — úteis em CI, hardening
+iterativo e gestão de risco.
+
+**`diff` — comparar dois scans no tempo.** Reutiliza o JSON; mostra resolvidas, novas e o delta de
+score. Sai com código 1 se o score **piorou** (bom para bloquear PRs que degradam a config):
+
+```bash
+caspar scan nginx.conf --report -f json -o antes/
+# … alterações ao nginx.conf …
+caspar scan nginx.conf --report -f json -o depois/
+caspar diff antes/ccss_*.json depois/ccss_*.json
+#   Score: 5.7 → 6.9  ▲ 1.2      ← a última alteração piorou 1.2 pontos
+#   Resolved: 1   New: 3
+```
+
+**`suppress` — aceitar um risco conhecido.** Marca uma misconfig como aceite (com justificação
+obrigatória); scans futuros escondem-na com `--suppress-file` (ou `.caspar-suppress.json` no cwd):
+
+```bash
+caspar suppress keepalive_timeout -r "Aprovado por arquitetura em 2026-06-15"
+caspar suppress --list
+caspar scan nginx.conf --suppress-file .caspar-suppress.json   # keepalive escondido
+```
+
+**`explain` — a origem completa de uma regra, sem correr scan.** Secção do benchmark, submétricas
+CCSS, CVEs e narrativa:
+
+```bash
+caspar explain keepalive_timeout --target nginx
+```
+
+**`history` — evolução do score.** Cada scan é gravado na DB; consulta o histórico:
+
+```bash
+caspar history                     # todos os scans recentes
+caspar history nginx.conf --last 5
+```
+
+**`watch` — re-scan automático ao editar.** Feedback em tempo real durante hardening manual (mostra
+o score a subir/descer a cada gravação do ficheiro):
+
+```bash
+caspar watch /etc/nginx/nginx.conf
+```
+
+**`badge` — badge de score para README** (estilo shields.io):
+
+```bash
+caspar badge reports/ccss_nginx.json          # markdown para colar no README
+# ![CASPAR Score](https://img.shields.io/badge/CASPAR-5.7%2F10-yellow)
+```
+
+**`plugin fetch --search` — busca fuzzy no catálogo** (evita adivinhar o slug):
+
+```bash
+caspar plugin fetch --search postgres         # sugere postgresql, epas
+```
+
+**Exit codes diferenciados (CI).** `--exit-code` no scan dá **2** se houver Critical, **1** se acima
+do `--threshold`, **0** caso contrário — controlo fino para pipelines:
+
+```bash
+caspar scan nginx.conf --exit-code --threshold 7.0
+```
+
+---
+
+## 16. Criar um plugin do zero (utilizadores avançados)
 
 Além de `add` (de ficheiro) e `fetch` (descoberta), podes escrever um plugin à mão — útil para um
 serviço não catalogado, um formato de config invulgar, ou um benchmark proprietário. Um plugin é um
@@ -491,7 +561,7 @@ key-value — na maioria dos casos é só delegar. O `rules.py` define como o se
 
 ---
 
-## 16. Troubleshooting — erros comuns
+## 17. Troubleshooting — erros comuns
 
 | Sintoma | Causa provável | Solução |
 |---------|----------------|---------|
@@ -505,7 +575,7 @@ key-value — na maioria dos casos é só delegar. O `rules.py` define como o se
 
 ---
 
-## 17. Posicionamento vs outras ferramentas
+## 18. Posicionamento vs outras ferramentas
 
 > **Nota:** esta tabela é *posicionamento conceptual*, não um benchmark. Reflete o desenho do CASPAR;
 > as colunas de terceiros são a nossa leitura de alto nível, não um teste comparativo. Confirma sempre
@@ -524,21 +594,27 @@ determinística e auditável.
 
 ---
 
-## 18. Roadmap / trabalho futuro
+## 19. Roadmap / trabalho futuro
 
 > Visão de direção, sujeita a validação. Não são compromissos.
 
 - **Infrastructure-as-Code:** estender o scan a Terraform, Kubernetes YAML e Dockerfiles (hoje o foco
   é config de serviços já instalados).
 - **Modo offline para `fetch`:** cache local / mirror dos STIGs para quando o stigviewer.com estiver
-  indisponível (hoje o fallback é manual via `plugin add`).
-- **Refinamento do scoring:** calibração das submétricas com feedback de utilizadores e mais ground
-  truth CCE (hoje só o apache-httpd tem CCE para calibração).
-- **Mais alvos no catálogo:** o stigviewer tem 400+ STIGs; expandir os 43 atuais conforme a procura.
+  indisponível (hoje o fallback é manual via `plugin add`, ou automático via fonte secundária).
+- **Score de confiança por misconfig:** expor uma medida de certeza da extracção LLM (ex. consenso
+  entre múltiplas gerações), para transparência sobre o não-determinismo do build.
+- **Exportação OSCAL / GRC:** interoperar com ferramentas de compliance enterprise (Vanta, Drata) via
+  o formato OSCAL do NIST.
+- **Refinamento do scoring:** calibração das submétricas com mais ground truth CCE (hoje só o
+  apache-httpd tem CCE para calibração).
+
+*(Já implementado nesta linha:* `diff`, `suppress`, `history`, `explain`, `watch`, `badge`,
+`fetch --search`, exit codes diferenciados — ver §15.)*
 
 ---
 
-## 19. Onde mexer (mapa rápido)
+## 20. Onde mexer (mapa rápido)
 
 | Quero… | Ficheiro |
 |--------|----------|
@@ -553,7 +629,7 @@ determinística e auditável.
 
 ---
 
-## 20. Resumo executivo
+## 21. Resumo executivo
 
 O CASPAR transforma um benchmark de segurança (CIS/STIG) num scanner de configuração com scoring de
 risco reproduzível. A separação **build-time (LLM, uma vez) / runtime (determinístico, sempre)** dá-lhe

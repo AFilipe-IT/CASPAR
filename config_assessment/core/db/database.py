@@ -650,3 +650,18 @@ class Database:
             issues=json.loads(row["issues_json"]),
             chains=json.loads(row["chains_json"]),
         )
+
+    def get_scan_history(self, input_path: str | None = None,
+                         limit: int = 10) -> list[dict]:
+        """Recent scans (most recent first) for score trending. Optionally
+        filtered to one input_path. Returns lightweight dicts, not full
+        ScanResults — history only needs score/severity/when."""
+        sql = ("SELECT timestamp, input_path, global_temporal_score, severity, "
+               "total_issues FROM scan_results ")
+        params: tuple = ()
+        if input_path:
+            sql += "WHERE input_path = ? "
+            params = (input_path,)
+        sql += "ORDER BY timestamp DESC LIMIT ?"
+        params = params + (limit,)
+        return [dict(r) for r in self._conn.execute(sql, params).fetchall()]

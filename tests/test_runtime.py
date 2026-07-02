@@ -270,6 +270,28 @@ class TestDatabase:
         assert retrieved is not None
         assert retrieved.global_temporal_score == 7.5
 
+    def test_scan_history_counts_limit_and_filter(self, db):
+        for i, score in enumerate([5.0, 6.0, 7.0]):
+            db.save_scan_result(ScanResult(
+                target_name="dummy", input_path="/tmp/a.conf",
+                input_hash=f"h{i}", profile=SystemProfile(av="N", au="N"),
+                global_temporal_score=score, severity="Medium"))
+        db.save_scan_result(ScanResult(
+            target_name="dummy", input_path="/tmp/other.conf",
+            input_hash="z", profile=SystemProfile(av="N", au="N"),
+            global_temporal_score=9.0, severity="High"))
+
+        # All scans, and the limit is honoured.
+        assert len(db.get_scan_history(limit=10)) == 4
+        assert len(db.get_scan_history(limit=2)) == 2
+        # Filtering to one input_path returns only its scans.
+        only_a = db.get_scan_history(input_path="/tmp/a.conf")
+        assert len(only_a) == 3
+        assert all(r["input_path"] == "/tmp/a.conf" for r in only_a)
+        # Rows carry the fields the CLI renders.
+        assert {"timestamp", "input_path", "global_temporal_score",
+                "severity"} <= set(only_a[0])
+
 
 # ------------------------------------------------------------------ #
 # End-to-end integration test  (Phase 1 completion criterion)          #

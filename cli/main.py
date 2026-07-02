@@ -308,13 +308,20 @@ def cli(ctx: click.Context, db: str, verbose: bool) -> None:
               help="Use online charts (ECharts via CDN) for the dashboard format.")
 @click.option("--threshold", "-t", default=0.0, type=float,
               help="Exit 1 if score > threshold (CI/CD).")
+@click.option("--exit-code", "differentiated_exit", is_flag=True, default=False,
+              help="Exit 2 if any Critical issue is present, 1 if over "
+                   "--threshold, 0 otherwise (finer CI control).")
+@click.option("--suppress-file", "suppress_file", default=None,
+              help="Suppression file (default .caspar-suppress.json if present) "
+                   "— accepted-risk issues are hidden and excluded from scoring "
+                   "of the exit code.")
 @click.option("--service-version", "service_version", default=None,
               help="Service version (e.g. 2.4.58) to cross-reference with "
                    "CVEs/exploits. If omitted, it is auto-detected (Docker tag, "
                    "binary, config).")
 @click.pass_context
-def scan(ctx, input_path, live, report, fmt, output, threshold, online,
-         service_version) -> None:
+def scan(ctx, input_path, live, report, fmt, output, threshold,
+         differentiated_exit, suppress_file, online, service_version) -> None:
     """Analyse service configurations — 4 modes.
 
     \b
@@ -373,12 +380,41 @@ def scan(ctx, input_path, live, report, fmt, output, threshold, online,
             image_hint = resolved.metadata.get("image")
             result = runtime.scan(resolved.path, db, version=detected_version,
                                   image=image_hint)
+            # Record the scan for history/trending (#4). Best-effort — a failure
+            # to persist history must never break the scan itself.
+            try:
+                db.save_scan_result(result)
+            except Exception as exc:
+                logger.warning("Could not save scan history: %s", exc)
     except Exception:
         if _deferred_cleanup:
             _deferred_cleanup()
         raise
 
+    # Apply accepted-risk suppressions (#2): hide matching issues and drop them
+    # from the exit-code decision. Only loads a file if given, or the default
+    # exists — no surprise filtering.
+    suppressed_issues: list = []
+    from config_assessment.reports.scan_features import SuppressionStore
+    _supp_path = suppress_file or SuppressionStore.DEFAULT_PATH
+    if suppress_file or Path(_supp_path).exists():
+        store = SuppressionStore(_supp_path)
+        kept = []
+        for issue in result.issues:
+            i_dict = {"directive": issue.directive, "bad_value": issue.bad_value}
+            if store.is_suppressed(i_dict):
+                suppressed_issues.append(issue)
+            else:
+                kept.append(issue)
+        if suppressed_issues:
+            result.issues = kept
+
     _print_result(result, resolved=resolved)
+    if suppressed_issues:
+        click.echo(click.style(
+            f"  ({len(suppressed_issues)} issue(s) suppressed via {_supp_path})",
+            dim=True))
+        click.echo()
 
     if report:
         # Default: a reports/ directory inside the project (next to cli/),
@@ -426,7 +462,26 @@ def scan(ctx, input_path, live, report, fmt, output, threshold, online,
     if _deferred_cleanup:
         _deferred_cleanup()
 
-    if threshold > 0.0 and result.global_temporal_score > threshold:
+    # Exit-code policy (#11). Default keeps the old contract (exit 1 over
+    # threshold). --exit-code adds a Critical→2 tier for finer CI control.
+    from config_assessment.core.ccss import severity_label
+    from config_assessment.reports.scan_features import (
+        classify_exit, EXIT_CRITICAL, EXIT_THRESHOLD)
+    sevs = [severity_label(i.temporal_score) for i in result.issues]
+
+    if differentiated_exit:
+        code = classify_exit(sevs, result.global_temporal_score, threshold)
+        if code == EXIT_CRITICAL:
+            click.echo(click.style(
+                "  Critical issue present — FAIL (exit 2)", fg="bright_red",
+                bold=True), err=True)
+        elif code == EXIT_THRESHOLD:
+            click.echo(click.style(
+                f"  Score {result.global_temporal_score:.1f} > {threshold:.1f} "
+                "— FAIL (exit 1)", fg="red", bold=True), err=True)
+        if code:
+            sys.exit(code)
+    elif threshold > 0.0 and result.global_temporal_score > threshold:
         click.echo(
             click.style(f"  Score {result.global_temporal_score:.1f} > {threshold:.1f} — FAIL", fg="red", bold=True),
             err=True,
@@ -769,6 +824,8 @@ def _plugin_add_finish(ctx, info, src_name, usable, value_rules, absence_rules,
 @click.argument("service", required=False)
 @click.option("--list", "list_only", is_flag=True,
               help="List services available for automatic fetch.")
+@click.option("--search", "search_term", default=None,
+              help="Fuzzy-search the catalog (e.g. --search postgres).")
 @click.option("--output", "-o", default="/tmp", show_default=True,
               help="Destination directory for the downloaded benchmark "
                    "(default /tmp: the container mounts /workspace read-only).")
@@ -779,7 +836,8 @@ def _plugin_add_finish(ctx, info, src_name, usable, value_rules, absence_rules,
 @click.option("--model", "-m", default="qwen2.5:14b", show_default=True,
               help="LLM model used by --then-install.")
 @click.pass_context
-def plugin_fetch(ctx, service, list_only, output, then_install, yes, model) -> None:
+def plugin_fetch(ctx, service, list_only, search_term, output, then_install,
+                 yes, model) -> None:
     """Download a benchmark from a public source and optionally install it.
 
     \b
@@ -793,22 +851,37 @@ def plugin_fetch(ctx, service, list_only, output, then_install, yes, model) -> N
     Download only:          caspar plugin fetch nginx -o ~/benchmarks/
     """
     from config_assessment.fetch.benchmark_fetcher import BenchmarkFetcher, FetchError
+    from config_assessment.reports.scan_features import search_catalog
 
     fetcher = BenchmarkFetcher()
 
-    if list_only:
-        rows = fetcher.list_available()
+    def _print_rows(rows, header_note=""):
         click.echo()
-        click.echo(f"  {'SERVICE':<12}  {'BENCHMARK':<36}  SOURCE")
-        click.echo("  " + "─" * 68)
+        click.echo(f"  {'SERVICE':<16}  {'BENCHMARK':<40}  SOURCE")
+        click.echo("  " + "─" * 72)
         for r in rows:
             src = r["sources"][0] if r["sources"] else {"type": "-"}
-            click.echo(f"  {r['service']:<12}  {r['service_name']:<36}  {src['type']}")
+            click.echo(f"  {r['service']:<16}  {r['service_name']:<40}  {src['type']}")
         click.echo()
-        click.echo(click.style(
-            f"  {len(rows)} services. "
-            "Fetch with: caspar plugin fetch <service> --then-install", dim=True))
-        click.echo()
+        if header_note:
+            click.echo(click.style(f"  {header_note}", dim=True))
+            click.echo()
+
+    if search_term:
+        rows = search_catalog(fetcher.list_available(), search_term)
+        if not rows:
+            click.echo(click.style(
+                f"No catalog match for '{search_term}'. "
+                "Try 'caspar plugin fetch --list'.", fg="yellow"), err=True)
+            sys.exit(1)
+        _print_rows(rows, f"{len(rows)} match(es) for '{search_term}'. "
+                          "Fetch with: caspar plugin fetch <service> --then-install")
+        return
+
+    if list_only:
+        rows = fetcher.list_available()
+        _print_rows(rows, f"{len(rows)} services. "
+                          "Fetch with: caspar plugin fetch <service> --then-install")
         return
 
     if not service:
@@ -894,6 +967,286 @@ def refresh(ctx, target, nvd_key, dry_run) -> None:
             fg="bright_red", bold=True,
         ))
         click.echo()
+
+
+# ── diff (#1) ──────────────────────────────────────────────────────────
+
+@cli.command()
+@click.argument("old_json", type=click.Path(exists=True))
+@click.argument("new_json", type=click.Path(exists=True))
+def diff(old_json, new_json) -> None:
+    """Compare two scan JSONs (caspar scan --report -f json).
+
+    \b
+    Shows resolved issues, new issues, and the score delta:
+      caspar diff reports/scan_old.json reports/scan_new.json
+    """
+    from config_assessment.reports.scan_features import load_scan, diff_scans
+
+    try:
+        d = diff_scans(load_scan(old_json), load_scan(new_json))
+    except (ValueError, KeyError) as e:
+        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        sys.exit(2)
+
+    delta = d.score_delta
+    arrow = "▲" if delta > 0 else ("▼" if delta < 0 else "=")
+    color = "red" if delta > 0 else ("green" if delta < 0 else "white")
+    click.echo()
+    click.echo(f"  Score: {d.old_score:.1f} → {d.new_score:.1f}  "
+               f"{click.style(f'{arrow} {abs(delta):.1f}', fg=color, bold=True)}")
+    click.echo()
+    click.echo(f"  {click.style('Resolved', fg='green')}: {len(d.resolved)}"
+               f"   {click.style('New', fg='red')}: {len(d.new_issues)}"
+               f"   Unchanged: {len(d.unchanged)}")
+    if d.resolved:
+        click.echo(f"\n  {click.style('── Resolved', fg='green', bold=True)}")
+        for i in d.resolved:
+            click.echo(f"    {click.style('✓', fg='green')} {i['directive']} = "
+                       f"{i.get('bad_value','')}  ({i.get('temporal_score',0):.1f})")
+    if d.new_issues:
+        click.echo(f"\n  {click.style('── New', fg='red', bold=True)}")
+        for i in d.new_issues:
+            click.echo(f"    {click.style('✗', fg='red')} {i['directive']} = "
+                       f"{i.get('bad_value','')}  ({i.get('temporal_score',0):.1f})")
+    click.echo()
+    # Exit 1 if the score got worse — useful in CI.
+    if delta > 0:
+        sys.exit(1)
+
+
+# ── badge (#10) ────────────────────────────────────────────────────────
+
+@cli.command()
+@click.argument("scan_json", type=click.Path(exists=True))
+@click.option("--label", default="CASPAR", show_default=True)
+@click.option("--url-only", is_flag=True, help="Print just the URL, not markdown.")
+def badge(scan_json, label, url_only) -> None:
+    """Print a shields.io score badge (URL or markdown) for a scan JSON.
+
+      caspar badge reports/scan.json          # markdown for a README
+    """
+    from config_assessment.reports.scan_features import load_scan, badge_url, badge_markdown
+    try:
+        score = load_scan(scan_json)["global_temporal_score"]
+    except (ValueError, KeyError) as e:
+        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        sys.exit(2)
+    click.echo(badge_url(score, label) if url_only else badge_markdown(score, label))
+
+
+# ── explain (#6) ───────────────────────────────────────────────────────
+
+@cli.command()
+@click.argument("directive")
+@click.option("--target", "-t", required=True, help="Plugin/target (e.g. nginx).")
+@click.pass_context
+def explain(ctx, directive, target) -> None:
+    """Show the full origin of a rule — no scan needed.
+
+    \b
+    Benchmark section, CCSS submetrics, CVEs and narrative for a directive:
+      caspar explain keepalive_timeout --target nginx
+    """
+    from config_assessment.core.db.database import Database
+
+    db_path = ctx.obj["db_path"]
+    if not Path(db_path).exists():
+        click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
+        sys.exit(2)
+
+    with Database(db_path) as db:
+        rules = [m for m in db.get_all_misconfigurations(target)
+                 if m.directive.lower() == directive.lower()]
+    if not rules:
+        click.echo(click.style(
+            f"No rule '{directive}' for target '{target}'. "
+            f"See: caspar scan / caspar targets.", fg="yellow"), err=True)
+        sys.exit(1)
+
+    for m in rules:
+        click.echo()
+        click.echo(f"  {click.style(m.directive, bold=True)}"
+                   + (f" = {m.bad_value}" if m.bad_value else "")
+                   + f"   {click.style(f'[{target}]', dim=True)}")
+        click.echo(f"  {'─' * 60}")
+        click.echo(f"  Bad → Good:   {m.bad_value or '(absence)'} → {m.good_value}")
+        click.echo(f"  CCSS:         AV:{m.av} Au:{m.au} AC:{m.ac}  "
+                   f"C:{m.c} I:{m.i} A:{m.a}")
+        click.echo(f"  Score:        Base {m.base_score:.1f} → "
+                   f"Temporal {m.temporal_score:.1f}  (GEL:{m.gel} GRL:{m.grl})")
+        if m.cis_section:
+            click.echo(f"  Benchmark:    {m.cis_section}"
+                       + (f"  ·  CCE {m.cce_id}" if m.cce_id else ""))
+        if m.cves:
+            click.echo(f"  CVEs:         {', '.join(m.cves)}")
+        if m.justification:
+            click.echo(f"  Why:          {m.justification}")
+        if m.recommendation:
+            click.echo(f"  {click.style('Fix:', fg='green')}          {m.recommendation}")
+        if m.narrative:
+            click.echo(f"\n  {click.style('Narrative:', dim=True)}\n  "
+                       + m.narrative.replace("\n", "\n  "))
+    click.echo()
+
+
+# ── history (#4) ───────────────────────────────────────────────────────
+
+@cli.command()
+@click.argument("input_path", required=False)
+@click.option("--last", "-n", default=10, show_default=True, type=int)
+@click.pass_context
+def history(ctx, input_path, last) -> None:
+    """Show past scan scores recorded in the DB (score trending).
+
+    \b
+      caspar history                     # all recent scans
+      caspar history nginx.conf --last 5 # only this input
+    """
+    from config_assessment.core.db.database import Database
+
+    db_path = ctx.obj["db_path"]
+    if not Path(db_path).exists():
+        click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
+        sys.exit(2)
+
+    with Database(db_path) as db:
+        rows = db.get_scan_history(input_path=input_path, limit=last)
+
+    if not rows:
+        click.echo("  No scan history yet. Run a scan first "
+                   "(history is recorded automatically).")
+        return
+    click.echo()
+    click.echo(f"  {'WHEN':<20}  {'SCORE':>6}  {'SEV':<9}  INPUT")
+    click.echo("  " + "─" * 68)
+    prev = None
+    for r in rows:
+        score = r["global_temporal_score"]
+        trend = ""
+        if prev is not None:
+            d = score - prev
+            trend = ("▲" if d > 0 else "▼" if d < 0 else "=")
+        click.echo(f"  {r['timestamp'][:19]:<20}  {score:>5.1f}{trend:<1}  "
+                   f"{r['severity']:<9}  {r['input_path']}")
+        prev = score
+    click.echo()
+
+
+# ── suppress (#2) ──────────────────────────────────────────────────────
+
+@cli.command()
+@click.argument("directive", required=False)
+@click.option("--reason", "-r", default="", help="Why this risk is accepted.")
+@click.option("--bad-value", default="", help="Only suppress this exact value.")
+@click.option("--list", "list_only", is_flag=True, help="List suppressions.")
+@click.option("--remove", default=None, help="Remove a directive's suppression.")
+@click.option("--file", "supp_file", default=None,
+              help="Suppression file (default .caspar-suppress.json).")
+def suppress(directive, reason, bad_value, list_only, remove, supp_file) -> None:
+    """Accept a misconfiguration as a known risk (suppressed in future scans).
+
+    \b
+      caspar suppress keepalive_timeout -r "Approved by architecture 2026-06-15"
+      caspar suppress --list
+      caspar suppress --remove keepalive_timeout
+    """
+    from datetime import date as _date
+    from config_assessment.reports.scan_features import SuppressionStore
+
+    store = SuppressionStore(supp_file)
+
+    if list_only:
+        if not store.items:
+            click.echo("  No suppressions.")
+            return
+        click.echo()
+        for s in store.items:
+            val = f" = {s.bad_value}" if s.bad_value else ""
+            click.echo(f"  {click.style(s.directive + val, bold=True)}"
+                       f"  {click.style(f'({s.date})', dim=True) if s.date else ''}")
+            click.echo(f"     {s.reason or '(no reason given)'}")
+        click.echo()
+        return
+
+    if remove:
+        before = len(store.items)
+        store.items = [s for s in store.items
+                       if s.directive.lower() != remove.lower()]
+        store.save()
+        click.echo(f"  Removed {before - len(store.items)} suppression(s) for '{remove}'.")
+        return
+
+    if not directive:
+        click.echo(click.style(
+            "Give a DIRECTIVE, or use --list / --remove.", fg="red"), err=True)
+        sys.exit(2)
+    if not reason:
+        click.echo(click.style(
+            "A --reason is required (accepting a risk should be justified).",
+            fg="red"), err=True)
+        sys.exit(2)
+
+    store.add(directive, reason, bad_value, date=str(_date.today()))
+    store.save()
+    click.echo(click.style(
+        f"  Suppressed '{directive}'{' = ' + bad_value if bad_value else ''} "
+        f"→ {store.path}", fg="green"))
+
+
+# ── watch (#8) ─────────────────────────────────────────────────────────
+
+@cli.command()
+@click.argument("input_path")
+@click.option("--interval", default=2.0, show_default=True, type=float,
+              help="Polling interval in seconds.")
+@click.pass_context
+def watch(ctx, input_path, interval) -> None:
+    """Re-scan a config whenever it changes (live hardening feedback).
+
+      caspar watch /etc/nginx/nginx.conf
+    """
+    import time
+    from config_assessment.core.db.database import Database
+    from config_assessment.core.input_resolver import resolve
+    from config_assessment.core import runtime
+
+    _discover_plugins()
+    db_path = ctx.obj["db_path"]
+    if not Path(db_path).exists():
+        click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
+        sys.exit(2)
+
+    target = Path(input_path)
+    if not target.exists():
+        click.echo(click.style(f"'{input_path}' not found.", fg="red"), err=True)
+        sys.exit(2)
+
+    click.echo(click.style(f"  Watching {input_path} (Ctrl-C to stop)…", fg="cyan"))
+    last_mtime = None
+    last_score = None
+    try:
+        while True:
+            mtime = target.stat().st_mtime
+            if mtime != last_mtime:
+                last_mtime = mtime
+                with Database(db_path) as db:
+                    resolved = resolve(input_path, live=False)
+                    result = runtime.scan(resolved.path, db)
+                score = result.global_temporal_score
+                trend = ""
+                if last_score is not None:
+                    d = score - last_score
+                    trend = click.style(
+                        f"  ({'▲' if d > 0 else '▼' if d < 0 else '='} {abs(d):.1f})",
+                        fg="red" if d > 0 else "green" if d < 0 else "white")
+                ts = datetime.now().strftime("%H:%M:%S")
+                click.echo(f"  {ts}  {click.style(f'{score:.1f}/10', bold=True)}  "
+                           f"[{result.severity}]  {len(result.issues)} issues{trend}")
+                last_score = score
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        click.echo("\n  Stopped.")
 
 
 if __name__ == "__main__":
