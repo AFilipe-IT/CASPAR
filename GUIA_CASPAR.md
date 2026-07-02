@@ -4,6 +4,17 @@
 > Complementa o [GUIA_TECNICO.md](GUIA_TECNICO.md) (orientado à arquitectura interna) e o
 > [README.md](README.md) (referência de comandos). Aqui o foco é *entender e demonstrar*.
 
+**Índice**
+
+1. [O que é o CASPAR](#1-o-que-é-o-caspar-em-duas-frases) · 2. [O problema](#2-o-problema-que-resolve) ·
+3. [As duas metades](#3-as-duas-metades-do-sistema-a-decisão-de-design-central) ·
+4. [Como o score é calculado](#4-como-o-score-é-calculado-ccss-resumido) ·
+5. [Modos de scan](#5-os-quatro-modos-de-scan) · 6. [Formatos de relatório](#6-os-quatro-formatos-de-relatório) ·
+7. [`add` vs `fetch`](#7-dois-modos-de-instalar-um-plugin-add-vs-fetch) ·
+8. [Demonstração prática](#8-demonstração-prática) · 9. [Docker](#9-demonstração-via-docker-máquina-limpa-sem-clonar-o-repo) ·
+10. [Fontes dos benchmarks](#10-de-onde-vêm-os-benchmarks-plugin-fetch) · 11. [Onde mexer](#11-onde-mexer-mapa-rápido) ·
+12. [Resumo](#12-resumo-executivo)
+
 ---
 
 ## 1. O que é o CASPAR, em duas frases
@@ -95,15 +106,75 @@ caspar scan --live nginx                    # 3. serviço instalado na máquina
 caspar scan docker://nginx:1.25             # 4. imagem Docker (extrai a config)
 ```
 
-Opções úteis: `--report -f html` (relatório HTML completo), `-f json|sarif` (integração CI/CD),
-`--threshold 7.0` (sai com código 1 se o score exceder — para pipelines), `--service-version 1.25`
-(cruza com CVEs dessa versão específica).
+Opções úteis: `--threshold 7.0` (sai com código 1 se o score exceder — para pipelines),
+`--service-version 1.25` (cruza com CVEs dessa versão específica), `--report` (grava relatório —
+ver §6).
 
 ---
 
-## 6. DEMONSTRAÇÃO PRÁTICA
+## 6. Os quatro formatos de relatório
 
-### 6.1 — Cenário: instalar um serviço novo e fazer scan, do zero
+Por omissão o scan imprime no terminal. Com `--report` grava um ficheiro em `reports/`; o formato
+escolhe-se com `-f`:
+
+```bash
+caspar scan nginx.conf                              # só terminal
+caspar scan nginx.conf --report                     # + HTML (formato por omissão)
+caspar scan nginx.conf --report -f dashboard        # + dashboard visual
+caspar scan nginx.conf --report -f json             # + JSON estruturado
+caspar scan nginx.conf --report -f sarif            # + SARIF (GitHub / CI)
+caspar scan nginx.conf --report -f dashboard --online   # dashboard com gráficos via CDN
+```
+
+| Formato | Para quê | Conteúdo |
+|---------|----------|----------|
+| **terminal** | inspeção rápida | Compacto, por severidade (Critical→Low): score, barra, CIA, base→temporal, GEL/GRL, CVEs, localização, recomendação. |
+| **html** *(por omissão)* | análise detalhada, partilha | Self-contained, offline, dark mode. Cada issue é **colapsável** com narrativa específica, justificação real de cada submétrica (não "Medium" genérico mas *porquê*), cenário de exploração com exemplo, **snippet da config real** com a linha destacada, CVEs e referências CIS/CCE. Filtros por severidade. |
+| **dashboard** | visão executiva, apresentações | Painel visual com **gauges** (score global, distribuição), **donuts** (severidades, impacto CIA) e gráficos. `--online` usa ECharts via CDN (gráficos mais ricos); sem `--online` é self-contained. |
+| **json** | automação, pipelines | Dump estruturado completo do resultado (todos os campos do modelo). |
+| **sarif** | GitHub Code Scanning | Integra diretamente com o *Security tab* do GitHub e ferramentas CI que falam SARIF 2.1. |
+
+O relatório é gravado em `<projeto>/reports/` por omissão (ou `-o <dir>`). Em WSL2, abre com
+`explorer.exe reports/ccss_*.html`.
+
+---
+
+## 7. Dois modos de instalar um plugin: `add` vs `fetch`
+
+Antes de fazer scan de um serviço, é preciso um **plugin** para ele. Há dois caminhos, para dois
+cenários diferentes — **não são intermutáveis**:
+
+| | `caspar plugin add` | `caspar plugin fetch` |
+|---|---|---|
+| **Entrada** | um **ficheiro que já tens** (`--source benchmark.pdf` ou `.xml`) | um **nome de serviço** (`nginx`, `mongodb`, …) |
+| **O que faz** | extrai e instala a partir desse ficheiro | **descobre e descarrega** o benchmark de fonte pública, depois (com `--then-install`) instala |
+| **Precisa de rede?** | Não | Sim (vai buscar ao stigviewer.com) |
+| **Quando usar** | já descarregaste o PDF CIS / STIG à mão, ou tens um benchmark próprio | não queres procurar o ficheiro — deixas o CASPAR encontrá-lo |
+
+```bash
+# add — a partir de um ficheiro local (CIS PDF ou DISA STIG XML)
+caspar plugin add --source sources/benchmarks/CIS_PostgreSQL_13.pdf
+caspar plugin add --source sources/stigs/U_Redis_Enterprise_6-x_STIG.xml
+
+# fetch — a partir do nome, descoberta automática
+caspar plugin fetch --list                  # ver os 43 alvos disponíveis
+caspar plugin fetch mongodb                  # só descarrega (para inspeção)
+caspar plugin fetch mongodb --then-install   # descarrega + instala num passo
+```
+
+Na prática, **`fetch --then-install` é o `add` sem teres de arranjar o ficheiro primeiro** — por baixo,
+o `fetch` descarrega o STIG, converte-o para XCCDF, e entrega-o exatamente ao mesmo pipeline do `add`.
+Por isso os dois partilham toda a lógica de extracção; a única diferença é *de onde vem o ficheiro*.
+
+Flags úteis do `add` (também aplicáveis ao que o `fetch --then-install` corre por baixo):
+`--dry-run` (mostra o que extrairia sem instalar), `--no-llm` (só heurística, sem Ollama),
+`-y` (sem confirmação), `--verbose` (lista todos os controlos extraídos).
+
+---
+
+## 8. DEMONSTRAÇÃO PRÁTICA
+
+### 8.1 — Cenário: instalar um serviço novo e fazer scan, do zero
 
 Suponhamos que queremos avaliar um MongoDB mas ainda não temos plugin para ele. Historicamente
 teríamos de: encontrar o STIG certo, descarregá-lo, e correr `plugin add` à mão. Com `plugin fetch`,
@@ -169,13 +240,14 @@ caspar targets
   mongodb        1.0       U mongodb enterprise advanced 8x V1R1 STIG   ← novo
 ```
 
-**Passo 4 — fazer scan de uma config MongoDB:**
+**Passo 4 — fazer scan de uma config MongoDB (com relatório):**
 
 ```bash
-caspar scan /etc/mongod.conf
+caspar scan /etc/mongod.conf                          # resultado no terminal
+caspar scan /etc/mongod.conf --report -f dashboard    # + painel visual em reports/
 ```
 
-### 6.2 — Um scan real, comentado (nginx)
+### 8.2 — Um scan real, comentado (nginx)
 
 Correndo `caspar scan test_nginx.conf` sobre uma config nginx propositadamente vulnerável:
 
@@ -206,17 +278,21 @@ Como ler cada bloco:
 - **A localização** (`test_nginx.conf:12 [http]`) aponta a linha e o contexto exatos.
 - **`→`** é a recomendação de remediação acionável.
 
-### 6.3 — Gerar um relatório para partilhar
+### 8.3 — Gerar os relatórios (os quatro formatos, ver §6)
 
 ```bash
-caspar scan test_nginx.conf --report -f html      # relatório HTML rico → reports/
-caspar scan test_nginx.conf --report -f sarif     # para GitHub code scanning / CI
-caspar scan test_nginx.conf --threshold 7.0       # falha o pipeline se score > 7
+caspar scan test_nginx.conf --report -f html         # HTML rico (colapsável) → reports/
+caspar scan test_nginx.conf --report -f dashboard    # painel visual com gauges/donuts
+caspar scan test_nginx.conf --report -f sarif        # GitHub Code Scanning / CI
+caspar scan test_nginx.conf --threshold 7.0          # falha o pipeline se score > 7
 ```
+
+Abre o HTML ou o dashboard no browser para ver as narrativas completas, os cenários de exploração e
+os gráficos. Em WSL2: `explorer.exe reports/ccss_test_nginx.conf_*.html`.
 
 ---
 
-## 7. Demonstração via Docker (máquina limpa, sem clonar o repo)
+## 9. Demonstração via Docker (máquina limpa, sem clonar o repo)
 
 Ideal para uma máquina de testes: um comando instala tudo (imagens + wrapper).
 
@@ -250,7 +326,7 @@ para produção.)
 
 ---
 
-## 8. De onde vêm os benchmarks (`plugin fetch`)
+## 10. De onde vêm os benchmarks (`plugin fetch`)
 
 O CASPAR descobre benchmarks a partir do **stigviewer.com**, que expõe cada STIG como JSON estruturado
 em `/stigs/<slug>/export/json`. O fetcher converte esse JSON num ficheiro XCCDF (o formato DISA STIG
@@ -269,7 +345,7 @@ ao catálogo.
 
 ---
 
-## 9. Onde mexer (mapa rápido)
+## 11. Onde mexer (mapa rápido)
 
 | Quero… | Ficheiro |
 |--------|----------|
@@ -278,12 +354,13 @@ ao catálogo.
 | Mudar a extracção de benchmarks | `config_assessment/build/benchmark_extractor.py` |
 | Mexer nas fórmulas CCSS | `config_assessment/core/ccss.py` |
 | Adicionar um comando CLI | `cli/main.py` |
+| Mudar um relatório (HTML/dashboard/SARIF) | `config_assessment/reports/` |
 | Ver a interface de um plugin | `config_assessment/plugins/<serviço>/` |
 | Config do Docker / persistência | `docker/caspar/` + `install.sh` |
 
 ---
 
-## 10. Resumo executivo
+## 12. Resumo executivo
 
 O CASPAR transforma um benchmark de segurança (CIS/STIG) num scanner de configuração com scoring de
 risco reproduzível. A separação **build-time (LLM, uma vez) / runtime (determinístico, sempre)** dá-lhe
