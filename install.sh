@@ -38,11 +38,13 @@ fi
 # Montar o directório actual para scan de ficheiros locais
 MOUNT_ARGS="-v $(pwd):/workspace:ro"
 
-# Em modo --live, montar /etc do host (leitura) para inspecionar a configuração
-# do serviço em execução. NOTA: NÃO montar /usr do host — mascararia o binário
-# caspar da imagem (/usr/local/bin/caspar) e o container deixaria de arrancar.
+# Em modo --live (e watch), montar /etc do host (leitura) para inspecionar a
+# configuração do serviço em execução. O bind-mount é uma vista live do host,
+# por isso o 'watch' deteta edições feitas no host em tempo real.
+# NOTA: NÃO montar /usr do host — mascararia o binário caspar da imagem
+# (/usr/local/bin/caspar) e o container deixaria de arrancar.
 # A deteção de versão recorre, neste modo, ao texto da configuração.
-if echo "$*" | grep -q "\-\-live"; then
+if echo "$*" | grep -qE "(\-\-live|(^| )watch( |$))"; then
     MOUNT_ARGS="$MOUNT_ARGS -v /etc:/etc:ro"
 fi
 
