@@ -24,8 +24,13 @@ class Finding:
     message: str
 
 
-def check(db_path: str | Path) -> list[Finding]:
-    """Run all integrity checks against the DB. Returns findings (empty = clean)."""
+def check(db_path: str | Path, strict: bool = False) -> list[Finding]:
+    """Run all integrity checks against the DB. Returns findings (empty = clean).
+
+    With strict=True, also audit narratives for strong impact claims (RCE,
+    privilege escalation, buffer overflow…) made without conditional language —
+    the kind of LLM overreach a reviewer would challenge. These are warnings for
+    human review, never auto-changes."""
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
@@ -34,9 +39,48 @@ def check(db_path: str | Path) -> list[Finding]:
         findings += _check_chain_directives(conn)
         findings += _check_scores(conn)
         findings += _check_base_version(conn)
+        if strict:
+            findings += _audit_narratives(conn)
         return findings
     finally:
         conn.close()
+
+
+# Strong-impact claims that require a precondition to be credible.
+_STRONG_CLAIMS = ("remote code execution", "arbitrary code", "arbitrary command",
+                  "privilege escalation", "buffer overflow")
+# Conditional language that makes a strong claim defensible (it's hedged).
+_CONDITIONAL = ("if ", "could ", "may ", "might ", "depends", "when combined",
+                "potential", "possible", "rather than", "not a ", "in the event",
+                "an attacker who", "once ", "provided ")
+
+
+def _audit_narratives(conn) -> list[Finding]:
+    """Flag misconfig narratives that assert a strong impact without hedging."""
+    import json as _json
+    out: list[Finding] = []
+    if "misconfigurations" not in _tables(conn):
+        return out
+    for r in conn.execute(
+            "SELECT target_name, directive, narrative FROM misconfigurations "
+            "WHERE narrative IS NOT NULL AND narrative != '{}'"):
+        text = (r["narrative"] or "").lower()
+        for claim in _STRONG_CLAIMS:
+            idx = text.find(claim)
+            if idx == -1:
+                continue
+            # Look at the sentence containing the claim (bounded by '.'), so
+            # hedging anywhere in that sentence counts — avoids flagging a claim
+            # that is already qualified ("may allow a buffer overflow if …").
+            start = text.rfind(".", 0, idx) + 1
+            end = text.find(".", idx)
+            sentence = text[start: end if end != -1 else len(text)]
+            if not any(cond in sentence for cond in _CONDITIONAL):
+                out.append(Finding("warning", "narrative",
+                    f"{r['target_name']}/{r['directive']}: narrative asserts "
+                    f"'{claim}' without conditional language — review for overreach"))
+                break
+    return out
 
 
 def _tables(conn) -> set[str]:

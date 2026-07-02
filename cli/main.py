@@ -1451,14 +1451,19 @@ def report(scan_jsons, do_merge) -> None:
 # ── doctor (#6: DB integrity) ──────────────────────────────────────────
 
 @cli.command()
+@click.option("--strict", is_flag=True, default=False,
+              help="Also audit narratives for strong impact claims (RCE, "
+                   "privilege escalation…) made without conditional language.")
 @click.pass_context
-def doctor(ctx) -> None:
+def doctor(ctx, strict) -> None:
     """Check the database for integrity problems (read-only).
 
     \b
     Flags orphan rules, chains referencing non-existent directives, out-of-range
-    scores, and missing reseed metadata. Exit 1 if any 'error' is found.
+    scores, and missing reseed metadata. --strict also audits narratives for
+    over-reaching impact claims. Exit 1 if any 'error' is found.
       caspar doctor
+      caspar doctor --strict
     """
     from config_assessment.core.db.doctor import check
 
@@ -1467,7 +1472,7 @@ def doctor(ctx) -> None:
         click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
         sys.exit(2)
 
-    findings = check(db_path)
+    findings = check(db_path, strict=strict)
     if not findings:
         click.echo(click.style("  ✓ Database is healthy — no issues found.",
                                fg="green"))
