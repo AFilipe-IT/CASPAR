@@ -191,7 +191,106 @@ def _print_result(result, resolved=None) -> None:
         for chain in active_chains:
             _print_chain_compact(chain)
 
+    _print_unknown_directives(getattr(result, "unknown_directives", []))
+
     click.echo(click.style("  ══════════════════════════════════════════════════════════════", dim=True))
+    click.echo()
+
+
+def _find_benchmark_file(target_name: str) -> Path | None:
+    """Locate the benchmark PDF/XML shipped inside a plugin directory, so it can
+    ground the --assess-unknown RAG. Best-effort: returns the first match."""
+    for base in _plugin_dirs():
+        pdir = base / target_name
+        if not pdir.is_dir():
+            continue
+        for pat in ("*.pdf", "*.xml"):
+            hits = sorted(pdir.glob(pat))
+            if hits:
+                return hits[0]
+    return None
+
+
+class _CombinedRAG:
+    """Query several RAG indexes and merge their top sections. Lets
+    --assess-unknown draw context from the benchmark AND user-supplied --docs."""
+
+    def __init__(self, indexes: list) -> None:
+        self._indexes = indexes
+
+    def query(self, text: str, top_k: int = 3) -> list:
+        out: list = []
+        for idx in self._indexes:
+            try:
+                out.extend(idx.query(text, top_k=top_k))
+            except Exception:
+                continue
+        return out[: top_k * max(1, len(self._indexes))]
+
+
+def _assess_unknown_directives(result, docs_path: str | None) -> None:
+    """Layer 3: build a RAG index (benchmark + optional --docs) and run the LLM
+    over the surfaced unknown directives. Mutates result.unknown_directives.
+    Degrades gracefully — any failure just leaves the LLM fields empty."""
+    from config_assessment.build.llm_client import make_client
+    from config_assessment.build.rag import BenchmarkIndex
+    from config_assessment.core.unknown_directives import assess_unknown_with_llm
+
+    indexes = []
+    bench = _find_benchmark_file(result.target_name)
+    for src in (bench, Path(docs_path) if docs_path else None):
+        if src and src.exists():
+            try:
+                indexes.append(BenchmarkIndex(str(src)))
+            except Exception as exc:
+                logger.warning("Could not index %s for RAG: %s", src, exc)
+    rag = _CombinedRAG(indexes) if indexes else None
+
+    click.echo(click.style(
+        f"  Assessing {len(result.unknown_directives)} uncovered directive(s) "
+        f"with LLM{' + RAG' if rag else ''} (non-deterministic)…", dim=True))
+    llm = make_client(backend="ollama", fallback_to_stub=True)
+    assess_unknown_with_llm(
+        result.unknown_directives, service=result.target_name,
+        llm=llm, rag_index=rag)
+
+
+def _print_unknown_directives(unknowns: list) -> None:
+    """Show directives the knowledge base does not cover (unknown-directive
+    detection). Suspicious ones (heuristic signals) first, then the rest.
+    Never scored — this is a coverage-gap panel."""
+    if not unknowns:
+        return
+    n_susp = sum(1 for u in unknowns if u.suspicious)
+    head = f"UNCOVERED DIRECTIVES  {click.style(f'({len(unknowns)})', dim=True)}"
+    if n_susp:
+        head += "  " + click.style(f"{n_susp} suspicious", fg="yellow", bold=True)
+    click.echo(f"  {click.style(head, bold=True)}")
+    click.echo(click.style(
+        "  not in the knowledge base — surfaced, not scored", dim=True))
+    click.echo()
+    for u in unknowns:
+        if u.suspicious:
+            mark = click.style("⚠", fg="yellow", bold=True)
+            detail = click.style("  ← " + "; ".join(u.risk_signals), fg="yellow")
+        else:
+            mark = click.style("·", dim=True)
+            detail = ""
+        loc = ""
+        if u.source_file and u.line_number:
+            loc = click.style(f"  {u.source_file}:{u.line_number}", dim=True)
+        val = f" = {u.value}" if u.value else ""
+        click.echo(f"  {mark} {click.style(u.name, bold=u.suspicious)}{val}{loc}{detail}")
+        # Layer 3 (LLM) verdict, when present — clearly marked low-confidence.
+        if u.llm_is_misconfig:
+            sc = f"~{u.llm_estimated_score:.1f}?" if u.llm_estimated_score else "?"
+            click.echo(click.style(
+                f"       LLM (low-confidence): possible misconfig {sc} "
+                f"{u.llm_impact}  {u.llm_justification}", fg="magenta"))
+        elif u.llm_is_misconfig is False and u.llm_justification:
+            click.echo(click.style(
+                f"       LLM (low-confidence): likely benign — {u.llm_justification}",
+                dim=True))
     click.echo()
 
 
@@ -319,9 +418,17 @@ def cli(ctx: click.Context, db: str, verbose: bool) -> None:
               help="Service version (e.g. 2.4.58) to cross-reference with "
                    "CVEs/exploits. If omitted, it is auto-detected (Docker tag, "
                    "binary, config).")
+@click.option("--assess-unknown", "assess_unknown", is_flag=True, default=False,
+              help="Also run an LLM (Ollama) over UNCOVERED directives to guess "
+                   "if they are misconfigurations. Non-deterministic, opt-in; "
+                   "results are low-confidence candidates, never scored.")
+@click.option("--docs", "docs_path", default=None,
+              help="Extra service documentation (file/dir) to ground the "
+                   "--assess-unknown LLM via RAG, on top of the benchmark.")
 @click.pass_context
 def scan(ctx, input_path, live, report, fmt, output, threshold,
-         differentiated_exit, suppress_file, online, service_version) -> None:
+         differentiated_exit, suppress_file, online, service_version,
+         assess_unknown, docs_path) -> None:
     """Analyse service configurations — 4 modes.
 
     \b
@@ -408,6 +515,13 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
                 kept.append(issue)
         if suppressed_issues:
             result.issues = kept
+
+    # Layer 3 of unknown-directive detection (opt-in, non-deterministic): assess
+    # the surfaced UNCOVERED directives with an LLM grounded in RAG context
+    # (benchmark + optional --docs). Auto-fires only when there ARE unknowns.
+    # Never touches the deterministic scores — fills each unknown's llm_* fields.
+    if assess_unknown and result.unknown_directives:
+        _assess_unknown_directives(result, docs_path)
 
     _print_result(result, resolved=resolved)
     if suppressed_issues:

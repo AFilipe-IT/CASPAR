@@ -18,11 +18,12 @@
 *Aprofundamento:* 11. [Números do projeto](#11-números-do-projeto-a-base-de-conhecimento) ·
 12. [Requisitos e tempos](#12-requisitos-de-sistema-e-tempos-esperados) · 13. [Attack chains em detalhe](#13-attack-chains-em-detalhe-exemplo-real) ·
 14. [CI/CD](#14-integração-cicd-github-actions) · 15. [Comandos de produtividade](#15-comandos-de-produtividade) ·
-16. [Criar um plugin do zero](#16-criar-um-plugin-do-zero-utilizadores-avançados) ·
-17. [Troubleshooting](#17-troubleshooting--erros-comuns) · 18. [vs outras ferramentas](#18-posicionamento-vs-outras-ferramentas) ·
-19. [Roadmap](#19-roadmap--trabalho-futuro)
+16. [Directivas desconhecidas](#16-deteção-de-directivas-desconhecidas) ·
+17. [Criar um plugin do zero](#17-criar-um-plugin-do-zero-utilizadores-avançados) ·
+18. [Troubleshooting](#18-troubleshooting--erros-comuns) · 19. [vs outras ferramentas](#19-posicionamento-vs-outras-ferramentas) ·
+20. [Roadmap](#20-roadmap--trabalho-futuro)
 
-*Referência:* 20. [Onde mexer](#20-onde-mexer-mapa-rápido) · 21. [Resumo](#21-resumo-executivo)
+*Referência:* 21. [Onde mexer](#21-onde-mexer-mapa-rápido) · 22. [Resumo](#22-resumo-executivo)
 
 ---
 
@@ -365,7 +366,7 @@ A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql
 | Attack chains | **26** (combinações que amplificam o risco) |
 | Version-exploits pré-computados | **19** (mapeamento versão → CVEs/exploits) |
 | Alvos disponíveis via `plugin fetch` | **43** (stigviewer.com) |
-| Testes automatizados | **436** (a passar) |
+| Testes automatizados | **452** (a passar) |
 
 Distribuição das 228 misconfigs pelos 7 targets: **docker 57 · tomcat 49 · apache-httpd 35 ·
 redis 29 · mysql 23 · nginx 18 · ssh 17**. Estes números são **verificáveis** — inspeciona a DB com
@@ -528,7 +529,55 @@ caspar scan nginx.conf --exit-code --threshold 7.0
 
 ---
 
-## 16. Criar um plugin do zero (utilizadores avançados)
+## 16. Deteção de directivas desconhecidas
+
+**O problema:** o CASPAR só deteta misconfigurations que estão na base de conhecimento (o benchmark).
+Uma directiva nova — introduzida numa versão mais recente do serviço, de um módulo de terceiros, ou
+simplesmente fora do benchmark — não teria regra e seria **invisível** ao scanner. O parser lê-a, mas
+nada a examina.
+
+A solução funciona em **três camadas**, desenhadas para **não quebrar o determinismo** do runtime:
+
+**Camada 1 — surfacing (determinística, sempre ligada).** Toda a directiva parseada que não tem
+regra na base (nem *value* nem *absence*) é reportada num painel `UNCOVERED DIRECTIVES`. Não é
+pontuada — é uma lacuna de cobertura, tornada visível. Puro conjunto-diferença, sem LLM.
+
+**Camada 2 — triagem heurística (determinística).** Das não-cobertas, marca as *suspeitas* por regras
+de padrão auditáveis: valor `*`, bind a `0.0.0.0`, permissões `777`, uma directiva com nome de
+segurança (`ssl`, `verify`, `auth`…) posta a `off`, ou um nome que sugere não-produção (`debug`,
+`experimental`, `test`). Continua sem LLM.
+
+```
+UNCOVERED DIRECTIVES  (5)  3 suspicious
+  ⚠ listen = 0.0.0.0:8080          ← binds to all interfaces (0.0.0.0)
+  ⚠ weird_perm = 0777              ← world-writable permissions (777)
+  ⚠ experimental_debug_mode = on   ← directive name suggests non-production ('debug')
+  · worker_processes = 1
+  · worker_connections = 1024
+```
+
+**Camada 3 — avaliação por LLM + RAG (não-determinística, opt-in via `--assess-unknown`).** Para cada
+directiva desconhecida, o LLM (Ollama) é *grounded* em contexto RAG — o benchmark do plugin **mais**
+documentação opcional que forneças com `--docs` — e estima se é uma misconfiguration, com impacto e
+justificação. Os resultados são **candidatos de baixa confiança, nunca somados ao score CCSS**: aparecem
+marcados à parte. É essencialmente "gerar uma regra candidata em tempo de scan", que podes depois
+validar e promover à base com `plugin add`.
+
+```bash
+caspar scan nginx.conf                              # Camadas 1+2 (determinístico)
+caspar scan nginx.conf --assess-unknown             # + Camada 3 (LLM+RAG)
+caspar scan nginx.conf --assess-unknown --docs manual_nginx_2.6.txt   # + docs próprias
+```
+
+> **Nota de honestidade:** isto **não** é um "detetor de zero-days". Uma directiva desconhecida pode ser
+> nova, de terceiros, um typo, ou perfeitamente benigna — o mecanismo revela *lacunas de cobertura* e,
+> opcionalmente, dá um palpite fundamentado. Nunca promete detetar exploits desconhecidos, e por isso
+> mantém a credibilidade do scoring determinístico: o LLM fica confinado a candidatos claramente
+> rotulados, fora do score.
+
+---
+
+## 17. Criar um plugin do zero (utilizadores avançados)
 
 Além de `add` (de ficheiro) e `fetch` (descoberta), podes escrever um plugin à mão — útil para um
 serviço não catalogado, um formato de config invulgar, ou um benchmark proprietário. Um plugin é um
@@ -561,7 +610,7 @@ key-value — na maioria dos casos é só delegar. O `rules.py` define como o se
 
 ---
 
-## 17. Troubleshooting — erros comuns
+## 18. Troubleshooting — erros comuns
 
 | Sintoma | Causa provável | Solução |
 |---------|----------------|---------|
@@ -575,7 +624,7 @@ key-value — na maioria dos casos é só delegar. O `rules.py` define como o se
 
 ---
 
-## 18. Posicionamento vs outras ferramentas
+## 19. Posicionamento vs outras ferramentas
 
 > **Nota:** esta tabela é *posicionamento conceptual*, não um benchmark. Reflete o desenho do CASPAR;
 > as colunas de terceiros são a nossa leitura de alto nível, não um teste comparativo. Confirma sempre
@@ -594,7 +643,7 @@ determinística e auditável.
 
 ---
 
-## 19. Roadmap / trabalho futuro
+## 20. Roadmap / trabalho futuro
 
 > Visão de direção, sujeita a validação. Não são compromissos.
 
@@ -614,13 +663,14 @@ determinística e auditável.
 
 ---
 
-## 20. Onde mexer (mapa rápido)
+## 21. Onde mexer (mapa rápido)
 
 | Quero… | Ficheiro |
 |--------|----------|
 | Adicionar um alvo ao `fetch` | `config_assessment/fetch/catalog.json` (só o slug) |
 | Perceber a lógica de download | `config_assessment/fetch/benchmark_fetcher.py` |
 | Mudar a extracção de benchmarks | `config_assessment/build/benchmark_extractor.py` |
+| Regras de deteção de directivas desconhecidas | `config_assessment/core/unknown_directives.py` |
 | Mexer nas fórmulas CCSS | `config_assessment/core/ccss.py` |
 | Adicionar um comando CLI | `cli/main.py` |
 | Mudar um relatório (HTML/dashboard/SARIF) | `config_assessment/reports/` |
@@ -629,7 +679,7 @@ determinística e auditável.
 
 ---
 
-## 21. Resumo executivo
+## 22. Resumo executivo
 
 O CASPAR transforma um benchmark de segurança (CIS/STIG) num scanner de configuração com scoring de
 risco reproduzível. A separação **build-time (LLM, uma vez) / runtime (determinístico, sempre)** dá-lhe

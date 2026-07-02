@@ -183,6 +183,12 @@ class ScanResult:
     # Number of CVEs the exploit lookup examined (>0 with no exploits = checked
     # and clean). Drives the "no public exploits found" report state.
     version_cves_checked: int = 0
+    # Directives present in the config that the knowledge base has NO rule for
+    # (unknown-directive detection). Deterministic surfacing + heuristic triage;
+    # each is an UnknownDirective. NEVER folded into the CCSS scores — these are
+    # coverage gaps, not scored issues. LLM assessment (Layer 3) fills the
+    # optional llm_* fields only when the caller opts in.
+    unknown_directives: list = field(default_factory=list)
 
     def model_dump_json(self, indent: int = 2) -> str:
         """Compatibility shim — matches Pydantic's .model_dump_json() API."""

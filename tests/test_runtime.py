@@ -203,6 +203,30 @@ class TestPluginRegistry:
         result = runtime.scan(dummy_config_file, db)
         assert result.target_name == "dummy"
 
+    def test_unknown_directives_surfaced_but_not_scored(
+            self, dummy_config_file, db):
+        """The DB only knows 'DangerousOption'. The config also has Listen and
+        LogLevel — these must appear as unknown directives, with Listen flagged
+        suspicious (0.0.0.0), and MUST NOT change the score vs the known issue."""
+        from config_assessment.plugins.dummy import DummyPlugin
+        runtime.register_plugin(DummyPlugin())
+        result = runtime.scan(dummy_config_file, db)
+
+        names = {u.name for u in result.unknown_directives}
+        assert "Listen" in names and "LogLevel" in names
+        assert "DangerousOption" not in names          # it's a known/scored issue
+
+        listen = next(u for u in result.unknown_directives if u.name == "Listen")
+        assert listen.suspicious                        # 0.0.0.0 flagged
+
+        # Determinism guarantee: unknown directives are NOT scored issues. Only
+        # the one known misconfiguration reaches result.issues; the global score
+        # is built from issues (+ chains), never from unknown directives.
+        assert len(result.issues) == 1
+        assert result.issues[0].directive == "DangerousOption"
+        assert all(u.llm_is_misconfig is None       # no LLM ran (deterministic)
+                   for u in result.unknown_directives)
+
 
 # ------------------------------------------------------------------ #
 # Database tests                                                       #
