@@ -6,14 +6,22 @@
 
 **Índice**
 
-1. [O que é o CASPAR](#1-o-que-é-o-caspar-em-duas-frases) · 2. [O problema](#2-o-problema-que-resolve) ·
+*Fundamentos:* 1. [O que é](#1-o-que-é-o-caspar-em-duas-frases) · 2. [O problema](#2-o-problema-que-resolve) ·
 3. [As duas metades](#3-as-duas-metades-do-sistema-a-decisão-de-design-central) ·
-4. [Como o score é calculado](#4-como-o-score-é-calculado-ccss-resumido) ·
-5. [Modos de scan](#5-os-quatro-modos-de-scan) · 6. [Formatos de relatório](#6-os-quatro-formatos-de-relatório) ·
+4. [Como o score é calculado](#4-como-o-score-é-calculado-ccss-resumido)
+
+*Utilização:* 5. [Modos de scan](#5-os-quatro-modos-de-scan) · 6. [Formatos de relatório](#6-os-quatro-formatos-de-relatório) ·
 7. [`add` vs `fetch`](#7-dois-modos-de-instalar-um-plugin-add-vs-fetch) ·
 8. [Demonstração prática](#8-demonstração-prática) · 9. [Docker](#9-demonstração-via-docker-máquina-limpa-sem-clonar-o-repo) ·
-10. [Fontes dos benchmarks](#10-de-onde-vêm-os-benchmarks-plugin-fetch) · 11. [Onde mexer](#11-onde-mexer-mapa-rápido) ·
-12. [Resumo](#12-resumo-executivo)
+10. [Fontes dos benchmarks](#10-de-onde-vêm-os-benchmarks-plugin-fetch)
+
+*Aprofundamento:* 11. [Números do projeto](#11-números-do-projeto-a-base-de-conhecimento) ·
+12. [Requisitos e tempos](#12-requisitos-de-sistema-e-tempos-esperados) · 13. [Attack chains em detalhe](#13-attack-chains-em-detalhe-exemplo-real) ·
+14. [CI/CD](#14-integração-cicd-github-actions) · 15. [Criar um plugin do zero](#15-criar-um-plugin-do-zero-utilizadores-avançados) ·
+16. [Troubleshooting](#16-troubleshooting--erros-comuns) · 17. [vs outras ferramentas](#17-posicionamento-vs-outras-ferramentas) ·
+18. [Roadmap](#18-roadmap--trabalho-futuro)
+
+*Referência:* 19. [Onde mexer](#19-onde-mexer-mapa-rápido) · 20. [Resumo](#20-resumo-executivo)
 
 ---
 
@@ -345,7 +353,192 @@ ao catálogo.
 
 ---
 
-## 11. Onde mexer (mapa rápido)
+## 11. Números do projeto (a base de conhecimento)
+
+A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql`) contém:
+
+| Métrica | Valor |
+|---------|-------|
+| Targets built-in | **7** (apache-httpd, nginx, mysql, redis, ssh, tomcat, docker) |
+| Misconfigurations catalogadas | **228** (com score CCSS, narrativa e recomendação) |
+| Attack chains | **26** (combinações que amplificam o risco) |
+| Version-exploits pré-computados | **19** (mapeamento versão → CVEs/exploits) |
+| Alvos disponíveis via `plugin fetch` | **43** (stigviewer.com) |
+| Testes automatizados | **410** (a passar) |
+
+Distribuição das 228 misconfigs pelos 7 targets: **docker 57 · tomcat 49 · apache-httpd 35 ·
+redis 29 · mysql 23 · nginx 18 · ssh 17**. Estes números são **verificáveis** — inspeciona a DB com
+`sqlite3 ccss.db "SELECT target_name, COUNT(*) FROM misconfigurations GROUP BY target_name"`.
+
+---
+
+## 12. Requisitos de sistema e tempos esperados
+
+O **runtime** (scan) é leve; o **build-time** (extração por LLM) é que pesa, por causa do Ollama.
+
+**Requisitos:**
+
+| Recurso | Necessário |
+|---------|-----------|
+| Scan (runtime) | Python 3.11+, ~100 MB RAM. Determinístico, sem GPU, sem rede. |
+| Build com LLM (`plugin add`/`fetch --then-install`) | Ollama + modelo. `mistral:7b` ⇒ **~5 GB RAM** (menos = swap lento). GPU acelera muito mas não é obrigatória. |
+| Imagem Docker `:latest` | **~545 MB** |
+| Imagem Docker `:full` (Ollama embutido) | **~4.5 GB** + o modelo (`mistral:7b` ≈ 4 GB, descarregado no 1º uso para o volume) |
+
+**Tempos esperados (ordem de grandeza, em CPU):**
+
+| Operação | Tempo |
+|----------|-------|
+| `caspar scan` | **~100–500 ms** (determinístico; escala com o nº de directivas) |
+| Seed da DB canónica (1º arranque Docker) | **< 1 s** |
+| `plugin fetch <svc>` (só download) | **~1–3 s** |
+| `plugin fetch --then-install`, 1ª vez | **+5–15 min** (pull do modelo Ollama) **+ minutos a horas** de extração (1 chamada LLM por regra; ~25–45 s/regra em CPU com `mistral:7b`) |
+| O mesmo com `CASPAR_MODEL=qwen2.5:1.5b` | **muito mais rápido** (~min), menos regras/chains extraídas — para testar o fluxo |
+
+> Regra prática: em CPU, um STIG de 50 regras com `mistral:7b` demora facilmente **>1 h**. Usa o modelo
+> leve para validar o fluxo e o `mistral:7b` só quando queres a qualidade final. O `scan` em si é
+> sempre instantâneo — o custo é uma vez, no build.
+
+---
+
+## 13. Attack chains em detalhe (exemplo real)
+
+Uma *attack chain* é um conjunto de misconfigs que, **combinadas**, valem mais do que a soma das
+partes: o score da chain é amplificado por um fator. Exemplo real da DB (chain
+`directory-traversal-chain`, target apache-httpd):
+
+```
+Chain: directory-traversal-chain            amplificação ×1.5
+├─ Options FollowSymLinks     [Base 5.8]  AV:N Au:N AC:M
+└─ AllowOverride All          [Base 5.8]  AV:N Au:N AC:M
+   Justificação: Options FollowSymLinks ou Indexes combinado com
+   AllowOverride All permite um .htaccess controlado pelo utilizador
+   escalar privilégios e permitir directory traversal ou execução de
+   scripts arbitrários.
+```
+
+Isoladamente, cada directiva é um Medium (~5.8). Juntas, a chain aplica ×1.5 porque uma habilita a
+exploração da outra (o `AllowOverride All` deixa o atacante usar `.htaccess` para tirar partido do
+`FollowSymLinks`). O relatório mostra o score amplificado, não o multiplicador solto — o fator está
+embutido no resultado. As 26 chains da DB são geradas no build-time por LLM (com fallback para um
+`chains.json` curado por plugin quando o LLM falha).
+
+---
+
+## 14. Integração CI/CD (GitHub Actions)
+
+O formato SARIF integra diretamente com o *Security tab* do GitHub. Exemplo de workflow:
+
+```yaml
+name: CASPAR Config Scan
+on: [push, pull_request]
+jobs:
+  caspar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run CASPAR (falha se score > 7.0)
+        run: |
+          docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
+            alfilipe/caspar:latest \
+            scan nginx.conf --report -f sarif --threshold 7.0 -o /workspace/reports
+
+      - name: Upload SARIF para o GitHub Security
+        if: always()                        # envia mesmo se o threshold falhar
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/
+```
+
+Notas: `--threshold 7.0` faz o job **falhar** (exit 1) se o score exceder — usa `if: always()` no
+upload para o SARIF ir à mesma. O `-o /workspace/reports` grava dentro do repositório montado (a
+imagem monta `/workspace` read-only, por isso aponta o output para lá explicitamente). Para JSON
+programático em vez de SARIF, troca por `-f json`.
+
+---
+
+## 15. Criar um plugin do zero (utilizadores avançados)
+
+Além de `add` (de ficheiro) e `fetch` (descoberta), podes escrever um plugin à mão — útil para um
+serviço não catalogado, um formato de config invulgar, ou um benchmark proprietário. Um plugin é um
+directório em `config_assessment/plugins/<serviço>/` com quatro ficheiros:
+
+```
+config_assessment/plugins/myservice/
+├── __init__.py          # regista o plugin (register_plugin) + metadata
+├── parser.py            # lê a config → lista de Directive(nome, valor, ficheiro, linha, contexto)
+├── rules.py             # infere o SystemProfile (AV/Au) a partir das directivas
+└── build_myservice.py   # ENTRIES: lista de (directiva, bad, good, secção) → popula a DB
+```
+
+Caminho mais rápido — **copiar um plugin existente e adaptar**:
+
+```bash
+cp -r config_assessment/plugins/nginx config_assessment/plugins/myservice
+# edita:
+#  __init__.py      → muda target_id/service_name/config_filenames
+#  parser.py        → ajusta ao formato da config (key-value, blocos, etc.)
+#  build_*.py       → substitui ENTRIES pelas tuas regras (directiva, bad, good, secção)
+# depois corre o build do plugin para popular a DB a partir das ENTRIES
+caspar targets                                            # confirma que aparece
+```
+
+O `parser.py` já tem parsers genéricos reutilizáveis (`config_assessment/parsers/`) para formatos
+key-value — na maioria dos casos é só delegar. O `rules.py` define como o serviço é exposto
+(rede/local, autenticação) para o cálculo do AV/Au. Vê `plugins/nginx/` como referência mínima e
+`plugins/apache_httpd/` como exemplo completo (com chains e narrativas).
+
+---
+
+## 16. Troubleshooting — erros comuns
+
+| Sintoma | Causa provável | Solução |
+|---------|----------------|---------|
+| `Ollama not reachable at http://localhost:11434 — falling back to stub client` e **0 controls** extraídos | O comando correu sem Ollama disponível (ou na imagem `:latest` em vez da `:full`) | Usa a imagem `:full` (tem Ollama embutido) ou arranca o Ollama; o wrapper encaminha `plugin add`/`fetch --then-install` para `:full` automaticamente. |
+| `model 'X' not found` no Ollama | O modelo pedido não está descarregado | `ollama pull <modelo>`, ou passa `CASPAR_MODEL=<modelo já instalado>`. Na imagem `:full` o entrypoint faz o pull automaticamente. |
+| `plugin fetch` falha com erro de rede / HTTP | stigviewer.com inacessível | Descarrega o STIG à mão e usa `caspar plugin add --source ficheiro.xml`. Alguns alvos têm fonte de fallback automática (apache, mongodb, postgresql, rhel9, sqlserver, windows-server-2022). |
+| `OSError: [Errno 30] Read-only file system` no fetch | Output apontado para um caminho read-only (ex. `/workspace` no container) | Usa `-o /tmp` (já é o default na imagem) ou outro dir com escrita. |
+| `permission denied` no volume `caspar_data` | Permissões do volume Docker (uid do container ≠ dono do volume) | O volume é escrito pelo utilizador `caspar` (uid 1000). Se criaste o volume com outro dono, remove-o (`docker volume rm caspar_data`) e deixa o entrypoint recriá-lo. |
+| Plugin instalado mas `caspar targets` **não o mostra** | A DB de scan está fora de sync, ou o plugin foi escrito para dentro do container sem volume | Confirma que corres com `-v caspar_data:/home/caspar/data`; um `plugin add`/`fetch` sem esse volume perde-se no `--rm`. Verifica a DB: `sqlite3 ccss.db "SELECT target_name FROM misconfigurations GROUP BY target_name"`. |
+| `pdftotext: command not found` no `plugin add` de um PDF | Falta o poppler-utils | `sudo apt-get install poppler-utils` (a imagem Docker já o traz). |
+
+---
+
+## 17. Posicionamento vs outras ferramentas
+
+> **Nota:** esta tabela é *posicionamento conceptual*, não um benchmark. Reflete o desenho do CASPAR;
+> as colunas de terceiros são a nossa leitura de alto nível, não um teste comparativo. Confirma sempre
+> as capacidades atuais de cada ferramenta na fonte respetiva.
+
+| Ferramenta | Abordagem | Scoring quantitativo (CCSS) | Reproduzível |
+|------------|-----------|:---:|:---:|
+| **CIS-CAT** | Compliance scanning (pass/fail vs CIS) | Não (pontua % de conformidade) | Sim |
+| **OpenSCAP** | Avaliação XCCDF/OVAL | Não | Sim |
+| **Trivy** | Scanning de vulnerabilidades (CVE) em imagens/IaC | Não (usa CVSS de CVEs, não de config) | Sim |
+| **CASPAR** | **Scoring quantitativo de risco de configuração (CCSS)** | **Sim** | **Sim (build/runtime)** |
+
+A distinção do CASPAR não é "detetar" desvios (várias ferramentas fazem isso bem) mas **quantificar o
+risco** de cada um num score 0–10 comparável, com attack chains e CVEs — e fazê-lo de forma
+determinística e auditável.
+
+---
+
+## 18. Roadmap / trabalho futuro
+
+> Visão de direção, sujeita a validação. Não são compromissos.
+
+- **Infrastructure-as-Code:** estender o scan a Terraform, Kubernetes YAML e Dockerfiles (hoje o foco
+  é config de serviços já instalados).
+- **Modo offline para `fetch`:** cache local / mirror dos STIGs para quando o stigviewer.com estiver
+  indisponível (hoje o fallback é manual via `plugin add`).
+- **Refinamento do scoring:** calibração das submétricas com feedback de utilizadores e mais ground
+  truth CCE (hoje só o apache-httpd tem CCE para calibração).
+- **Mais alvos no catálogo:** o stigviewer tem 400+ STIGs; expandir os 43 atuais conforme a procura.
+
+---
+
+## 19. Onde mexer (mapa rápido)
 
 | Quero… | Ficheiro |
 |--------|----------|
@@ -360,7 +553,7 @@ ao catálogo.
 
 ---
 
-## 12. Resumo executivo
+## 20. Resumo executivo
 
 O CASPAR transforma um benchmark de segurança (CIS/STIG) num scanner de configuração com scoring de
 risco reproduzível. A separação **build-time (LLM, uma vez) / runtime (determinístico, sempre)** dá-lhe
