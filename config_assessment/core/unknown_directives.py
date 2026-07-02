@@ -231,3 +231,54 @@ def _rag_context(rag_index, query: str, top_k: int) -> str:
         body = getattr(s, "body", "") or getattr(s, "remediation", "")
         parts.append(f"- {title}: {body}"[:500])
     return "\n".join(parts)
+
+
+# ── Promotion: candidate → permanent rule ──────────────────────────────
+
+_IMPACT_RE = re.compile(r"C:([NPC]).*?I:([NPC]).*?A:([NPC])", re.IGNORECASE)
+
+
+def _parse_impact(impact: str) -> tuple[str, str, str]:
+    """Parse an LLM impact string like 'C:P I:N A:N' → ('P','N','N').
+    Defaults to Partial confidentiality if unparseable (conservative)."""
+    m = _IMPACT_RE.search(impact or "")
+    if m:
+        return tuple(g.upper() for g in m.groups())  # type: ignore[return-value]
+    return ("P", "N", "N")
+
+
+def promote_to_misconfiguration(u: "UnknownDirective", *, target_name: str):
+    """Turn an LLM-assessed unknown directive into a Misconfiguration ready to
+    upsert. Requires u.llm_is_misconfig is True. Scores are computed from the
+    LLM's estimated impact via the normal CCSS formulas — the estimate seeds
+    the metrics, the scoring stays deterministic.
+
+    The rule is conservative and clearly attributable: AV:N Au:N AC:L (typical
+    for a network-facing config value), GEL/GRL Not-Defined, and the
+    justification records that it was LLM-derived and promoted.
+    """
+    from config_assessment.core.models import Misconfiguration
+    from config_assessment.core import ccss
+
+    if not u.llm_is_misconfig:
+        raise ValueError("candidate is not an LLM-confirmed misconfiguration")
+
+    c, i, a = _parse_impact(u.llm_impact)
+    av, au, ac = "N", "N", "L"
+    bs = ccss.base_score(av, au, ac, c, i, a)
+    ts = ccss.temporal_score(bs, "ND", "ND")
+
+    return Misconfiguration(
+        target_name=target_name,
+        directive=u.name,
+        bad_value=u.value,
+        good_value="",  # unknown — the operator sets the secure value on review
+        av=av, au=au, ac=ac, c=c, i=i, a=a,
+        base_score=bs, temporal_score=ts,
+        gel="ND", grl="ND",
+        cis_section="",
+        justification=(u.llm_justification or "LLM-assessed unknown directive")
+                      + " [promoted from unknown-directive assessment; review before trusting]",
+        recommendation="Review this promoted rule and set a concrete good_value.",
+        rule_type="value",
+    )

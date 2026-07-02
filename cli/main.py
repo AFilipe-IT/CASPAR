@@ -1508,5 +1508,91 @@ def fix(ctx, input_path, live, dry_run, in_place, output) -> None:
     click.echo()
 
 
+# ── promote (#2: candidate → permanent rule) ───────────────────────────
+
+@cli.command()
+@click.argument("input_path", metavar="CONFIG")
+@click.option("--directive", "-d", "only_directive", default=None,
+              help="Promote only this directive (default: all confirmed).")
+@click.option("--docs", "docs_path", default=None,
+              help="Extra docs to ground the LLM assessment (RAG).")
+@click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt.")
+@click.pass_context
+def promote(ctx, input_path, only_directive, docs_path, yes) -> None:
+    """Promote an LLM-assessed unknown directive to a permanent DB rule.
+
+    \b
+    Runs the scan with --assess-unknown, then turns each directive the LLM
+    flagged as a likely misconfiguration into a real rule (scored via the normal
+    CCSS formulas), so future scans detect it deterministically. Review the
+    good_value afterwards — promotion seeds the rule, it doesn't finalise it.
+
+      caspar promote nginx.conf                 # all confirmed candidates
+      caspar promote nginx.conf -d some_flag    # just one
+    """
+    from config_assessment.core.db.database import Database
+    from config_assessment.core.input_resolver import resolve
+    from config_assessment.core import runtime
+    from config_assessment.core.unknown_directives import promote_to_misconfiguration
+
+    _discover_plugins()
+    db_path = ctx.obj["db_path"]
+    if not Path(db_path).exists():
+        click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
+        sys.exit(2)
+
+    try:
+        resolved = resolve(input_path, live=False)
+    except (FileNotFoundError, RuntimeError, ValueError) as e:
+        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        sys.exit(2)
+
+    with Database(db_path) as db:
+        result = runtime.scan(resolved.path, db)
+        if not result.unknown_directives:
+            click.echo("  No uncovered directives to assess.")
+            return
+        click.echo(f"  Assessing {len(result.unknown_directives)} uncovered "
+                   "directive(s) with LLM…")
+        _assess_unknown_directives(result, docs_path)
+
+        candidates = [u for u in result.unknown_directives if u.llm_is_misconfig]
+        if only_directive:
+            candidates = [u for u in candidates
+                          if u.name.lower() == only_directive.lower()]
+        if not candidates:
+            click.echo(click.style(
+                "  No confirmed candidates to promote "
+                "(the LLM found none, or needs Ollama).", fg="yellow"))
+            return
+
+        click.echo(f"\n  {click.style('CANDIDATES', bold=True)} "
+                   f"{click.style(f'({len(candidates)})', dim=True)}")
+        for u in candidates:
+            sc = f"~{u.llm_estimated_score:.1f}" if u.llm_estimated_score else "?"
+            click.echo(f"  {sc}  {click.style(u.name, bold=True)} = {u.value}  "
+                       f"{u.llm_impact}")
+            click.echo(click.style(f"       {u.llm_justification[:110]}", dim=True))
+
+        if not yes and not click.confirm(
+                f"\n  Promote {len(candidates)} rule(s) to '{result.target_name}'?",
+                default=False):
+            click.echo("  Aborted.")
+            return
+
+        n = 0
+        for u in candidates:
+            try:
+                m = promote_to_misconfiguration(u, target_name=result.target_name)
+                db.upsert_misconfiguration(m)
+                n += 1
+            except Exception as exc:
+                logger.warning("Could not promote '%s': %s", u.name, exc)
+    click.echo(click.style(
+        f"\n  ✓ Promoted {n} rule(s). Review their good_value with "
+        f"'caspar explain <directive> -t {result.target_name}'.", fg="green"))
+    click.echo()
+
+
 if __name__ == "__main__":
     cli()

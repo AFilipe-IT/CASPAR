@@ -158,3 +158,37 @@ def test_assess_works_without_rag():
     assess_unknown_with_llm(unknowns, service="nginx", llm=llm, rag_index=None)
     assert unknowns[0].llm_is_misconfig is False
     assert "(no documentation found)" in llm.prompts[0]
+
+
+# ── Promotion: candidate → rule ────────────────────────────────────────
+
+def test_parse_impact():
+    from config_assessment.core.unknown_directives import _parse_impact
+    assert _parse_impact("C:P I:N A:N") == ("P", "N", "N")
+    assert _parse_impact("C:C I:C A:C") == ("C", "C", "C")
+    # Unparseable → conservative default.
+    assert _parse_impact("garbage") == ("P", "N", "N")
+
+
+def test_promote_builds_scored_misconfiguration():
+    from config_assessment.core.unknown_directives import (
+        UnknownDirective, promote_to_misconfiguration)
+    u = UnknownDirective("weird_flag", "on")
+    u.llm_is_misconfig = True
+    u.llm_impact = "C:P I:C A:N"
+    u.llm_justification = "opens tampering"
+    m = promote_to_misconfiguration(u, target_name="nginx")
+    assert m.directive == "weird_flag" and m.bad_value == "on"
+    assert (m.c, m.i, m.a) == ("P", "C", "N")
+    assert m.base_score > 0 and m.temporal_score > 0
+    assert "promoted" in m.justification.lower()   # attributable origin
+    assert m.rule_type == "value"
+
+
+def test_promote_rejects_non_candidate():
+    from config_assessment.core.unknown_directives import (
+        UnknownDirective, promote_to_misconfiguration)
+    u = UnknownDirective("x", "1")            # llm_is_misconfig is None
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        promote_to_misconfiguration(u, target_name="nginx")
