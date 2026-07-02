@@ -348,13 +348,23 @@ curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh
 ```
 ✓ *Sucesso:* `caspar --help` lista os comandos (scan, targets, plugin, diff, badge, explain, history, suppress, watch).
 
-**1 — Scan básico + relatórios.** Cria um `nginx.conf` de teste e corre:
+**1 — Scan básico + relatórios.** O wrapper monta o directório **atual** como `/workspace`, por isso
+o ficheiro a analisar tem de estar no cwd (ou usa `--live <serviço>` para um serviço instalado):
 
 ```bash
-caspar scan nginx.conf                          # terminal
-caspar scan nginx.conf --report -f dashboard    # painel visual → volume caspar_reports
+caspar scan --live apache2                          # serviço instalado (não precisa de ficheiro)
+# ou, para um ficheiro no directório atual:
+cp /etc/nginx/nginx.conf .  &&  caspar scan nginx.conf
+caspar scan --live apache2 --report -f dashboard    # painel visual → volume caspar_reports
+
+# obter o relatório do volume para o host (é um volume Docker, não um path direto):
+docker run --rm -v caspar_reports:/r -v "$PWD":/out --entrypoint cp \
+  alfilipe/caspar:latest -r /r/. /out/
+ls *.html                                           # abre no browser
 ```
-✓ *Sucesso:* score 0–10 com issues por severidade; o dashboard é gerado.
+✓ *Sucesso:* score 0–10 com issues por severidade; o dashboard aparece em `/reports/…` (no volume) e
+copia-se para o host com o comando acima. *(Se scan de um ficheiro der `Not found`, confirma que ele
+está no directório de onde corres o `caspar`.)*
 
 **2 — Deteção de directivas desconhecidas** (determinístico). No mesmo scan:
 
@@ -688,7 +698,8 @@ key-value — na maioria dos casos é só delegar. O `rules.py` define como o se
 | `model 'X' not found` no Ollama | O modelo pedido não está descarregado | `ollama pull <modelo>`, ou passa `CASPAR_MODEL=<modelo já instalado>`. Na imagem `:full` o entrypoint faz o pull automaticamente. |
 | `plugin fetch` falha com erro de rede / HTTP | stigviewer.com inacessível | Descarrega o STIG à mão e usa `caspar plugin add --source ficheiro.xml`. Alguns alvos têm fonte de fallback automática (apache, mongodb, postgresql, rhel9, sqlserver, windows-server-2022). |
 | `OSError: [Errno 30] Read-only file system` no fetch | Output apontado para um caminho read-only (ex. `/workspace` no container) | Usa `-o /tmp` (já é o default na imagem) ou outro dir com escrita. |
-| `permission denied` no volume `caspar_data` | Permissões do volume Docker (uid do container ≠ dono do volume) | O volume é escrito pelo utilizador `caspar` (uid 1000). Se criaste o volume com outro dono, remove-o (`docker volume rm caspar_data`) e deixa o entrypoint recriá-lo. |
+| `attempt to write a readonly database` / `permission denied` no `caspar_data` | Volume stale, criado por uma imagem antiga com outro dono (root) | O CASPAR já **cai automaticamente** para `/tmp` (não-persistente) e avisa. Para restaurar a persistência: `docker volume rm caspar_data` e deixa o entrypoint recriá-lo. |
+| Relatório (`--report`) não aparece na máquina host | Versão antiga escrevia dentro do container (efémero) | Corrigido: os relatórios vão para o volume `caspar_reports` (`CASPAR_REPORTS_DIR=/reports`). Faz `docker pull` da imagem mais recente. Vê o ficheiro com `docker run --rm -v caspar_reports:/r --entrypoint ls alfilipe/caspar:latest /r`. |
 | Plugin instalado mas `caspar targets` **não o mostra** | A DB de scan está fora de sync, ou o plugin foi escrito para dentro do container sem volume | Confirma que corres com `-v caspar_data:/home/caspar/data`; um `plugin add`/`fetch` sem esse volume perde-se no `--rm`. Verifica a DB: `sqlite3 ccss.db "SELECT target_name FROM misconfigurations GROUP BY target_name"`. |
 | `pdftotext: command not found` no `plugin add` de um PDF | Falta o poppler-utils | `sudo apt-get install poppler-utils` (a imagem Docker já o traz). |
 
