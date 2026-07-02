@@ -1400,6 +1400,48 @@ def watch(ctx, input_path, interval) -> None:
         click.echo("\n  Stopped.")
 
 
+# ── doctor (#6: DB integrity) ──────────────────────────────────────────
+
+@cli.command()
+@click.pass_context
+def doctor(ctx) -> None:
+    """Check the database for integrity problems (read-only).
+
+    \b
+    Flags orphan rules, chains referencing non-existent directives, out-of-range
+    scores, and missing reseed metadata. Exit 1 if any 'error' is found.
+      caspar doctor
+    """
+    from config_assessment.core.db.doctor import check
+
+    db_path = ctx.obj["db_path"]
+    if not Path(db_path).exists():
+        click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
+        sys.exit(2)
+
+    findings = check(db_path)
+    if not findings:
+        click.echo(click.style("  ✓ Database is healthy — no issues found.",
+                               fg="green"))
+        return
+
+    errors = [f for f in findings if f.severity == "error"]
+    warnings = [f for f in findings if f.severity == "warning"]
+    click.echo()
+    click.echo(f"  {click.style('DATABASE CHECK', bold=True)}  "
+               + click.style(f"{len(errors)} error(s)", fg="red", bold=bool(errors))
+               + " · "
+               + click.style(f"{len(warnings)} warning(s)", fg="yellow"))
+    click.echo()
+    for f in errors + warnings:
+        color = "red" if f.severity == "error" else "yellow"
+        tag = click.style(f"[{f.severity}]", fg=color, bold=f.severity == "error")
+        click.echo(f"  {tag} {click.style(f.category, dim=True)}: {f.message}")
+    click.echo()
+    if errors:
+        sys.exit(1)
+
+
 # ── fix (#1: assisted remediation) ─────────────────────────────────────
 
 @cli.command()
