@@ -446,7 +446,8 @@ A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql
 | Attack chains | **26** (combinações que amplificam o risco) |
 | Version-exploits pré-computados | **19** (mapeamento versão → CVEs/exploits) |
 | Alvos disponíveis via `plugin fetch` | **43** (stigviewer.com) |
-| Testes automatizados | **452** (a passar) |
+| Versão da DB base (para o reseed) | **2** (`caspar_meta.base_db_version`) |
+| Testes automatizados | **464** (a passar) |
 
 Distribuição das 228 misconfigs pelos 7 targets: **docker 57 · tomcat 49 · apache-httpd 35 ·
 redis 29 · mysql 23 · nginx 18 · ssh 17**. Estes números são **verificáveis** — inspeciona a DB com
@@ -493,17 +494,31 @@ partes: o score da chain é amplificado por um fator. Exemplo real da DB (chain
 Chain: directory-traversal-chain            amplificação ×1.5
 ├─ Options FollowSymLinks     [Base 5.8]  AV:N Au:N AC:M
 └─ AllowOverride All          [Base 5.8]  AV:N Au:N AC:M
-   Justificação: Options FollowSymLinks ou Indexes combinado com
-   AllowOverride All permite um .htaccess controlado pelo utilizador
-   escalar privilégios e permitir directory traversal ou execução de
-   scripts arbitrários.
+   Justificação: AllowOverride All deixa um .htaccess controlado pelo
+   utilizador sobrepor a config, e Options FollowSymLinks/Indexes alarga
+   o que essa config alcança — traversal por symlink + listagem. Chegar a
+   RCE depende de que handlers o .htaccess pode ativar (risco forte de
+   exposição/override, não RCE garantido).
 ```
 
 Isoladamente, cada directiva é um Medium (~5.8). Juntas, a chain aplica ×1.5 porque uma habilita a
-exploração da outra (o `AllowOverride All` deixa o atacante usar `.htaccess` para tirar partido do
-`FollowSymLinks`). O relatório mostra o score amplificado, não o multiplicador solto — o fator está
-embutido no resultado. As 26 chains da DB são geradas no build-time por LLM (com fallback para um
-`chains.json` curado por plugin quando o LLM falha).
+exploração da outra. O relatório mostra o score amplificado, não o multiplicador solto.
+
+**Cap por tipo de impacto (determinístico).** A amplificação é gerada por LLM, mas a **severidade tem
+um tecto auditável**: uma chain cujo impacto combinado é só Confidencialidade (info-disclosure /
+fingerprinting, sem Integridade nem Disponibilidade) é **capada em High (8.9)** — a banda Critical
+reserva-se a chains que podem adulterar ou negar serviço (RCE, DoS). Por isso a `info-disclosure-chain`
+(ServerTokens + ServerSignature) é 8.9 e não 9.9, enquanto a `webdav-rce-chain` (tem I e A) pode ser
+Critical. É uma regra, não julgamento por-chain — se um avaliador perguntar "porque não é Critical?",
+a resposta é o critério de impacto (ver `ccss.impact_capped_score`).
+
+**Score global explicado.** Como o global é `max(issue, chain)`, um overall alto pode vir de uma
+*chain*, não de uma issue individual. O relatório mostra **Highest Issue / Highest Chain / Overall
+(from issue|chain)** — no terminal e no dashboard — para o número de topo ser sempre explicado.
+
+As 26 chains da DB são geradas no build-time por LLM, revistas e curadas num `chains.json` por plugin
+(o *ground truth* humano). As justificações das chains do apache foram moderadas para não afirmarem
+impactos sem evidência (ex.: nenhuma "privilege escalation" de um mero status+root).
 
 ---
 
@@ -606,6 +621,17 @@ do `--threshold`, **0** caso contrário — controlo fino para pipelines:
 ```bash
 caspar scan nginx.conf --exit-code --threshold 7.0
 ```
+
+**Automáticos (Docker, sem flags).** Três comportamentos que o wrapper/imagem tratam sozinhos:
+
+- **Versão no modo `--live`** — o container é isolado e não tem o binário do serviço, por isso o
+  wrapper corre `apache2 -v` / `nginx -v` **no host** e injeta `--service-version`, para o
+  cross-reference de CVEs/exploits funcionar (`🔎 Versão detetada no host: apache2 2.4.xx`).
+- **Relatórios no host** — com `--report`, os ficheiros vão para `./reports/` do teu directório atual
+  (não para um volume Docker), por isso aparecem logo ao teu lado.
+- **Reseed versionado** — quando puxas uma imagem nova, a DB base do teu volume `caspar_data` é
+  atualizada automaticamente no próximo comando (justificações corrigidas, novas regras built-in),
+  **preservando** os plugins que instalaste. Sem `docker volume rm`, sem perder nada.
 
 ---
 
@@ -752,11 +778,13 @@ determinística e auditável.
 | Perceber a lógica de download | `config_assessment/fetch/benchmark_fetcher.py` |
 | Mudar a extracção de benchmarks | `config_assessment/build/benchmark_extractor.py` |
 | Regras de deteção de directivas desconhecidas | `config_assessment/core/unknown_directives.py` |
-| Mexer nas fórmulas CCSS | `config_assessment/core/ccss.py` |
+| Mexer nas fórmulas CCSS / cap de impacto das chains | `config_assessment/core/ccss.py` |
+| Moderar justificações de chains do apache | `config_assessment/plugins/apache_httpd/chains.json` |
 | Adicionar um comando CLI | `cli/main.py` |
 | Mudar um relatório (HTML/dashboard/SARIF) | `config_assessment/reports/` |
+| Reseed versionado da DB (bump ao mudar o canonical) | `config_assessment/core/db/reseed.py` |
 | Ver a interface de um plugin | `config_assessment/plugins/<serviço>/` |
-| Config do Docker / persistência | `docker/caspar/` + `install.sh` |
+| Config do Docker / persistência / versão-no-host | `docker/caspar/` + `install.sh` |
 
 ---
 
