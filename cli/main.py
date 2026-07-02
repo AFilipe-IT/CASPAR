@@ -110,7 +110,7 @@ def _discover_plugins() -> None:
 
 # ── Relatório terminal ─────────────────────────────────────────────
 
-def _print_result(result, resolved=None) -> None:
+def _print_result(result, resolved=None, show_uncovered=False) -> None:
     from config_assessment.core.ccss import severity_label as sl
 
     groups = _dedup_issues(sorted(result.issues, key=lambda x: -x.temporal_score))
@@ -191,7 +191,8 @@ def _print_result(result, resolved=None) -> None:
         for chain in active_chains:
             _print_chain_compact(chain)
 
-    _print_unknown_directives(getattr(result, "unknown_directives", []))
+    _print_unknown_directives(getattr(result, "unknown_directives", []),
+                              show_all=show_uncovered)
 
     click.echo(click.style("  ══════════════════════════════════════════════════════════════", dim=True))
     click.echo()
@@ -255,21 +256,27 @@ def _assess_unknown_directives(result, docs_path: str | None) -> None:
         llm=llm, rag_index=rag)
 
 
-def _print_unknown_directives(unknowns: list) -> None:
+def _print_unknown_directives(unknowns: list, show_all: bool = False) -> None:
     """Show directives the knowledge base does not cover (unknown-directive
-    detection). Suspicious ones (heuristic signals) first, then the rest.
-    Never scored — this is a coverage-gap panel."""
+    detection). By default only the *suspicious* ones are listed in full, with
+    the benign remainder summarised — a real config has hundreds of benign
+    unknowns (AddCharset, AddIcon…) that would bury the signal. `show_all`
+    (--show-uncovered) lists every one. Never scored — a coverage-gap panel."""
     if not unknowns:
         return
-    n_susp = sum(1 for u in unknowns if u.suspicious)
+    suspicious = [u for u in unknowns if u.suspicious]
+    benign = [u for u in unknowns if not u.suspicious]
+    assessed = [u for u in unknowns if u.llm_is_misconfig is not None]
+
     head = f"UNCOVERED DIRECTIVES  {click.style(f'({len(unknowns)})', dim=True)}"
-    if n_susp:
-        head += "  " + click.style(f"{n_susp} suspicious", fg="yellow", bold=True)
+    if suspicious:
+        head += "  " + click.style(f"{len(suspicious)} suspicious", fg="yellow", bold=True)
     click.echo(f"  {click.style(head, bold=True)}")
     click.echo(click.style(
         "  not in the knowledge base — surfaced, not scored", dim=True))
     click.echo()
-    for u in unknowns:
+
+    def _line(u):
         if u.suspicious:
             mark = click.style("⚠", fg="yellow", bold=True)
             detail = click.style("  ← " + "; ".join(u.risk_signals), fg="yellow")
@@ -281,7 +288,6 @@ def _print_unknown_directives(unknowns: list) -> None:
             loc = click.style(f"  {u.source_file}:{u.line_number}", dim=True)
         val = f" = {u.value}" if u.value else ""
         click.echo(f"  {mark} {click.style(u.name, bold=u.suspicious)}{val}{loc}{detail}")
-        # Layer 3 (LLM) verdict, when present — clearly marked low-confidence.
         if u.llm_is_misconfig:
             sc = f"~{u.llm_estimated_score:.1f}?" if u.llm_estimated_score else "?"
             click.echo(click.style(
@@ -291,6 +297,19 @@ def _print_unknown_directives(unknowns: list) -> None:
             click.echo(click.style(
                 f"       LLM (low-confidence): likely benign — {u.llm_justification}",
                 dim=True))
+
+    # Always show suspicious in full. Show benign too only with --show-uncovered
+    # (or when the LLM assessed them, so verdicts aren't hidden).
+    for u in suspicious:
+        _line(u)
+    shown_benign = benign if (show_all or assessed) else []
+    for u in shown_benign:
+        _line(u)
+    hidden = len(benign) - len(shown_benign)
+    if hidden:
+        click.echo(click.style(
+            f"  … and {hidden} more benign uncovered directive(s) "
+            "— use --show-uncovered to list all", dim=True))
     click.echo()
 
 
@@ -425,10 +444,13 @@ def cli(ctx: click.Context, db: str, verbose: bool) -> None:
 @click.option("--docs", "docs_path", default=None,
               help="Extra service documentation (file/dir) to ground the "
                    "--assess-unknown LLM via RAG, on top of the benchmark.")
+@click.option("--show-uncovered", "show_uncovered", is_flag=True, default=False,
+              help="List every uncovered directive, not just the suspicious "
+                   "ones (a real config has hundreds of benign unknowns).")
 @click.pass_context
 def scan(ctx, input_path, live, report, fmt, output, threshold,
          differentiated_exit, suppress_file, online, service_version,
-         assess_unknown, docs_path) -> None:
+         assess_unknown, docs_path, show_uncovered) -> None:
     """Analyse service configurations — 4 modes.
 
     \b
@@ -523,7 +545,7 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
     if assess_unknown and result.unknown_directives:
         _assess_unknown_directives(result, docs_path)
 
-    _print_result(result, resolved=resolved)
+    _print_result(result, resolved=resolved, show_uncovered=show_uncovered)
     if suppressed_issues:
         click.echo(click.style(
             f"  ({len(suppressed_issues)} issue(s) suppressed via {_supp_path})",
@@ -531,10 +553,15 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
         click.echo()
 
     if report:
-        # Default: a reports/ directory inside the project (next to cli/),
-        # so reports are collected in the repo regardless of the cwd.
+        # Where reports go, in order of precedence:
+        #   1. explicit -o/--output
+        #   2. $CASPAR_REPORTS_DIR (the Docker image sets this to the mounted
+        #      /reports volume, so reports survive a --rm container)
+        #   3. a reports/ dir next to the package (native use / dev)
         if output:
             od = Path(output)
+        elif os.environ.get("CASPAR_REPORTS_DIR"):
+            od = Path(os.environ["CASPAR_REPORTS_DIR"])
         else:
             od = Path(__file__).resolve().parent.parent / "reports"
         od.mkdir(parents=True, exist_ok=True)

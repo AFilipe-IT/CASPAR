@@ -12,7 +12,25 @@ DB="${CASPAR_DB:-$DATA_DIR/ccss.db}"
 PLUGINS_DIR="${CASPAR_PLUGINS_DIR:-$DATA_DIR/plugins}"
 SEED_DB="/home/caspar/app/ccss.seed.db"
 
-mkdir -p "$DATA_DIR" "$PLUGINS_DIR"
+mkdir -p "$DATA_DIR" "$PLUGINS_DIR" 2>/dev/null || true
+
+# Guard against a stale volume owned by another uid (e.g. created by an older
+# image as root): if the data dir is not writable by us, we can't chown it
+# (we run unprivileged), so fall back to a writable in-container location. The
+# DB/plugins then don't persist, but the scan works instead of crashing with
+# "attempt to write a readonly database". A one-line note tells the user how to
+# restore persistence.
+if [ ! -w "$DATA_DIR" ] || ! ( : > "$DATA_DIR/.caspar-write-test" 2>/dev/null ); then
+    echo "caspar: data volume '$DATA_DIR' is not writable (likely owned by another user)." >&2
+    echo "caspar: falling back to non-persistent /tmp; to fix, run: docker volume rm caspar_data" >&2
+    DATA_DIR=/tmp/caspar-data
+    DB="$DATA_DIR/ccss.db"
+    PLUGINS_DIR="$DATA_DIR/plugins"
+    mkdir -p "$PLUGINS_DIR"
+    export CASPAR_DATA_DIR="$DATA_DIR" CASPAR_DB="$DB" CASPAR_PLUGINS_DIR="$PLUGINS_DIR"
+else
+    rm -f "$DATA_DIR/.caspar-write-test" 2>/dev/null || true
+fi
 
 # Seed the working DB from the baked canonical DB the first time only. Never
 # overwrite an existing DB — that would wipe plugins the user already installed.

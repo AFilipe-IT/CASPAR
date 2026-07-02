@@ -10,7 +10,18 @@ DATA_DIR="${CASPAR_DATA_DIR:-/home/caspar/data}"
 DB="${CASPAR_DB:-$DATA_DIR/ccss.db}"
 PLUGINS_DIR="${CASPAR_PLUGINS_DIR:-$DATA_DIR/plugins}"
 SEED_DB="/home/caspar/app/ccss.seed.db"
-mkdir -p "$DATA_DIR" "$PLUGINS_DIR"
+mkdir -p "$DATA_DIR" "$PLUGINS_DIR" 2>/dev/null || true
+# Fall back to a writable location if the data volume is owned by another uid
+# (stale volume from an older image) — avoids "readonly database" crashes.
+if [ ! -w "$DATA_DIR" ] || ! ( : > "$DATA_DIR/.caspar-write-test" 2>/dev/null ); then
+    echo "caspar: data volume '$DATA_DIR' not writable; using non-persistent /tmp." >&2
+    echo "caspar: to restore persistence, run: docker volume rm caspar_data" >&2
+    DATA_DIR=/tmp/caspar-data; DB="$DATA_DIR/ccss.db"; PLUGINS_DIR="$DATA_DIR/plugins"
+    mkdir -p "$PLUGINS_DIR"
+    export CASPAR_DATA_DIR="$DATA_DIR" CASPAR_DB="$DB" CASPAR_PLUGINS_DIR="$PLUGINS_DIR"
+else
+    rm -f "$DATA_DIR/.caspar-write-test" 2>/dev/null || true
+fi
 if [ ! -f "$DB" ] && [ -f "$SEED_DB" ]; then
     cp "$SEED_DB" "$DB"
 fi

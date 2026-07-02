@@ -78,6 +78,21 @@ def test_triage_does_not_flag_benign_value():
     assert not triage_unknown(UnknownDirective("worker_processes", "4")).suspicious
 
 
+def test_triage_no_false_positive_on_token_in_list():
+    # Real-world false positives: a risky word appearing as one token of a
+    # multi-token value must NOT flag (Norwegian 'no', a '.test' entry, etc.).
+    assert not triage_unknown(UnknownDirective("AddLanguage", "no .no")).suspicious
+    assert not triage_unknown(
+        UnknownDirective("LanguagePriority", "en ca no pl")).suspicious
+    assert not triage_unknown(UnknownDirective("index", "a b test c")).suspicious
+
+
+def test_triage_flags_whole_value_off():
+    # But the WHOLE value being a disabled/off token is still flagged.
+    assert triage_unknown(UnknownDirective("cors", "*")).suspicious
+    assert triage_unknown(UnknownDirective("bind", "0.0.0.0")).suspicious
+
+
 def test_surface_and_triage_orders_suspicious_first():
     dirs = [_d("benign", "4"), _d("perm", "0777"), _d("also_benign", "x")]
     out = surface_and_triage(dirs, set())

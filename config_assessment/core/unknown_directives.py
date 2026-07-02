@@ -90,14 +90,18 @@ _SECURITY_NAME_WORDS = ("verify", "secure", "auth", "ssl", "tls", "cert",
                         "allow", "trust", "cipher", "protocol")
 
 # Value patterns that are risky in general (regardless of directive name).
+# Anchored to the WHOLE value where possible: config values are often
+# multi-token lists (e.g. "AddLanguage no .no", "index a b c"), so an unanchored
+# word match produces false positives (Norwegian code 'no', a file named
+# '.test'…). We only flag a value that IS the risky token, not one that merely
+# contains it.
 _RISKY_VALUE_PATTERNS: list[tuple[str, str]] = [
     (r"^\*$", "wildcard '*' (matches everything)"),
-    (r"0\.0\.0\.0(?::\d+)?", "binds to all interfaces (0.0.0.0)"),
+    (r"\b0\.0\.0\.0(?::\d+)?\b", "binds to all interfaces (0.0.0.0)"),
     (r"(?i)^(all|any)$", "value 'all/any' — overly broad"),
-    (r"(?i)\b(disable|disabled|none|no)\b", "feature disabled"),
-    (r"(?i)\b(insecure|unsafe|permissive|debug|test)\b", "insecure/debug keyword"),
-    (r"(?i)^(0|false|off)$", "boolean-off value"),
-    (r"(?i)(chmod\s*)?0?777", "world-writable permissions (777)"),
+    (r"(?i)^(disable|disabled|none|no|false|off|0)$", "feature disabled / boolean-off"),
+    (r"(?i)^(insecure|unsafe|permissive|debug|test)$", "insecure/debug value"),
+    (r"(?i)(^|\s)(chmod\s*)?0?777($|\s)", "world-writable permissions (777)"),
 ]
 
 # "off/false/0/no" is only risky when the directive NAME implies a protection.

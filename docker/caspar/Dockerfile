@@ -56,8 +56,11 @@ RUN sqlite3 /home/caspar/app/ccss.seed.db < data/ccss_canonical.sql
 ENV CASPAR_DATA_DIR=/home/caspar/data
 ENV CASPAR_DB=/home/caspar/data/ccss.db
 ENV CASPAR_PLUGINS_DIR=/home/caspar/data/plugins
-RUN mkdir -p /home/caspar/data/plugins /home/caspar/reports \
-    && chown -R caspar:caspar /home/caspar
+# Reports go to /reports, which the caspar wrapper mounts as the caspar_reports
+# volume — so a saved report survives the --rm container.
+ENV CASPAR_REPORTS_DIR=/reports
+RUN mkdir -p /home/caspar/data/plugins /reports \
+    && chown -R caspar:caspar /home/caspar /reports
 
 COPY docker/caspar/seed_data.sh /usr/local/bin/caspar-seed
 RUN chmod +x /usr/local/bin/caspar-seed
