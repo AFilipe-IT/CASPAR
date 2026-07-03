@@ -213,6 +213,45 @@ def test_log_flag_writes_colourless_alerts_and_keeps_terminal_clean(
     assert "\x1b[" not in body   # colourless
 
 
+def test_live_flag_resolves_service_and_labels_by_name(tmp_path, monkeypatch):
+    """`watch --live apache2` resolves the service to its config path (like
+    scan --live) and labels alerts by the service name, not the file basename."""
+    from click.testing import CliRunner
+    import cli.main as m
+    from config_assessment.core.input_resolver import ResolvedInput
+
+    cfg = tmp_path / "apache2.conf"
+    cfg.write_text("ServerTokens Prod\n")
+
+    seen = {}
+
+    def fake_resolve(input_path, live=False):
+        seen["input"], seen["live"] = input_path, live
+        return ResolvedInput(path=str(cfg), mode="live",
+                             metadata={"service": "apache-httpd"})
+    monkeypatch.setattr("config_assessment.core.input_resolver.resolve",
+                        fake_resolve)
+    monkeypatch.setattr("config_assessment.core.runtime.scan",
+                        lambda *a, **k: _Res(8.9, "High", []))
+
+    def fake_loop(path, **k):
+        yield ChangeEvent(cfg, "d0", None)   # baseline only, then stop
+    monkeypatch.setattr("config_assessment.core.watch.watch", fake_loop)
+    monkeypatch.setattr(m.Path, "exists", lambda self: True)
+
+    class _DummyDB:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr("config_assessment.core.db.database.Database",
+                        lambda *a, **k: _DummyDB())
+
+    result = CliRunner().invoke(m.cli, ["watch", "apache2", "--live"])
+    assert result.exit_code == 0
+    assert seen["live"] is True and seen["input"] == "apache2"
+    assert "Service: apache-httpd" in result.output
+    assert "watching apache-httpd" in result.output   # labelled by service name
+
+
 def test_log_path_in_missing_dir_errors_cleanly(tmp_path, monkeypatch):
     """An unwritable --log path (e.g. a host path invisible in the container)
     exits 2 with guidance, not a traceback."""

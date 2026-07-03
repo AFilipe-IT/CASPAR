@@ -1636,6 +1636,9 @@ def promote(ctx, input_path, only_directive, docs_path, yes) -> None:
 
 @cli.command()
 @click.argument("input_path", metavar="CONFIG")
+@click.option("--live", "-l", is_flag=True, default=False,
+              help="CONFIG is an installed service name (e.g. apache2); watch "
+                   "its config directory. Resolves the path like `scan --live`.")
 @click.option("--interval", "-i", default=1.0, type=float, show_default=True,
               help="Seconds between checks for a config change.")
 @click.option("--profile", "env_profile", default=None,
@@ -1643,18 +1646,18 @@ def promote(ctx, input_path, only_directive, docs_path, yes) -> None:
               help="Environment baseline for scoring (as in scan).")
 @click.option("--log", "log_path", default=None, metavar="FILE",
               help="Append alerts to FILE instead of the terminal (for "
-                   "background use: `caspar watch cfg --log ~/w.log &`).")
+                   "background use: `caspar watch cfg --log watch.log &`).")
 @click.pass_context
-def watch(ctx, input_path, interval, env_profile, log_path) -> None:
+def watch(ctx, input_path, live, interval, env_profile, log_path) -> None:
     """Continuously audit a config: alert on screen whenever it changes.
 
-    Watches the file (or directory) and, on every change, re-runs the
-    deterministic scan and prints ONE compact log line: the new score and what
-    changed. The line is red when the risk got worse, green when it improved.
-    Runs in the background with the terminal free; stop with Ctrl-C.
+    Watches a file, a directory, or (with --live) an installed service's config
+    directory. On every change it re-runs the deterministic scan and prints ONE
+    compact log line: the new score and what changed — red when risk worsened,
+    green when it improved. Runs in the background with the terminal free.
 
     With --log, alerts are appended to a file and the terminal stays clean —
-    ideal for `caspar watch cfg --log ~/w.log &`; read it with `cat ~/w.log`.
+    ideal for `caspar watch cfg --log watch.log &`; read it with `cat watch.log`.
 
     Full detail is intentionally omitted — run `caspar scan <config>` for the
     complete report. Data comes from the DB (zero-LLM, zero-network).
@@ -1662,7 +1665,8 @@ def watch(ctx, input_path, interval, env_profile, log_path) -> None:
     \b
     caspar watch /etc/nginx/nginx.conf
     caspar watch /etc/apache2/ --profile production
-    caspar watch nginx.conf --log ~/watch.log &   # background, terminal free
+    caspar watch --live apache2                    # find + watch its config dir
+    caspar watch nginx.conf --log watch.log &      # background, terminal free
     """
     from config_assessment.core.db.database import Database
     from config_assessment.core.input_resolver import resolve
@@ -1675,15 +1679,22 @@ def watch(ctx, input_path, interval, env_profile, log_path) -> None:
         click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
         sys.exit(2)
 
-    # Resolve once to fail fast on a bad path. Watch is for static configs on
-    # disk, not --live/docker sources.
+    # Resolve once to fail fast. With --live, CONFIG is a service name resolved
+    # to its config dir (same mapping as `scan --live`); otherwise a disk path.
     try:
-        resolved = resolve(input_path, live=False)
+        resolved = resolve(input_path, live=live)
     except (FileNotFoundError, RuntimeError, ValueError) as e:
         click.echo(click.style(f"Error: {e}", fg="red"), err=True)
         sys.exit(2)
 
-    name = Path(resolved.path).name
+    # Label: the service name in --live mode (clearer than the entry file's
+    # basename), otherwise the path's basename.
+    if live:
+        name = resolved.metadata.get("service") or input_path
+        click.echo(click.style(
+            f"  Service: {name}  ({resolved.path})", fg="cyan"))
+    else:
+        name = Path(resolved.path).name
 
     # --log routes alerts to a file (append, colourless so it stays greppable).
     # The terminal then only gets a one-line pointer, so it stays free.

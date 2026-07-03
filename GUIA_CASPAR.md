@@ -593,11 +593,19 @@ se o risco piorou**, verde se melhorou. Não repete o relatório completo (para 
 em 2º plano com o terminal livre; deteção determinística por hash de conteúdo (Linux nativo, WSL2 e
 volumes Docker). Aceita `--profile` como o `scan`. Pára com `Ctrl-C` (ou `docker stop caspar-watch`).
 
+Aceita **ficheiro, diretório ou serviço** como alvo:
+
 ```bash
-caspar watch /etc/nginx/nginx.conf              # 1 linha de baseline; depois só alertas
-caspar watch /etc/apache2/ --profile production # diretório inteiro, baseline de produção
+caspar watch /etc/nginx/nginx.conf              # um ficheiro
+caspar watch /etc/apache2/ --profile production # um DIRETÓRIO inteiro (alerta se qualquer ficheiro mudar)
+caspar watch --live apache2                      # SERVIÇO: descobre a config e vigia-a (como scan --live)
 caspar watch nginx.conf --log watch.log &        # 2º plano, terminal LIVRE; lê com: cat watch.log
 ```
+
+- **Diretório:** não precisas de apontar a um ficheiro específico — dá a pasta (`/etc/apache2/`) e o
+  CASPAR vigia-a recursivamente; qualquer alteração em qualquer ficheiro dispara a re-auditoria.
+- **`--live <serviço>`:** nem precisas de saber o caminho — o CASPAR resolve a pasta de config do serviço
+  (mesmo mapa do `scan --live`) e vigia-a. Serviços: apache2, nginx, sshd, mysql, …
 
 Com `--log`, os alertas são **anexados** ao ficheiro (sem cor, prontos a `grep`) e o terminal fica livre —
 o modo recomendado para background. Sem `--log`, os alertas saem coloridos no próprio terminal.
