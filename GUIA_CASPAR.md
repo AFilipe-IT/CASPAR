@@ -606,6 +606,14 @@ caspar watch nginx.conf --log watch.log &        # 2º plano, terminal LIVRE; l�
   CASPAR vigia-a recursivamente; qualquer alteração em qualquer ficheiro dispara a re-auditoria.
 - **`--live <serviço>`:** nem precisas de saber o caminho — o CASPAR resolve a pasta de config do serviço
   (mesmo mapa do `scan --live`) e vigia-a. Serviços: apache2, nginx, sshd, mysql, …
+- **`--notify`:** além da linha no terminal do watch, transmite os agravamentos como **notificação de
+  sistema** (`wall` para todos os terminais do utilizador, `notify-send` no desktop). Assim quem estiver a
+  editar a config **noutro terminal** também recebe o aviso. (Em Docker, o wrapper partilha `/dev/pts` +
+  `utmp` do host para o `wall` chegar aos teus terminais.)
+
+```bash
+caspar watch ~/demo/apache2.conf --notify &   # alerta salta em qualquer terminal teu
+```
 
 Com `--log`, os alertas são **anexados** ao ficheiro (sem cor, prontos a `grep`) e o terminal fica livre —
 o modo recomendado para background. Sem `--log`, os alertas saem coloridos no próprio terminal.

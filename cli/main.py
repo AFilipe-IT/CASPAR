@@ -1650,9 +1650,12 @@ def promote(ctx, input_path, only_directive, docs_path, yes) -> None:
 @click.option("--log", "log_path", default=None, metavar="FILE",
               help="Append alerts to FILE instead of the terminal (for "
                    "background use: `caspar watch cfg --log watch.log &`).")
+@click.option("--notify", is_flag=True, default=False,
+              help="Also broadcast worsening alerts as a system notification "
+                   "(wall / notify-send), so they reach any terminal.")
 @click.pass_context
 def watch(ctx, input_path, live, service_version, interval, env_profile,
-          log_path) -> None:
+          log_path, notify) -> None:
     """Continuously audit a config: alert on screen whenever it changes.
 
     Watches a file, a directory, or (with --live) an installed service's config
@@ -1761,12 +1764,41 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
                 _emit(base)
             else:
                 _emit(_watch_alert_line(ts, name, result, prev))
+                # System notification on a WORSENING change, so the alert reaches
+                # whoever is editing the config in another terminal.
+                if notify and result.global_temporal_score > \
+                        (prev.global_temporal_score if prev else 0.0) + 0.05:
+                    _notify_system(
+                        f"CASPAR: {name} risk {prev.global_temporal_score:.1f}"
+                        f"→{result.global_temporal_score:.1f} [{result.severity}]")
             prev = result
     except KeyboardInterrupt:
         click.echo(click.style("\n  Stopped.", dim=True))
     finally:
         if _log_fh is not None:
             _log_fh.close()
+
+
+def _notify_system(message: str) -> None:
+    """Best-effort system notification, so an alert reaches any terminal.
+
+    Tries `wall` (broadcasts to all of the user's terminals — works headless /
+    over SSH) and `notify-send` (desktop popup, if a GUI is present). Silently
+    does nothing if neither exists — notification is a bonus, never fatal."""
+    import shutil
+    import subprocess
+    for cmd in (["wall"], ["notify-send", "CASPAR"]):
+        exe = shutil.which(cmd[0])
+        if not exe:
+            continue
+        try:
+            if cmd[0] == "wall":
+                subprocess.run([exe], input=message, text=True,
+                               timeout=5, check=False)
+            else:
+                subprocess.run(cmd + [message], timeout=5, check=False)
+        except (OSError, subprocess.SubprocessError):
+            continue
 
 
 def _watch_alert_line(ts, name, result, prev) -> str:

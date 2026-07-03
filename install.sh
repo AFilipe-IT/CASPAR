@@ -112,6 +112,13 @@ if echo "$*" | grep -qE "(\-\-live|(^| )watch( |$))"; then
     MOUNT_ARGS="$MOUNT_ARGS -v /etc:/etc:ro"
 fi
 
+# --notify: para o 'wall' de dentro do container alcançar os terminais do HOST,
+# partilha-se os pseudo-terminais do host e a lista de logins (utmp). Sem isto,
+# a notificação ficaria presa no container. Só quando --notify é pedido.
+if echo "$*" | grep -q "\-\-notify"; then
+    MOUNT_ARGS="$MOUNT_ARGS -v /dev/pts:/dev/pts -v /run/utmp:/run/utmp:ro"
+fi
+
 # --- Injeção de versão no modo --live --------------------------------------
 # O container está isolado e não tem o binário do serviço, por isso não pode
 # correr 'httpd -v'. Corremo-lo AQUI (no host, onde o serviço está instalado) e

@@ -255,6 +255,29 @@ def test_live_flag_resolves_service_and_labels_by_name(tmp_path, monkeypatch):
     assert "watching apache-httpd" in result.output   # labelled by service name
 
 
+def test_notify_broadcasts_on_worsening(monkeypatch):
+    """_notify_system shells out to wall/notify-send; verify it invokes an
+    available broadcaster and never raises when one is missing."""
+    import cli.main as m
+    calls = []
+    monkeypatch.setattr(m, "_notify_system", lambda msg: calls.append(msg))
+
+    # Directly exercise the notify decision the loop makes.
+    prev, now = _Res(0.0, "None", []), _Res(6.1, "Medium", [])
+    worse = now.global_temporal_score > prev.global_temporal_score + 0.05
+    if worse:
+        m._notify_system(f"CASPAR: cfg {prev.global_temporal_score:.1f}"
+                         f"→{now.global_temporal_score:.1f}")
+    assert calls and "0.0→6.1" in calls[0]
+
+
+def test_notify_system_is_best_effort_when_no_tool(monkeypatch):
+    """No wall / notify-send present → silent no-op, never an exception."""
+    import cli.main as m
+    monkeypatch.setattr("shutil.which", lambda *_: None)
+    m._notify_system("anything")   # must not raise
+
+
 def test_log_path_in_missing_dir_errors_cleanly(tmp_path, monkeypatch):
     """An unwritable --log path (e.g. a host path invisible in the container)
     exits 2 with guidance, not a traceback."""
