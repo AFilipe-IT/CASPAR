@@ -1639,6 +1639,9 @@ def promote(ctx, input_path, only_directive, docs_path, yes) -> None:
 @click.option("--live", "-l", is_flag=True, default=False,
               help="CONFIG is an installed service name (e.g. apache2); watch "
                    "its config directory. Resolves the path like `scan --live`.")
+@click.option("--service-version", "service_version", default=None,
+              help="Service version for CVE/exploit cross-reference (the Docker "
+                   "wrapper injects this from the host in --live mode).")
 @click.option("--interval", "-i", default=1.0, type=float, show_default=True,
               help="Seconds between checks for a config change.")
 @click.option("--profile", "env_profile", default=None,
@@ -1648,7 +1651,8 @@ def promote(ctx, input_path, only_directive, docs_path, yes) -> None:
               help="Append alerts to FILE instead of the terminal (for "
                    "background use: `caspar watch cfg --log watch.log &`).")
 @click.pass_context
-def watch(ctx, input_path, live, interval, env_profile, log_path) -> None:
+def watch(ctx, input_path, live, service_version, interval, env_profile,
+          log_path) -> None:
     """Continuously audit a config: alert on screen whenever it changes.
 
     Watches a file, a directory, or (with --live) an installed service's config
@@ -1727,9 +1731,16 @@ def watch(ctx, input_path, live, interval, env_profile, log_path) -> None:
         else:
             click.echo("  " + styled_line)
 
+    # Version for CVE/exploit cross-reference: explicit flag wins, else the
+    # resolver's --live detection (same precedence as `scan`).
+    _version = service_version or resolved.metadata.get("version") or None
+    if _version == "unknown":
+        _version = None
+
     def _scan():
         with Database(db_path) as db:
-            return runtime.scan(resolved.path, db, env_profile=env_profile)
+            return runtime.scan(resolved.path, db, version=_version,
+                                env_profile=env_profile)
 
     prev = None   # previous ScanResult, for the delta
     try:

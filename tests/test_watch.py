@@ -245,7 +245,10 @@ def test_live_flag_resolves_service_and_labels_by_name(tmp_path, monkeypatch):
     monkeypatch.setattr("config_assessment.core.db.database.Database",
                         lambda *a, **k: _DummyDB())
 
-    result = CliRunner().invoke(m.cli, ["watch", "apache2", "--live"])
+    # --service-version is accepted (the Docker wrapper injects it for --live);
+    # it must not raise "no such option".
+    result = CliRunner().invoke(
+        m.cli, ["watch", "apache2", "--live", "--service-version", "2.4.52"])
     assert result.exit_code == 0
     assert seen["live"] is True and seen["input"] == "apache2"
     assert "Service: apache-httpd" in result.output
