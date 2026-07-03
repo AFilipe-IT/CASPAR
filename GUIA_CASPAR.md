@@ -19,6 +19,7 @@
 13. [Requisitos e tempos](#13-requisitos-de-sistema-e-tempos-esperados) · 14. [Attack chains em detalhe](#14-attack-chains-em-detalhe-exemplo-real) ·
 15. [CI/CD](#15-integração-cicd-github-actions) · 16. [Comandos de produtividade](#16-comandos-de-produtividade) ·
 17. [Directivas desconhecidas](#17-deteção-de-directivas-desconhecidas) ·
+17-B. [Engenharia do `watch`](#17-b-engenharia-do-watch--problemática--solução--como-se-resolveu) ·
 18. [Criar um plugin do zero](#18-criar-um-plugin-do-zero-utilizadores-avançados) ·
 19. [Troubleshooting](#19-troubleshooting--erros-comuns) · 20. [vs outras ferramentas](#20-posicionamento-vs-outras-ferramentas) ·
 21. [Roadmap](#21-roadmap--trabalho-futuro)
@@ -447,7 +448,7 @@ A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql
 | Version-exploits pré-computados | **19** (mapeamento versão → CVEs/exploits) |
 | Alvos disponíveis via `plugin fetch` | **43** (stigviewer.com) |
 | Versão da DB base (para o reseed) | **2** (`caspar_meta.base_db_version`) |
-| Testes automatizados | **493** (a passar) |
+| Testes automatizados | **515** (a passar) |
 
 Distribuição das 228 misconfigs pelos 7 targets: **docker 57 · tomcat 49 · apache-httpd 35 ·
 redis 29 · mysql 23 · nginx 18 · ssh 17**. Estes números são **verificáveis** — inspeciona a DB com
@@ -685,11 +686,34 @@ caspar history                     # todos os scans recentes
 caspar history nginx.conf --last 5
 ```
 
-**`watch` — re-scan automático ao editar.** Feedback em tempo real durante hardening manual (mostra
-o score a subir/descer a cada gravação do ficheiro):
+**`watch` — auditoria contínua de drift (alerta em tempo real).** Vigia um ficheiro, um diretório ou um
+serviço e, sempre que a config muda, imprime **uma linha de alerta** com o novo score e o que mudou —
+**vermelho se o risco piorou**, verde se melhorou. Deteção determinística por hash de conteúdo (Linux
+nativo, WSL2 e volumes Docker). Corre em 2º plano com o terminal livre; pára com `Ctrl-C` (ou
+`docker stop caspar-watch`). Ver a §17-B para a engenharia por trás.
+
+Três alvos:
 
 ```bash
-caspar watch /etc/nginx/nginx.conf
+caspar watch /etc/nginx/nginx.conf              # um ficheiro
+caspar watch /etc/apache2/ --profile production # um DIRETÓRIO inteiro (alerta se qualquer ficheiro mudar)
+caspar watch --live apache2                      # SERVIÇO: descobre a config e vigia-a (como scan --live)
+```
+
+Duas formas de entrega (background):
+
+```bash
+caspar watch nginx.conf --log watch.log &        # alertas para ficheiro (sem cor, grep-áveis); terminal limpo
+caspar watch apache2.conf --notify &             # notificação de sistema — chega a QUALQUER terminal do utilizador
+```
+
+Exemplo (config limpa que passa a ter misconfigs e depois é corrigida):
+
+```
+[02:00:40] ○ watching apache2.conf — baseline 0.0/10 [None]
+[02:00:41] ⚠ apache2.conf  0.0 → 8.9  [High]      +1 issue  ↑ ServerTokens=Full (7.1)
+[02:00:44] ⚠ apache2.conf  8.9 → 10.0 [Critical]  +1 issue  ↑ User=root (8.7)
+[02:00:49] ✓ apache2.conf  10.0 → 0.0 [None]      -2 issues
 ```
 
 **`badge` — badge de score para README** (estilo shields.io):
@@ -738,10 +762,14 @@ A solução funciona em **três camadas**, desenhadas para **não quebrar o dete
 regra na base (nem *value* nem *absence*) é reportada num painel `UNCOVERED DIRECTIVES`. Não é
 pontuada — é uma lacuna de cobertura, tornada visível. Puro conjunto-diferença, sem LLM.
 
-**Camada 2 — triagem heurística (determinística).** Das não-cobertas, marca as *suspeitas* por regras
-de padrão auditáveis: valor `*`, bind a `0.0.0.0`, permissões `777`, uma directiva com nome de
-segurança (`ssl`, `verify`, `auth`…) posta a `off`, ou um nome que sugere não-produção (`debug`,
-`experimental`, `test`). Continua sem LLM.
+**Camada 2 — triagem heurística (determinística).** Das não-cobertas, marca as *suspeitas* por **14
+padrões de valor** auditáveis + **27 nomes de segurança** + **15 nomes de não-produção**: exposição ampla
+(`*`, `0.0.0.0`, `0.0.0.0/0`, `https://*`), protocolos/cifras obsoletos (`TLSv1.0`, `SSLv3`, `RC4`,
+`MD5`), segredos em claro (`password=`, `api_key=`), shell no valor (`/bin/bash`, `eval`), permissões
+`666`/`777`, caminhos temporários (`/tmp`, `/dev/shm`), valores de não-produção (`trace`, `verbose`,
+`development`), ou uma directiva com nome de segurança (`ssl`, `auth`, `cors`, `privilege`…) posta a
+`off`. Tudo **ancorado ao valor inteiro** para evitar falsos positivos em listas de tokens (ex.:
+`AddLanguage no .no`). Continua sem LLM.
 
 ```
 UNCOVERED DIRECTIVES  (5)  3 suspicious
@@ -770,6 +798,55 @@ caspar scan nginx.conf --assess-unknown --docs manual_nginx_2.6.txt   # + docs p
 > opcionalmente, dá um palpite fundamentado. Nunca promete detetar exploits desconhecidos, e por isso
 > mantém a credibilidade do scoring determinístico: o LLM fica confinado a candidatos claramente
 > rotulados, fora do score.
+
+---
+
+## 17-B. Engenharia do `watch` — problemática → solução → como se resolveu
+
+Esta secção documenta o percurso da funcionalidade de **auditoria contínua** (`caspar watch`), do
+requisito ao estado final. É deliberadamente narrativa: cada linha é uma decisão de engenharia com o seu
+*porquê*, e a maioria dos problemas só apareceu ao **validar em ambiente real** (a VM de teste), não nos
+testes unitários — que é a lição central.
+
+### Requisito
+
+> *"Ativar um modo de auditoria automática: quando uma config muda, disparar um alerta sobre uma possível
+> misconfiguration e o impacto que ela pode ter (conteúdo já na base de dados)."*
+
+### As decisões de design (problemática → solução)
+
+| # | Problemática | Solução | Como se resolveu |
+|---|--------------|---------|------------------|
+| 1 | Detetar mudanças sem violar o invariante *runtime determinístico* | Loop de **polling por hash de conteúdo**, não `inotify` | Núcleo só de I/O (`core/watch.py`) que emite `ChangeEvent`; o scoring continua o `runtime.scan` (zero-LLM, zero-rede). Funciona igual em Linux nativo, WSL2 e volumes Docker |
+| 2 | Um relatório completo por cada gravação é ruído | **Uma linha de alerta** compacta: score, delta e a directiva culpada | `_watch_alert_line`: vermelho se o risco *agregado* piorou, verde se melhorou, neutro se igual. Critério único (score global) → defensável |
+| 3 | Em 2º plano o `tail -f` duplicava linhas e "prendia" o prompt | Flag **`--log FILE`**: alertas para ficheiro (sem cor, grep-áveis); terminal só recebe uma linha-ponteiro | Substitui a receita `> log & tail -f`; o daemon fica parável com `docker stop caspar-watch` |
+| 4 | Vigiar um **serviço** exigia saber o caminho da config | Flag **`--live <serviço>`** | Reutiliza o resolvedor do `scan --live` (mapa `apache2 → /etc/apache2/…`); rotula o alerta pelo nome do serviço |
+| 5 | Cobrir configs novas de uma atualização | **Deteção de directivas desconhecidas** (§17) já corre em cada re-scan | Camadas 1+2 determinísticas; o `watch` herda-as automaticamente |
+
+### Os 6 bugs de integração Docker (só visíveis a correr na VM)
+
+O `watch` corre dentro de um container isolado. Cada fronteira host/container revelou um bug que **os
+testes unitários não podiam apanhar** — e cada um foi corrigido com o seu commit:
+
+| # | Sintoma na VM | Causa raiz | Correção |
+|---|---------------|-----------|----------|
+| 1 | `watch /etc/apache2/…` → *"Not found"* | O wrapper só montava `/etc` do host com `--live` | Montar `/etc:ro` também para `watch` (é uma vista *live* → o polling vê as edições) |
+| 2 | `--log ~/w.log` → traceback | O `~` do host não existe dentro do container | Erro limpo com orientação, em vez de traceback |
+| 3 | `--log watch.log` → *"Read-only file system"* | A cwd é montada `:ro` (correto para `scan`) | Montar a cwd `:rw` **apenas** para `watch --log` |
+| 4 | `watch --live apache2` → *"No such option: --service-version"* | O wrapper injeta `--service-version` para todo o `--live`, mas o `watch` não a declarava | `watch` passa a aceitar `--service-version` e a passá-la ao scan |
+| 5 | Só funcionava dentro da pasta da config | O wrapper montava só a cwd | O wrapper deteta o caminho do alvo, monta **a pasta dele** e reescreve o argumento para `/workspace/…`. Funciona de qualquer diretório |
+| 6 | `--notify` mudo em WSL2 | `wall` depende de `utmp`, que o WSL2 não popula | **Fallback**: escrever direto nos `/dev/pts/*` (o que o `wall` faz por baixo, sem `utmp`) → funciona em WSL2, contentores e Linux real |
+
+### Estado final
+
+Da ideia "auditoria automática" a uma funcionalidade de nível de produto: **3 alvos** (ficheiro /
+diretório / `--live`), **alerta compacto colorido**, **`--log`** e **`--notify`** para background, daemon
+parável, e funciona de qualquer pasta. **16 testes** dedicados; a notificação com três camadas
+(`notify-send` → `wall` → escrita em `/dev/pts`) é robusta e independente do ambiente.
+
+> **Lição para a dissertação:** testes unitários verdes provam a lógica; **só a validação empírica na
+> máquina-alvo revela os problemas de fronteira** (host/container, permissões, ambiente). Os seis bugs
+> acima são exatamente esse tipo de rigor — cada um reproduzido, diagnosticado e corrigido com evidência.
 
 ---
 
@@ -855,10 +932,12 @@ determinística e auditável.
 - **Refinamento do scoring:** calibração das submétricas com mais ground truth CCE (hoje só o
   apache-httpd tem CCE para calibração).
 
-*(Já implementado nesta linha:* `diff`, `suppress`, `history`, `explain`, `watch`, `badge`,
-`fetch --search`, exit codes diferenciados, `fix` (remediação), `promote` (aprender directivas),
-`report` (merge), `doctor` (integridade + auditoria de narrativas), `--profile` (baseline de
-ambiente) — ver §16.)*
+*(Já implementado nesta linha:* `diff`, `suppress`, `history`, `explain`, `badge`, `fetch --search`,
+exit codes diferenciados, `fix` (remediação), `promote` (aprender directivas), `report` (merge),
+`doctor` (integridade + auditoria de narrativas), `--profile` (baseline de ambiente), e o
+**`watch` completo** — auditoria contínua com 3 alvos (ficheiro/diretório/`--live`), alerta compacto,
+`--log` e `--notify` (ver §16 e a engenharia em §17-B). Triagem da Camada 2 reforçada para 14 padrões de
+valor — ver §17.)*
 
 ---
 
@@ -873,6 +952,7 @@ ambiente) — ver §16.)*
 | Mexer nas fórmulas CCSS / cap de impacto das chains | `config_assessment/core/ccss.py` |
 | Perfis de ambiente (production/internal/dev) | `config_assessment/core/runtime.py` (`ENV_PROFILES`) |
 | Remediação assistida (`caspar fix`) | `config_assessment/reports/remediation.py` |
+| Auditoria contínua (`caspar watch`) — loop e alerta | `config_assessment/core/watch.py` + `cli/main.py` |
 | Integridade da DB / auditoria de narrativas | `config_assessment/core/db/doctor.py` |
 | Moderar justificações de chains do apache | `config_assessment/plugins/apache_httpd/chains.json` |
 | Adicionar um comando CLI | `cli/main.py` |
