@@ -1782,23 +1782,62 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
 def _notify_system(message: str) -> None:
     """Best-effort system notification, so an alert reaches any terminal.
 
-    Tries `wall` (broadcasts to all of the user's terminals — works headless /
-    over SSH) and `notify-send` (desktop popup, if a GUI is present). Silently
-    does nothing if neither exists — notification is a bonus, never fatal."""
+    Three layers, all best-effort (a failure never breaks the watch):
+      1. `notify-send` — desktop popup, if a GUI is present.
+      2. `wall` — the standard util-linux broadcast (all the user's login
+         terminals); works on a real Linux server / over SSH.
+      3. Direct write to each writable /dev/pts/* — what wall does underneath,
+         but WITHOUT needing utmp to be populated. This is the fallback that
+         makes --notify work where wall can't: WSL2, containers, minimal
+         systems with no login records."""
     import shutil
     import subprocess
-    for cmd in (["wall"], ["notify-send", "CASPAR"]):
-        exe = shutil.which(cmd[0])
-        if not exe:
+    banner = f"\n\N{WARNING SIGN}  {message}\n"
+
+    if shutil.which("notify-send"):
+        try:
+            subprocess.run(["notify-send", "CASPAR", message],
+                           timeout=5, check=False)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    delivered = False
+    if shutil.which("wall"):
+        try:
+            # wall -n suppresses the banner header if permitted; ignore failure.
+            subprocess.run(["wall"], input=message, text=True,
+                           timeout=5, check=False)
+            delivered = True
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    # Fallback: write straight to the active PTYs. Independent of utmp, so it
+    # reaches other terminals on WSL2 / in containers where wall stays silent.
+    _write_to_ptys(banner)
+
+
+def _write_to_ptys(text: str) -> None:
+    """Write text to every /dev/pts/* we can open for writing (best-effort)."""
+    import os
+    import glob
+    my_tty = None
+    try:
+        my_tty = os.ttyname(1)   # don't double-print on our own terminal
+    except OSError:
+        pass
+    for pts in glob.glob("/dev/pts/[0-9]*"):
+        if pts == my_tty:
             continue
         try:
-            if cmd[0] == "wall":
-                subprocess.run([exe], input=message, text=True,
-                               timeout=5, check=False)
-            else:
-                subprocess.run(cmd + [message], timeout=5, check=False)
-        except (OSError, subprocess.SubprocessError):
-            continue
+            fd = os.open(pts, os.O_WRONLY | os.O_NONBLOCK)
+        except OSError:
+            continue          # not ours / not writable — skip
+        try:
+            os.write(fd, text.encode("utf-8", "replace"))
+        except OSError:
+            pass
+        finally:
+            os.close(fd)
 
 
 def _watch_alert_line(ts, name, result, prev) -> str:

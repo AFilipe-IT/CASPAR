@@ -272,10 +272,27 @@ def test_notify_broadcasts_on_worsening(monkeypatch):
 
 
 def test_notify_system_is_best_effort_when_no_tool(monkeypatch):
-    """No wall / notify-send present → silent no-op, never an exception."""
+    """No wall / notify-send present → still writes to PTYs, never raises."""
     import cli.main as m
     monkeypatch.setattr("shutil.which", lambda *_: None)
+    monkeypatch.setattr(m, "_write_to_ptys", lambda *_: None)
     m._notify_system("anything")   # must not raise
+
+
+def test_pts_fallback_writes_to_writable_ptys(tmp_path, monkeypatch):
+    """The PTY fallback writes the message to each pts it can open — this is
+    what makes --notify reach other terminals on WSL2 / in containers where
+    wall is silent (no utmp)."""
+    import cli.main as m
+
+    fake_pts = tmp_path / "3"
+    fake_pts.write_text("")   # stand-in for /dev/pts/3
+    monkeypatch.setattr("glob.glob", lambda pat: [str(fake_pts)])
+    # Our own tty is something else, so the fake pts is not skipped.
+    monkeypatch.setattr("os.ttyname", lambda fd: "/dev/pts/999")
+
+    m._write_to_ptys("\n⚠  CASPAR: cfg 0.0→6.1\n")
+    assert "CASPAR: cfg 0.0→6.1" in fake_pts.read_text()
 
 
 def test_log_path_in_missing_dir_errors_cleanly(tmp_path, monkeypatch):
