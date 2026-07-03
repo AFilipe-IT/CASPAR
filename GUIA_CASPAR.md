@@ -596,11 +596,16 @@ volumes Docker). Aceita `--profile` como o `scan`. Pára com `Ctrl-C` (ou `docke
 ```bash
 caspar watch /etc/nginx/nginx.conf              # 1 linha de baseline; depois só alertas
 caspar watch /etc/apache2/ --profile production # diretório inteiro, baseline de produção
-caspar watch nginx.conf --log ~/watch.log &      # 2º plano, terminal LIVRE; lê com: cat ~/watch.log
+caspar watch nginx.conf --log watch.log &        # 2º plano, terminal LIVRE; lê com: cat watch.log
 ```
 
 Com `--log`, os alertas são **anexados** ao ficheiro (sem cor, prontos a `grep`) e o terminal fica livre —
 o modo recomendado para background. Sem `--log`, os alertas saem coloridos no próprio terminal.
+
+> **Docker:** usa um caminho **relativo** para `--log` (ex.: `--log watch.log`, corrido de dentro da
+> pasta que estás a analisar). O wrapper monta a pasta atual no container, por isso `watch.log` aparece
+> na tua pasta no host. Um caminho absoluto como `~/watch.log` **não** funciona dentro do container
+> (o `~` do host não está montado) — o CASPAR avisa-te com uma mensagem clara se tentares.
 
 Exemplo de saída (config limpa que passa a ter uma misconfiguration e depois é corrigida):
 

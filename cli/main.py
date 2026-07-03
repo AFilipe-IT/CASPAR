@@ -1689,7 +1689,22 @@ def watch(ctx, input_path, interval, env_profile, log_path) -> None:
     # The terminal then only gets a one-line pointer, so it stays free.
     _log_fh = None
     if log_path:
-        _log_fh = open(log_path, "a", encoding="utf-8", buffering=1)  # line-buffered
+        try:
+            _log_fh = open(log_path, "a", encoding="utf-8", buffering=1)  # line-buffered
+        except OSError as e:
+            # Common under the Docker wrapper: an absolute host path like
+            # ~/watch.log isn't visible inside the container (only the mounted
+            # cwd is). Point the user at a path that works, don't dump a trace.
+            click.echo(click.style(
+                f"Cannot write log to '{log_path}': {e.strerror}.", fg="red"),
+                err=True)
+            click.echo(
+                "  In Docker, the log must land in the mounted working dir — "
+                "use a path inside it, e.g. " +
+                click.style("--log watch.log", bold=True) +
+                " (relative), then read it with " +
+                click.style("cat watch.log", bold=True) + ".", err=True)
+            sys.exit(2)
         click.echo(
             f"  {click.style('○', fg='cyan')} watching {name} in background — "
             f"alerts → {click.style(log_path, bold=True)}"

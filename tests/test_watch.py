@@ -211,3 +211,21 @@ def test_log_flag_writes_colourless_alerts_and_keeps_terminal_clean(
     assert "baseline 0.0/10 [None]" in body
     assert "0.0 → 8.9" in body and "ServerTokens=Full" in body
     assert "\x1b[" not in body   # colourless
+
+
+def test_log_path_in_missing_dir_errors_cleanly(tmp_path, monkeypatch):
+    """An unwritable --log path (e.g. a host path invisible in the container)
+    exits 2 with guidance, not a traceback."""
+    from click.testing import CliRunner
+    import cli.main as m
+
+    cfg = tmp_path / "httpd.conf"
+    cfg.write_text("ServerTokens Prod\n")
+    monkeypatch.setattr(m.Path, "exists", lambda self: True)
+
+    bad = tmp_path / "no-such-dir" / "w.log"   # parent doesn't exist
+    result = CliRunner().invoke(m.cli, ["watch", str(cfg), "--log", str(bad)])
+    assert result.exit_code == 2
+    assert "Cannot write log" in result.output
+    assert "--log watch.log" in result.output   # points at a working form
+    assert "Traceback" not in result.output
