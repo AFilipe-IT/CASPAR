@@ -69,6 +69,31 @@ if ! echo "$*" | grep -q "\-\-live"; then
     done
 fi
 
+# Reescrever o valor de --log para o interior de /workspace, para que um caminho
+# absoluto (ex.: --log ~/demo/watch.log) funcione dentro do container. Se cair
+# dentro da pasta montada, converte para /workspace/<relativo>; se for só um
+# nome (sem barra), fica como está (já resolve para /workspace). Assim o
+# utilizador pode dar o log no mesmo sítio da config sem pensar no mount.
+_new=(); _take_log=0
+for _a in "$@"; do
+    if [ "$_take_log" = "1" ]; then
+        _take_log=0
+        case "$_a" in
+            /*)  # absoluto: se estiver sob a pasta montada, torna-o relativo a /workspace
+                case "$_a" in
+                    "$WORKDIR_HOST"/*) _new+=("/workspace/${_a#$WORKDIR_HOST/}") ;;
+                    *)                 _new+=("$_a") ;;   # fora: deixa (o CASPAR avisa)
+                esac ;;
+            */*) _new+=("/workspace/$_a") ;;             # relativo com subpasta
+            *)   _new+=("$_a") ;;                          # nome simples: já vai p/ /workspace
+        esac
+        continue
+    fi
+    _new+=("$_a")
+    [ "$_a" = "--log" ] && _take_log=1
+done
+set -- "${_new[@]}"
+
 # Montar a pasta escolhida em /workspace (leitura apenas por omissão).
 # Excepção: 'watch --log' precisa de ESCREVER o ficheiro de log, logo read-write.
 if echo "$*" | grep -qE "(^| )watch( |$)" && echo "$*" | grep -q "\-\-log"; then
