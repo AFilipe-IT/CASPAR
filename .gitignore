@@ -62,3 +62,9 @@ narratives_reference.txt
 
 # CASPAR user state
 .caspar-suppress.json
+
+# Material da dissertação (não pertence ao repo do código)
+*.zip
+FCUP_thesis_layout/
+caspar_inforum2026/
+documentosccss/
