@@ -35,13 +35,46 @@ if echo "$*" | grep -qE "$BUILDTIME_CMDS" \
     IMAGE="alfilipe/caspar:full"
 fi
 
-# Montar o directório actual para scan de ficheiros locais (leitura apenas).
-# Excepção: 'watch --log' precisa de ESCREVER o ficheiro de log na cwd montada,
-# por isso nesse caso monta-se read-write. (watch sem --log continua read-only.)
+# Escolher a pasta de trabalho a montar em /workspace. Por omissão é a cwd, mas
+# se o utilizador passar um CAMINHO existente (ficheiro/pasta) fora da cwd — ex.:
+# 'caspar watch ~/demo/apache2.conf' corrido de outro sítio — montamos a pasta
+# DESSE caminho e reescrevemos o argumento para o caminho equivalente dentro do
+# container. Assim o comando funciona de qualquer diretório.
+# Excepções (ficam na cwd): modo --live (o alvo é um nome de serviço, não um
+# caminho) e caminhos sob /etc (já montado read-only mais abaixo).
+WORKDIR_HOST="$(pwd)"
+if ! echo "$*" | grep -q "\-\-live"; then
+    for _arg in "$@"; do
+        case "$_arg" in
+            -*) continue ;;                    # é uma flag, não um caminho
+            /etc/*) continue ;;                # já coberto pelo mount de /etc
+        esac
+        if [ -e "$_arg" ]; then
+            # Monta a pasta que CONTÉM o alvo e reescreve o argumento para o
+            # caminho equivalente sob /workspace. Um ficheiro → monta o dirname;
+            # uma pasta → monta a própria pasta. Funciona de qualquer cwd.
+            if [ -d "$_arg" ]; then
+                WORKDIR_HOST=$(cd "$_arg" && pwd)
+                _wsarg="/workspace"
+            else
+                WORKDIR_HOST=$(cd "$(dirname "$_arg")" && pwd)
+                _wsarg="/workspace/$(basename "$_arg")"
+            fi
+            _new=(); for _a in "$@"; do
+                if [ "$_a" = "$_arg" ]; then _new+=("$_wsarg"); else _new+=("$_a"); fi
+            done
+            set -- "${_new[@]}"
+            break
+        fi
+    done
+fi
+
+# Montar a pasta escolhida em /workspace (leitura apenas por omissão).
+# Excepção: 'watch --log' precisa de ESCREVER o ficheiro de log, logo read-write.
 if echo "$*" | grep -qE "(^| )watch( |$)" && echo "$*" | grep -q "\-\-log"; then
-    MOUNT_ARGS="-v $(pwd):/workspace"          # read-write: para o log
+    MOUNT_ARGS="-v $WORKDIR_HOST:/workspace"    # read-write: para o log
 else
-    MOUNT_ARGS="-v $(pwd):/workspace:ro"
+    MOUNT_ARGS="-v $WORKDIR_HOST:/workspace:ro"
 fi
 
 # Em modo --live (e watch), montar /etc do host (leitura) para inspecionar a
