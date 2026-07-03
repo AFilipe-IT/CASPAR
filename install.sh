@@ -35,8 +35,14 @@ if echo "$*" | grep -qE "$BUILDTIME_CMDS" \
     IMAGE="alfilipe/caspar:full"
 fi
 
-# Montar o directório actual para scan de ficheiros locais
-MOUNT_ARGS="-v $(pwd):/workspace:ro"
+# Montar o directório actual para scan de ficheiros locais (leitura apenas).
+# Excepção: 'watch --log' precisa de ESCREVER o ficheiro de log na cwd montada,
+# por isso nesse caso monta-se read-write. (watch sem --log continua read-only.)
+if echo "$*" | grep -qE "(^| )watch( |$)" && echo "$*" | grep -q "\-\-log"; then
+    MOUNT_ARGS="-v $(pwd):/workspace"          # read-write: para o log
+else
+    MOUNT_ARGS="-v $(pwd):/workspace:ro"
+fi
 
 # Em modo --live (e watch), montar /etc do host (leitura) para inspecionar a
 # configuração do serviço em execução. O bind-mount é uma vista live do host,
