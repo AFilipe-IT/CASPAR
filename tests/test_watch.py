@@ -160,3 +160,54 @@ def test_alert_line_unchanged_score_is_neutral():
     now = _Res(8.9, "High", [_Issue("a", 5.0), _Issue("b", 5.4, "All")])
     line = _line(now, prev)
     assert "•" in line and "+1 issue" in line
+
+
+# ── --log routing (background use) ─────────────────────────────────────
+
+def test_log_flag_writes_colourless_alerts_and_keeps_terminal_clean(
+        tmp_path, monkeypatch):
+    """--log appends colourless alerts to a file; the terminal only gets the
+    one-line pointer (so it stays free in the background)."""
+    from click.testing import CliRunner
+    import cli.main as m
+
+    cfg = tmp_path / "httpd.conf"
+    cfg.write_text("ServerTokens Prod\n")
+    logf = tmp_path / "w.log"
+
+    # watch imports these locally (from ... import ...), so patch them at their
+    # SOURCE modules where the local imports resolve them.
+    scores = iter([_Res(0.0, "None", []),
+                   _Res(8.9, "High", [_Issue("ServerTokens", 7.1, "Full")])])
+    monkeypatch.setattr("config_assessment.core.runtime.scan",
+                        lambda *a, **k: next(scores))
+
+    def fake_loop(path, **k):
+        yield ChangeEvent(cfg, "d0", None)
+        yield ChangeEvent(cfg, "d1", "d0")
+    monkeypatch.setattr("config_assessment.core.watch.watch", fake_loop)
+
+    # A real DB isn't needed — a no-op context manager suffices.
+    class _DummyDB:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr("config_assessment.core.db.database.Database",
+                        lambda *a, **k: _DummyDB())
+    # Bypass the DB-file existence check.
+    monkeypatch.setattr(m.Path, "exists", lambda self: True)
+
+    runner = CliRunner()
+    result = runner.invoke(m.cli, ["watch", str(cfg), "--log", str(logf)])
+    assert result.exit_code == 0
+
+    # Terminal: pointer line only — no alert content (the score move / baseline
+    # score belong in the file, not the terminal).
+    assert "in background" in result.output
+    assert "0.0 → 8.9" not in result.output   # no alert line leaked to terminal
+    assert "baseline 0.0/10" not in result.output
+
+    # File: baseline + the worsening alert, no ANSI escapes.
+    body = logf.read_text()
+    assert "baseline 0.0/10 [None]" in body
+    assert "0.0 → 8.9" in body and "ServerTokens=Full" in body
+    assert "\x1b[" not in body   # colourless

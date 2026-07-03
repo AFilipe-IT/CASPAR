@@ -596,8 +596,11 @@ volumes Docker). Aceita `--profile` como o `scan`. Pára com `Ctrl-C` (ou `docke
 ```bash
 caspar watch /etc/nginx/nginx.conf              # 1 linha de baseline; depois só alertas
 caspar watch /etc/apache2/ --profile production # diretório inteiro, baseline de produção
-caspar watch nginx.conf -i 2 &                   # em 2º plano, verifica a cada 2s (default 1s)
+caspar watch nginx.conf --log ~/watch.log &      # 2º plano, terminal LIVRE; lê com: cat ~/watch.log
 ```
+
+Com `--log`, os alertas são **anexados** ao ficheiro (sem cor, prontos a `grep`) e o terminal fica livre —
+o modo recomendado para background. Sem `--log`, os alertas saem coloridos no próprio terminal.
 
 Exemplo de saída (config limpa que passa a ter uma misconfiguration e depois é corrigida):
 

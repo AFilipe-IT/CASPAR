@@ -1641,8 +1641,11 @@ def promote(ctx, input_path, only_directive, docs_path, yes) -> None:
 @click.option("--profile", "env_profile", default=None,
               type=click.Choice(["production", "internal", "dev"]),
               help="Environment baseline for scoring (as in scan).")
+@click.option("--log", "log_path", default=None, metavar="FILE",
+              help="Append alerts to FILE instead of the terminal (for "
+                   "background use: `caspar watch cfg --log ~/w.log &`).")
 @click.pass_context
-def watch(ctx, input_path, interval, env_profile) -> None:
+def watch(ctx, input_path, interval, env_profile, log_path) -> None:
     """Continuously audit a config: alert on screen whenever it changes.
 
     Watches the file (or directory) and, on every change, re-runs the
@@ -1650,12 +1653,16 @@ def watch(ctx, input_path, interval, env_profile) -> None:
     changed. The line is red when the risk got worse, green when it improved.
     Runs in the background with the terminal free; stop with Ctrl-C.
 
+    With --log, alerts are appended to a file and the terminal stays clean —
+    ideal for `caspar watch cfg --log ~/w.log &`; read it with `cat ~/w.log`.
+
     Full detail is intentionally omitted — run `caspar scan <config>` for the
     complete report. Data comes from the DB (zero-LLM, zero-network).
 
     \b
     caspar watch /etc/nginx/nginx.conf
     caspar watch /etc/apache2/ --profile production
+    caspar watch nginx.conf --log ~/watch.log &   # background, terminal free
     """
     from config_assessment.core.db.database import Database
     from config_assessment.core.input_resolver import resolve
@@ -1678,6 +1685,22 @@ def watch(ctx, input_path, interval, env_profile) -> None:
 
     name = Path(resolved.path).name
 
+    # --log routes alerts to a file (append, colourless so it stays greppable).
+    # The terminal then only gets a one-line pointer, so it stays free.
+    _log_fh = None
+    if log_path:
+        _log_fh = open(log_path, "a", encoding="utf-8", buffering=1)  # line-buffered
+        click.echo(
+            f"  {click.style('○', fg='cyan')} watching {name} in background — "
+            f"alerts → {click.style(log_path, bold=True)}"
+            + click.style("  (stop: docker stop caspar-watch, or Ctrl-C)", dim=True))
+
+    def _emit(styled_line: str) -> None:
+        if _log_fh is not None:
+            _log_fh.write(click.unstyle(styled_line) + "\n")
+        else:
+            click.echo("  " + styled_line)
+
     def _scan():
         with Database(db_path) as db:
             return runtime.scan(resolved.path, db, env_profile=env_profile)
@@ -1688,19 +1711,25 @@ def watch(ctx, input_path, interval, env_profile) -> None:
             result = _scan()
             ts = datetime.now().strftime("%H:%M:%S")
             if event.previous is None:
-                # Baseline: one quiet line, no report.
-                click.echo(
-                    f"  {click.style(f'[{ts}]', dim=True)} "
+                base = (
+                    f"{click.style(f'[{ts}]', dim=True)} "
                     f"{click.style('○', fg='cyan')} watching {name} — "
                     f"baseline {result.global_temporal_score:.1f}/10 "
-                    f"[{result.severity}]"
-                    + click.style(f"  (every {interval:g}s · Ctrl-C to stop)",
-                                  dim=True))
+                    f"[{result.severity}]")
+                # In terminal mode also show the poll cadence; in --log the
+                # pointer line above already covered how to stop.
+                if _log_fh is None:
+                    base += click.style(
+                        f"  (every {interval:g}s · Ctrl-C to stop)", dim=True)
+                _emit(base)
             else:
-                click.echo("  " + _watch_alert_line(ts, name, result, prev))
+                _emit(_watch_alert_line(ts, name, result, prev))
             prev = result
     except KeyboardInterrupt:
         click.echo(click.style("\n  Stopped.", dim=True))
+    finally:
+        if _log_fh is not None:
+            _log_fh.close()
 
 
 def _watch_alert_line(ts, name, result, prev) -> str:
