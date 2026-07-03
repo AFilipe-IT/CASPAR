@@ -93,6 +93,49 @@ def test_triage_flags_whole_value_off():
     assert triage_unknown(UnknownDirective("bind", "0.0.0.0")).suspicious
 
 
+def test_triage_flags_weak_crypto_and_obsolete_protocols():
+    assert triage_unknown(UnknownDirective("SSLProtocol", "TLSv1.0")).suspicious
+    assert triage_unknown(UnknownDirective("SSLCipherSuite", "RC4-MD5")).suspicious
+    assert triage_unknown(UnknownDirective("proto", "SSLv3")).suspicious
+
+
+def test_triage_flags_wildcard_origin_and_any_cidr():
+    assert triage_unknown(UnknownDirective("AllowFrom", "0.0.0.0/0")).suspicious
+    assert triage_unknown(UnknownDirective("CorsOrigin", "https://*")).suspicious
+
+
+def test_triage_flags_hardcoded_secret_and_shell():
+    assert triage_unknown(UnknownDirective("DbUrl", "password=hunter2")).suspicious
+    assert triage_unknown(UnknownDirective("ApiCfg", "api_key=sk-abc")).suspicious
+    assert triage_unknown(UnknownDirective("Hook", "/bin/bash -c x")).suspicious
+    assert triage_unknown(UnknownDirective("Cmd", "eval $(curl x)")).suspicious
+
+
+def test_triage_flags_dangerous_paths_and_perms():
+    assert triage_unknown(UnknownDirective("TmpDir", "/tmp/sess")).suspicious
+    assert triage_unknown(UnknownDirective("Mode", "0666")).suspicious
+
+
+def test_triage_flags_nonproduction_value():
+    assert triage_unknown(UnknownDirective("LogMode", "trace")).suspicious
+    assert triage_unknown(UnknownDirective("Env", "development")).suspicious
+
+
+def test_triage_new_patterns_no_false_positives():
+    # Legitimate values that superficially resemble a risky token must NOT flag.
+    benign = [
+        ("DocumentRoot", "/var/www/html"),      # a path, not /tmp
+        ("ServerName", "example.com"),
+        ("Path", "/usr/bin/false-flag"),        # contains 'bin' but not a shell
+        ("Charset", "utf-8"),
+        ("LogFormat", "combined"),
+        ("Listen", "127.0.0.1:443"),            # loopback, not 0.0.0.0
+    ]
+    for name, val in benign:
+        assert not triage_unknown(
+            UnknownDirective(name, val)).suspicious, f"false positive: {name}={val}"
+
+
 def test_surface_and_triage_orders_suspicious_first():
     dirs = [_d("benign", "4"), _d("perm", "0777"), _d("also_benign", "x")]
     out = surface_and_triage(dirs, set())

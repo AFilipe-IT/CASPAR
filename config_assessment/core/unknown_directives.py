@@ -86,8 +86,10 @@ def find_unknown_directives(directives: list["Directive"],
 # Directive-name signals: a name containing one of these words suggests a
 # security-relevant control, so a permissive value on it is worth flagging.
 _SECURITY_NAME_WORDS = ("verify", "secure", "auth", "ssl", "tls", "cert",
-                        "password", "secret", "token", "encrypt", "permission",
-                        "allow", "trust", "cipher", "protocol")
+                        "password", "passwd", "secret", "token", "apikey",
+                        "api_key", "credential", "encrypt", "permission",
+                        "allow", "trust", "cipher", "protocol", "csrf", "cors",
+                        "xss", "hsts", "sandbox", "privilege", "sudo", "root")
 
 # Value patterns that are risky in general (regardless of directive name).
 # Anchored to the WHOLE value where possible: config values are often
@@ -96,12 +98,28 @@ _SECURITY_NAME_WORDS = ("verify", "secure", "auth", "ssl", "tls", "cert",
 # '.test'…). We only flag a value that IS the risky token, not one that merely
 # contains it.
 _RISKY_VALUE_PATTERNS: list[tuple[str, str]] = [
+    # ── over-broad exposure ────────────────────────────────────────────
     (r"^\*$", "wildcard '*' (matches everything)"),
     (r"\b0\.0\.0\.0(?::\d+)?\b", "binds to all interfaces (0.0.0.0)"),
     (r"(?i)^(all|any)$", "value 'all/any' — overly broad"),
+    (r"(?i)^\*://\*?|^https?://\*", "wildcard origin/host (CORS-style '*')"),
+    (r"(?i)^0\.0\.0\.0/0$|^::/0$", "any-source CIDR (0.0.0.0/0)"),
+    # ── disabled protections ───────────────────────────────────────────
     (r"(?i)^(disable|disabled|none|no|false|off|0)$", "feature disabled / boolean-off"),
-    (r"(?i)^(insecure|unsafe|permissive|debug|test)$", "insecure/debug value"),
+    (r"(?i)^(insecure|unsafe|permissive|debug|test|trace|verbose|develop(ment)?)$",
+     "insecure/debug value"),
+    # ── weak crypto / obsolete protocols ───────────────────────────────
+    (r"(?i)\b(sslv2|sslv3|tlsv1(\.0|\.1)?)\b", "obsolete TLS/SSL protocol"),
+    (r"(?i)\b(rc4|des|3des|md5|sha1|null|export|anon)\b", "weak cipher/hash"),
+    # ── dangerous permissions / paths ──────────────────────────────────
     (r"(?i)(^|\s)(chmod\s*)?0?777($|\s)", "world-writable permissions (777)"),
+    (r"(?i)(^|\s)0?(666|757|707)($|\s)", "world-accessible permissions"),
+    (r"^/tmp/|^/var/tmp/|^/dev/shm/", "world-writable temp path (predictable)"),
+    # ── secrets in the clear / code execution ──────────────────────────
+    (r"(?i)(password|passwd|secret|api[_-]?key|token)\s*=\s*\S+",
+     "possible hard-coded secret"),
+    (r"(?i)(\b(eval|exec|system|shell_exec|popen)\b|/bin/(sh|bash|zsh|dash))",
+     "shell/eval in value (command execution)"),
 ]
 
 # "off/false/0/no" is only risky when the directive NAME implies a protection.
@@ -110,7 +128,8 @@ _OFF_VALUES = {"off", "false", "0", "no", "none", "disabled"}
 # Directive-name words that are risky on their own (a directive that shouldn't
 # exist in a hardened production config, regardless of value).
 _RISKY_NAME_WORDS = ("debug", "experimental", "test", "unsafe", "insecure",
-                     "backdoor", "legacy", "deprecated")
+                     "backdoor", "legacy", "deprecated", "trace", "dump",
+                     "verbose", "devel", "development", "staging", "mock")
 
 
 def triage_unknown(u: UnknownDirective) -> UnknownDirective:
