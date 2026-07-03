@@ -174,6 +174,11 @@ def parse_benchmark(path: str) -> list[Section]:
             directives=directives,
         ))
 
+    # Not a CIS benchmark (no 'Ensure …' sections found)? Treat it as a generic
+    # document — a service manual, CCSS/NISTIR, etc. — so --docs can ingest it.
+    if not sections:
+        return parse_document(path)
+
     return sections
 
 
@@ -187,6 +192,66 @@ def _extract_field(text: str, start_marker: str, end_marker: str) -> str:
     if e == -1:
         return text[s:s + 800]
     return text[s:e].strip()
+
+
+# ------------------------------------------------------------------ #
+# Generic document parser (service manuals, CCSS/NISTIR, arbitrary   #
+# docs that are NOT CIS benchmarks)                                   #
+# ------------------------------------------------------------------ #
+
+# A heading looks like: an ALL-CAPS line, a numbered "3.2 Title", or a short
+# Title-Case line on its own. Used to break a manual into retrievable chunks.
+_HEADING_RE = re.compile(
+    r'^(?:'
+    r'(\d+(?:\.\d+)*\s+\S.{0,80})'          # "3.2 Access Vector"
+    r'|([A-Z][A-Z0-9 ,\-/]{4,80})'          # "COMMON CONFIGURATION SCORING"
+    r'|([A-Z][\w\-]+(?:\s+[A-Z][\w\-]+){0,7})'  # "Server Tokens Directive"
+    r')\s*$'
+)
+
+
+def parse_document(path: str, *, max_chars: int = 1200) -> list["Section"]:
+    """Chunk an arbitrary document (service manual, CCSS/NISTIR, any PDF/text)
+    into retrievable Sections. Used when a doc is NOT a CIS benchmark, so
+    `--docs` can ingest manuals as-is to ground the LLM (Layer 3 RAG).
+
+    Chunking is structural: split on detected headings, then cap each chunk to
+    ~max_chars so retrieval stays focused. Deterministic; no LLM."""
+    content = _read_pdf(path)
+    lines = content.split("\n")
+
+    chunks: list[tuple[str, list[str]]] = []   # (heading, body-lines)
+    cur_head, cur_body = "", []
+    for line in lines:
+        stripped = line.strip()
+        if stripped and _HEADING_RE.match(stripped) and len(stripped.split()) <= 10:
+            if cur_body:
+                chunks.append((cur_head, cur_body))
+            cur_head, cur_body = stripped, []
+        else:
+            cur_body.append(line)
+    if cur_body:
+        chunks.append((cur_head, cur_body))
+
+    sections: list[Section] = []
+    for i, (head, body) in enumerate(chunks):
+        text = "\n".join(body).strip()
+        if not text:
+            continue
+        # Split over-long chunks into ~max_chars windows so a hit is precise.
+        for j in range(0, len(text), max_chars):
+            piece = text[j:j + max_chars]
+            title = head or (piece[:60].replace("\n", " ").strip())
+            sections.append(Section(
+                section_id=f"doc-{i}" + (f".{j // max_chars}" if j else ""),
+                title=title,
+                level="reference",
+                description=piece,
+                rationale="", remediation="", default_value="",
+                full_text=f"{title}\n{piece}",
+                directives=list(set(_DIRECTIVE_RE.findall(piece))),
+            ))
+    return sections
 
 
 # ------------------------------------------------------------------ #

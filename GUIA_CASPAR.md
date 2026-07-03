@@ -448,7 +448,7 @@ A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql
 | Version-exploits pré-computados | **19** (mapeamento versão → CVEs/exploits) |
 | Alvos disponíveis via `plugin fetch` | **43** (stigviewer.com) |
 | Versão da DB base (para o reseed) | **2** (`caspar_meta.base_db_version`) |
-| Testes automatizados | **515** (a passar) |
+| Testes automatizados | **520** (a passar) |
 
 Distribuição das 228 misconfigs pelos 7 targets: **docker 57 · tomcat 49 · apache-httpd 35 ·
 redis 29 · mysql 23 · nginx 18 · ssh 17**. Estes números são **verificáveis** — inspeciona a DB com
@@ -785,13 +785,26 @@ directiva desconhecida, o LLM (Ollama) é *grounded* em contexto RAG — o bench
 documentação opcional que forneças com `--docs` — e estima se é uma misconfiguration, com impacto e
 justificação. Os resultados são **candidatos de baixa confiança, nunca somados ao score CCSS**: aparecem
 marcados à parte. É essencialmente "gerar uma regra candidata em tempo de scan", que podes depois
-validar e promover à base com `plugin add`.
+validar e promover à base com `caspar promote`.
 
 ```bash
 caspar scan nginx.conf                              # Camadas 1+2 (determinístico)
 caspar scan nginx.conf --assess-unknown             # + Camada 3 (LLM+RAG)
-caspar scan nginx.conf --assess-unknown --docs manual_nginx_2.6.txt   # + docs próprias
+caspar scan nginx.conf --assess-unknown --docs manual_nginx.pdf   # + o manual do serviço
 ```
+
+**Sim, isto é RAG — e podes passar manuais para aumentar o conhecimento do LLM.** O `--docs` aceita
+**qualquer documento** (o manual do serviço, o NISTIR 7502 do CCSS, um STIG, texto ou **PDF** — via
+`pdftotext`, já na imagem). O documento é *chunked* por estrutura (headings/parágrafos), indexado por
+TF-IDF, e as secções mais relevantes para cada directiva são recuperadas e injetadas no prompt do LLM.
+O `_CombinedRAG` funde o benchmark do plugin **com** os teus `--docs`, por isso o LLM responde ancorado
+em ambos.
+
+> **Fronteira de design (importante para a defesa):** o RAG vive no **build-time** e na **Camada 3
+> (opt-in)** — **nunca** no scoring determinístico do runtime. Passar mais documentos melhora a
+> *extração de regras* e a *avaliação de desconhecidas*, mas **por design não altera os scores CCSS**
+> (que são aritmética pura, reprodutível). O `CCSS`/NISTIR é a *fórmula*; passá-lo como `--docs` ajuda o
+> LLM a *justificar* submétricas, não a *calcular* o score.
 
 > **Nota de honestidade:** isto **não** é um "detetor de zero-days". Uma directiva desconhecida pode ser
 > nova, de terceiros, um typo, ou perfeitamente benigna — o mecanismo revela *lacunas de cobertura* e,
@@ -948,6 +961,7 @@ valor — ver §17.)*
 | Adicionar um alvo ao `fetch` | `config_assessment/fetch/catalog.json` (só o slug) |
 | Perceber a lógica de download | `config_assessment/fetch/benchmark_fetcher.py` |
 | Mudar a extracção de benchmarks | `config_assessment/build/benchmark_extractor.py` |
+| RAG: indexar benchmark / manual / CCSS (`--docs`) | `config_assessment/build/rag.py` (`parse_document`, `BenchmarkIndex`) |
 | Regras de deteção de directivas desconhecidas | `config_assessment/core/unknown_directives.py` |
 | Mexer nas fórmulas CCSS / cap de impacto das chains | `config_assessment/core/ccss.py` |
 | Perfis de ambiente (production/internal/dev) | `config_assessment/core/runtime.py` (`ENV_PROFILES`) |
