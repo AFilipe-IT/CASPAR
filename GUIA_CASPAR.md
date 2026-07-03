@@ -587,15 +587,24 @@ numa vista única: pior ofensor, scores por target, totais.
 caspar report reports/*.json
 ```
 
-**`watch` — auditoria contínua.** Vigia um ficheiro (ou diretório) de configuração e, sempre que o
-conteúdo muda, **re-corre o scan** e mostra as misconfigurations detetadas e o seu impacto (dados já na
-DB). Deteção determinística por hash de conteúdo — funciona em Linux nativo, WSL2 e volumes montados em
-Docker. Corre até `Ctrl-C`; não guarda baseline nem escreve ficheiros. Aceita `--profile` como o `scan`.
+**`watch` — auditoria contínua (alerta de drift).** Vigia um ficheiro (ou diretório) de configuração e,
+sempre que o conteúdo muda, imprime **uma linha de alerta** com o novo score e o que mudou — **vermelho
+se o risco piorou**, verde se melhorou. Não repete o relatório completo (para isso, `caspar scan`). Corre
+em 2º plano com o terminal livre; deteção determinística por hash de conteúdo (Linux nativo, WSL2 e
+volumes Docker). Aceita `--profile` como o `scan`. Pára com `Ctrl-C` (ou `docker stop caspar-watch`).
 
 ```bash
-caspar watch /etc/nginx/nginx.conf              # audita ao arrancar e a cada alteração
+caspar watch /etc/nginx/nginx.conf              # 1 linha de baseline; depois só alertas
 caspar watch /etc/apache2/ --profile production # diretório inteiro, baseline de produção
-caspar watch nginx.conf -i 2                     # verifica a cada 2s (por omissão 1s)
+caspar watch nginx.conf -i 2 &                   # em 2º plano, verifica a cada 2s (default 1s)
+```
+
+Exemplo de saída (config limpa que passa a ter uma misconfiguration e depois é corrigida):
+
+```
+[02:00:40] ○ watching httpd.conf — baseline 0.0/10 [None]
+[02:00:41] ⚠ httpd.conf  0.0 → 8.9  [High]  +1 issue  ↑ ServerTokens=Full (7.1)
+[02:00:45] ✓ httpd.conf  8.9 → 0.0  [None]  -1 issue
 ```
 
 **`doctor` — integridade da base de dados.** Valida regras órfãs, chains a apontar para directivas

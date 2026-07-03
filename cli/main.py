@@ -1349,61 +1349,6 @@ def suppress(directive, reason, bad_value, list_only, remove, supp_file) -> None
         f"→ {store.path}", fg="green"))
 
 
-# ── watch (#8) ─────────────────────────────────────────────────────────
-
-@cli.command()
-@click.argument("input_path")
-@click.option("--interval", default=2.0, show_default=True, type=float,
-              help="Polling interval in seconds.")
-@click.pass_context
-def watch(ctx, input_path, interval) -> None:
-    """Re-scan a config whenever it changes (live hardening feedback).
-
-      caspar watch /etc/nginx/nginx.conf
-    """
-    import time
-    from config_assessment.core.db.database import Database
-    from config_assessment.core.input_resolver import resolve
-    from config_assessment.core import runtime
-
-    _discover_plugins()
-    db_path = ctx.obj["db_path"]
-    if not Path(db_path).exists():
-        click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
-        sys.exit(2)
-
-    target = Path(input_path)
-    if not target.exists():
-        click.echo(click.style(f"'{input_path}' not found.", fg="red"), err=True)
-        sys.exit(2)
-
-    click.echo(click.style(f"  Watching {input_path} (Ctrl-C to stop)…", fg="cyan"))
-    last_mtime = None
-    last_score = None
-    try:
-        while True:
-            mtime = target.stat().st_mtime
-            if mtime != last_mtime:
-                last_mtime = mtime
-                with Database(db_path) as db:
-                    resolved = resolve(input_path, live=False)
-                    result = runtime.scan(resolved.path, db)
-                score = result.global_temporal_score
-                trend = ""
-                if last_score is not None:
-                    d = score - last_score
-                    trend = click.style(
-                        f"  ({'▲' if d > 0 else '▼' if d < 0 else '='} {abs(d):.1f})",
-                        fg="red" if d > 0 else "green" if d < 0 else "white")
-                ts = datetime.now().strftime("%H:%M:%S")
-                click.echo(f"  {ts}  {click.style(f'{score:.1f}/10', bold=True)}  "
-                           f"[{result.severity}]  {len(result.issues)} issues{trend}")
-                last_score = score
-            time.sleep(interval)
-    except KeyboardInterrupt:
-        click.echo("\n  Stopped.")
-
-
 # ── report --merge (#5: executive multi-scan summary) ──────────────────
 
 @cli.command()
@@ -1698,11 +1643,15 @@ def promote(ctx, input_path, only_directive, docs_path, yes) -> None:
               help="Environment baseline for scoring (as in scan).")
 @click.pass_context
 def watch(ctx, input_path, interval, env_profile) -> None:
-    """Continuously audit a config: re-scan whenever it changes.
+    """Continuously audit a config: alert on screen whenever it changes.
 
     Watches the file (or directory) and, on every change, re-runs the
-    deterministic scan and shows the misconfigurations found and their impact —
-    data already in the DB. Runs until Ctrl-C. No baseline, no files written.
+    deterministic scan and prints ONE compact log line: the new score and what
+    changed. The line is red when the risk got worse, green when it improved.
+    Runs in the background with the terminal free; stop with Ctrl-C.
+
+    Full detail is intentionally omitted — run `caspar scan <config>` for the
+    complete report. Data comes from the DB (zero-LLM, zero-network).
 
     \b
     caspar watch /etc/nginx/nginx.conf
@@ -1719,31 +1668,75 @@ def watch(ctx, input_path, interval, env_profile) -> None:
         click.echo(click.style(f"DB '{db_path}' not found.", fg="yellow"), err=True)
         sys.exit(2)
 
-    # Resolve once to fail fast on a bad path and to reuse scan's renderer.
-    # Watch is for static configs on disk, not --live/docker sources.
+    # Resolve once to fail fast on a bad path. Watch is for static configs on
+    # disk, not --live/docker sources.
     try:
         resolved = resolve(input_path, live=False)
     except (FileNotFoundError, RuntimeError, ValueError) as e:
         click.echo(click.style(f"Error: {e}", fg="red"), err=True)
         sys.exit(2)
 
-    click.echo(click.style(f"  Watching {resolved.path}", fg="cyan") +
-               click.style(f"  (every {interval:g}s · Ctrl-C to stop)", dim=True))
+    name = Path(resolved.path).name
 
-    def _rescan() -> None:
+    def _scan():
         with Database(db_path) as db:
-            result = runtime.scan(resolved.path, db, env_profile=env_profile)
-        _print_result(result, resolved=resolved)
+            return runtime.scan(resolved.path, db, env_profile=env_profile)
 
+    prev = None   # previous ScanResult, for the delta
     try:
         for event in watch_loop(resolved.path, interval=interval):
-            if event.previous is not None:
-                click.echo(click.style(
-                    f"\n  ⟳ Change detected in {event.path} — re-auditing…",
-                    fg="yellow", bold=True))
-            _rescan()
+            result = _scan()
+            ts = datetime.now().strftime("%H:%M:%S")
+            if event.previous is None:
+                # Baseline: one quiet line, no report.
+                click.echo(
+                    f"  {click.style(f'[{ts}]', dim=True)} "
+                    f"{click.style('○', fg='cyan')} watching {name} — "
+                    f"baseline {result.global_temporal_score:.1f}/10 "
+                    f"[{result.severity}]"
+                    + click.style(f"  (every {interval:g}s · Ctrl-C to stop)",
+                                  dim=True))
+            else:
+                click.echo("  " + _watch_alert_line(ts, name, result, prev))
+            prev = result
     except KeyboardInterrupt:
         click.echo(click.style("\n  Stopped.", dim=True))
+
+
+def _watch_alert_line(ts, name, result, prev) -> str:
+    """One compact, colored log line describing a config change.
+
+    Red when risk worsened (score up), green when it improved (score down),
+    neutral when unchanged. Summarises the score move, the net issue
+    count change, and the single worst driver — never the full report."""
+    score = result.global_temporal_score
+    old = prev.global_temporal_score if prev else 0.0
+    worse = score > old + 0.05
+    better = score < old - 0.05
+    color = "red" if worse else "green" if better else "white"
+    icon = "⚠" if worse else "✓" if better else "•"
+
+    # Score move: "0.0 → 6.1".
+    move = f"{old:.1f} → {score:.1f}" if prev else f"{score:.1f}"
+
+    # Net issue delta and the newly-appearing worst issue, if any.
+    prev_dirs = {i.directive for i in prev.issues} if prev else set()
+    new_issues = [i for i in result.issues if i.directive not in prev_dirs]
+    net = len(result.issues) - (len(prev.issues) if prev else 0)
+    net_str = f"{net:+d} issue" + ("s" if abs(net) != 1 else "")
+
+    parts = [
+        click.style(f"[{ts}]", dim=True),
+        click.style(f"{icon} {name}", fg=color, bold=worse),
+        click.style(f"{move}  [{result.severity}]", fg=color, bold=worse),
+        click.style(net_str, fg=color),
+    ]
+    if new_issues:
+        top = max(new_issues, key=lambda i: i.temporal_score)
+        val = f"={top.bad_value}" if getattr(top, "bad_value", "") else ""
+        parts.append(click.style(
+            f"↑ {top.directive}{val} ({top.temporal_score:.1f})", fg=color))
+    return "  ".join(parts)
 
 
 if __name__ == "__main__":

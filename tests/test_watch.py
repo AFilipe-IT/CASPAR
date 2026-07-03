@@ -110,3 +110,53 @@ def test_unreadable_target_yields_empty_and_no_crash(tmp_path):
     # No baseline (empty digest) and the loop tolerates it without raising.
     events = list(watch(missing, stop=lambda: True, sleep=lambda _: None))
     assert events == []
+
+
+# ── the compact alert line (CLI formatter) ─────────────────────────────
+
+class _Issue:
+    def __init__(self, directive, score, bad_value=""):
+        self.directive, self.temporal_score, self.bad_value = directive, score, bad_value
+
+
+class _Res:
+    def __init__(self, score, severity, issues):
+        self.global_temporal_score = score
+        self.severity = severity
+        self.issues = issues
+
+
+def _line(result, prev):
+    from cli.main import _watch_alert_line
+    import click
+    # Strip ANSI so we assert on text; colour is asserted separately.
+    return click.unstyle(_watch_alert_line("12:00:00", "httpd.conf", result, prev))
+
+
+def test_alert_line_worsening_shows_move_and_driver():
+    prev = _Res(0.0, "None", [])
+    now = _Res(8.9, "High", [_Issue("ServerTokens", 7.1, "Full")])
+    line = _line(now, prev)
+    assert "0.0 → 8.9" in line and "[High]" in line
+    assert "+1 issue" in line
+    assert "ServerTokens=Full (7.1)" in line
+    assert "⚠" in line   # worsening icon
+
+
+def test_alert_line_improvement_is_green_check():
+    prev = _Res(8.9, "High", [_Issue("ServerTokens", 7.1, "Full")])
+    now = _Res(0.0, "None", [])
+    import click
+    from cli.main import _watch_alert_line
+    styled = _watch_alert_line("12:00:00", "httpd.conf", now, prev)
+    assert "✓" in styled
+    assert "-1 issue" in click.unstyle(styled)
+    assert "\x1b[32m" in styled   # green ANSI
+
+
+def test_alert_line_unchanged_score_is_neutral():
+    # More issues but capped score → net risk unchanged → neutral marker.
+    prev = _Res(8.9, "High", [_Issue("a", 5.0)])
+    now = _Res(8.9, "High", [_Issue("a", 5.0), _Issue("b", 5.4, "All")])
+    line = _line(now, prev)
+    assert "•" in line and "+1 issue" in line
