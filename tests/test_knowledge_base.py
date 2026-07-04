@@ -88,6 +88,51 @@ def test_ingest_manual_missing_file_is_graceful(tmp_path):
     assert m._ingest_manual(str(tmp_path / "nope.pdf"), pdir) is None
 
 
+# --- PDF → .md sidecar: extracted once at ingestion, preferred by the RAG ---
+
+
+def test_ingest_pdf_writes_md_sidecar(tmp_path, monkeypatch):
+    """Ingesting a PDF also extracts a readable .md (deterministic, pdftotext)
+    — what the RAG indexes and what a human can audit."""
+    import cli._knowledge as kb
+    calls = {}
+
+    def fake_extract(pdf, out_md):
+        calls["args"] = (pdf, out_md)
+        out_md.write_text("# extracted")
+        return True
+    monkeypatch.setattr(kb, "_pdf_to_markdown", fake_extract)
+
+    src = tmp_path / "apache-docs.pdf"
+    src.write_text("pdf body")
+    pdir = tmp_path / "plugins" / "apache_httpd"
+    pdir.mkdir(parents=True)
+
+    dest = kb._ingest_manual(str(src), pdir)
+    assert dest is not None
+    assert calls["args"][1] == pdir / "manual_apache-docs.md"
+    assert (pdir / "manual_apache-docs.md").read_text() == "# extracted"
+
+
+def test_discovery_prefers_md_sidecar_over_twin_pdf(tmp_path):
+    """manual_x.pdf + manual_x.md must yield ONE entry (the .md) — no
+    double-indexing; a PDF without a sidecar is still used directly."""
+    import cli._knowledge as kb
+    base = tmp_path / "plugins"
+    pdir = base / "nginx"
+    pdir.mkdir(parents=True)
+    (pdir / "manual_docs.pdf").write_text("pdf")
+    (pdir / "manual_docs.md").write_text("md")
+    (pdir / "CIS_bench.pdf").write_text("benchmark, no sidecar")
+
+    with patch.object(kb, "_plugin_dirs", lambda: [base]):
+        names = [p.name for p in kb._find_knowledge_docs("nginx")
+                 if p.parent == pdir]
+    assert "manual_docs.md" in names
+    assert "manual_docs.pdf" not in names     # sidecar wins
+    assert "CIS_bench.pdf" in names           # lone PDF still indexed
+
+
 # --- fetch --then-install --manual: the manual must reach plugin_add ---------
 
 from click.testing import CliRunner

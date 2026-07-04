@@ -63,8 +63,16 @@ def _find_knowledge_docs(target_name: str) -> list[Path]:
             pdir = base / name
             if not pdir.is_dir():
                 continue
-            for pat in ("*.pdf", "*.xml", "*.txt", "docs/*.pdf", "docs/*.txt"):
+            # A PDF ingested with a .md sidecar (extracted at build time) is
+            # indexed via the sidecar — same content, better chunks, and no
+            # double-indexing of the pair.
+            md_stems = {p.stem for pat in ("*.md", "docs/*.md")
+                        for p in pdir.glob(pat)}
+            for pat in ("*.md", "*.pdf", "*.xml", "*.txt",
+                        "docs/*.md", "docs/*.pdf", "docs/*.txt"):
                 for hit in sorted(pdir.glob(pat)):
+                    if hit.suffix.lower() == ".pdf" and hit.stem in md_stems:
+                        continue
                     _add(hit)
 
     # Shared CCSS reference (NISTIR 7502) — applies to every service.
@@ -127,11 +135,30 @@ def _assess_unknown_directives(result, docs_path: str | None) -> None:
         llm=llm, rag_index=rag)
 
 
+def _pdf_to_markdown(pdf: Path, out_md: Path) -> bool:
+    """Extract a PDF's text to a markdown sidecar via `pdftotext -layout`
+    (deterministic — no LLM rewrites the knowledge base). The .md is what the
+    RAG indexes (better chunks) and what a human audits: you can READ exactly
+    what grounds the LLM. Best-effort; returns False when pdftotext is absent."""
+    import shutil as _sh
+    import subprocess
+    if not _sh.which("pdftotext"):
+        return False
+    try:
+        subprocess.run(["pdftotext", "-layout", str(pdf), str(out_md)],
+                       timeout=120, check=True, capture_output=True)
+        return out_md.is_file() and out_md.stat().st_size > 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def _ingest_manual(manual: str, plugin_dir: Path) -> Path | None:
     """Copy/download a service manual into the plugin dir, so it becomes part of
     the target's RAG knowledge base at BUILD time (retrieved on every scan, not
     passed each run). `manual` is a local path OR an http(s) URL to a PDF/text
-    (e.g. https://archive.apache.org/dist/httpd/docs/…). Best-effort."""
+    (e.g. https://archive.apache.org/dist/httpd/docs/…). A PDF also gets a
+    readable .md sidecar (extracted once, here — build-time), which the RAG
+    prefers over re-reading the PDF every scan. Best-effort."""
     import shutil
     from urllib.parse import urlparse
     from urllib.request import urlopen, Request
@@ -149,14 +176,19 @@ def _ingest_manual(manual: str, plugin_dir: Path) -> Path | None:
                 f"  Could not download manual from {manual}: {exc}", fg="yellow"),
                 err=True)
             return None
-        click.echo(f"  Manual saved: {click.style(str(dest), fg='cyan')}")
-        return dest
-    src = Path(manual)
-    if not src.exists():
-        click.echo(click.style(f"  Manual not found: {manual}", fg="yellow"),
-                   err=True)
-        return None
-    dest = plugin_dir / f"manual_{src.name}"
-    shutil.copy(src, dest)
+    else:
+        src = Path(manual)
+        if not src.exists():
+            click.echo(click.style(f"  Manual not found: {manual}", fg="yellow"),
+                       err=True)
+            return None
+        dest = plugin_dir / f"manual_{src.name}"
+        shutil.copy(src, dest)
+
     click.echo(f"  Manual saved: {click.style(str(dest), fg='cyan')}")
+    if dest.suffix.lower() == ".pdf":
+        sidecar = dest.with_suffix(".md")
+        if _pdf_to_markdown(dest, sidecar):
+            click.echo(f"  Extracted:    {click.style(str(sidecar), fg='cyan')}"
+                       + click.style("  (what the RAG reads — auditable)", dim=True))
     return dest

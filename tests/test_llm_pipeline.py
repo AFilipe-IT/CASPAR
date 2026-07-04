@@ -64,6 +64,10 @@ class TestRAG:
 
     @pytest.fixture(scope="class")
     def index(self):
+        # The CIS benchmark PDF is licensed material, kept out of the repo
+        # (*.pdf in .gitignore) — on a fresh clone / CI runner it's absent.
+        if not _Path(BENCHMARK_PATH).exists():
+            pytest.skip("CIS benchmark PDF not available (not in repo)")
         return BenchmarkIndex(BENCHMARK_PATH)
 
     def test_parses_correct_number_of_sections(self, index):
@@ -212,6 +216,8 @@ class TestPromptConstruction:
 
     @pytest.fixture(scope="class")
     def index(self):
+        if not _Path(BENCHMARK_PATH).exists():
+            pytest.skip("CIS benchmark PDF not available (not in repo)")
         return BenchmarkIndex(BENCHMARK_PATH)
 
     def test_prompt_contains_directive(self, index):
