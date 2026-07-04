@@ -46,6 +46,11 @@ caspar plugin fetch nginx --then-install --manual https://.../nginx-docs.pdf
 
 O manual é copiado para a pasta do plugin (no volume persistente, em Docker), *chunked* por estrutura e indexado por TF-IDF. Em cada scan, `_find_knowledge_docs` descobre-o do disco — sem flag de runtime. O RAG vive **apenas** no build-time e na Camada 3 (opt-in); **nunca** toca no scoring CCSS determinístico.
 
+A referência partilhada **NISTIR 7502 (a especificação CCSS, ~285KB) viaja com o projeto**: está no
+repo e é *baked* na imagem Docker (exceção explícita à exclusão de PDFs), por isso a Camada 3 tem o
+conhecimento CCSS em qualquer máquina, offline, sem passo extra. Os benchmarks CIS grandes continuam
+fora da imagem — chegam via `plugin add`/`fetch` e persistem no volume.
+
 O catálogo cobre **43 alvos**, agrupados por categoria:
 
 - **Web / app servers:** nginx, apache, apache-windows, tomcat, iis, iis-site, jboss

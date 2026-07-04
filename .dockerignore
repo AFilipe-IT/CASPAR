@@ -41,6 +41,10 @@ htmlcov/
 # (Saves ~85MB — the SSH CIS benchmark alone is 78MB.)
 **/*.pdf
 *.pdf
+# Exception: the CCSS spec (NISTIR 7502, ~285KB) is the SHARED RAG knowledge
+# for every target's Layer 3 (--assess-unknown). _find_knowledge_docs expects
+# it at the app root — bake it in so it works on any machine, offline.
+!nistir7502.pdf
 
 # Editor / OS.
 .vscode/

@@ -55,7 +55,11 @@ ccss_*.sarif
 # Logs
 *.log
 narratives_reference.txt
+# PDFs ficam fora do repo (benchmarks CIS chegam aos 78MB)…
 *.pdf
+# …excepto a especificação CCSS: é a base de conhecimento partilhada de TODOS
+# os targets (Camada 3/RAG) e tem de viajar com o clone e com a imagem Docker.
+!nistir7502.pdf
 
 # Generated documents
 *.docx
