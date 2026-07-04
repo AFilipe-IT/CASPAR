@@ -65,6 +65,11 @@ class Database:
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._init_schema()
 
+    @property
+    def path(self) -> str:
+        """Filesystem path of this database (":memory:" when in-memory)."""
+        return self._path
+
     # ------------------------------------------------------------------ #
     # Context manager support                                              #
     # ------------------------------------------------------------------ #
@@ -264,6 +269,11 @@ class Database:
         row = cur.fetchone()
         self._conn.commit()
         return row["id"]
+
+    def get_target_names(self) -> list[str]:
+        """Names of every target with rules in this DB (sorted)."""
+        rows = self._conn.execute("SELECT name FROM targets ORDER BY name")
+        return [r["name"] for r in rows.fetchall()]
 
     def get_target_id(self, target_name: str) -> int | None:
         cur = self._conn.execute(

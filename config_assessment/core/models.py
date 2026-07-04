@@ -189,6 +189,11 @@ class ScanResult:
     # coverage gaps, not scored issues. LLM assessment (Layer 3) fills the
     # optional llm_* fields only when the caller opts in.
     unknown_directives: list = field(default_factory=list)
+    # Reproducibility manifest (core/manifest.py): CASPAR version, SHA-256 of
+    # the knowledge base, target + rule count, Python version. Matching
+    # manifests + matching input_hash ⇒ identical scores, by construction —
+    # makes the determinism claim auditable from the report itself.
+    manifest: dict = field(default_factory=dict)
 
     @property
     def highest_issue_score(self) -> float:

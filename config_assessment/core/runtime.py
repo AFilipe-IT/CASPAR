@@ -33,6 +33,7 @@ from pathlib import Path
 
 import config_assessment.core.ccss as ccss
 from config_assessment.core.db.database import Database
+from config_assessment.core.manifest import build_manifest
 from config_assessment.core.models import (
     AttackChain,
     Misconfiguration,
@@ -501,7 +502,8 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
     # triage. This is NOT scored — it flags coverage gaps (e.g. a directive new
     # in a later service version) so they are no longer invisible.
     from config_assessment.core.unknown_directives import surface_and_triage
-    known_names = {m.directive for m in db.get_all_misconfigurations(meta.name)}
+    _target_rules = db.get_all_misconfigurations(meta.name)
+    known_names = {m.directive for m in _target_rules}
     unknown_directives = surface_and_triage(directives, known_names)
     if unknown_directives:
         logger.info("[scan] %d unknown directive(s) surfaced (%d suspicious)",
@@ -561,6 +563,10 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
         exploit_lookup_failed=exploit_lookup_failed,
         version_cves_checked=version_cves_checked,
         unknown_directives=unknown_directives,
+        # Reproducibility manifest: what code + knowledge base produced these
+        # scores. Matching manifest + matching input_hash ⇒ identical scores.
+        manifest=build_manifest(db.path, meta.name,
+                                rules_count=len(_target_rules)),
     )
 
     logger.info(

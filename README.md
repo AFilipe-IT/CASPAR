@@ -2,6 +2,15 @@
 
 **Framework genérico de scoring de configurações de segurança baseado em NISTIR 7502 (CCSS)**
 
+> **Este documento é a vitrine e referência de comandos.** Os outros três têm papéis distintos:
+>
+> | Documento | Papel | Lê-o quando… |
+> |---|---|---|
+> | **README.md** (este) | Vitrine + referência de comandos | queres saber o que é e como usar |
+> | [GUIA_CASPAR.md](GUIA_CASPAR.md) | Guia de utilizador + demonstração | queres perceber e demonstrar, do zero |
+> | [GUIA_TECNICO.md](GUIA_TECNICO.md) | Arquitectura interna | vais mexer no código |
+> | [HANDOFF.md](HANDOFF.md) | Briefing de continuação (histórico) | retomas o projeto noutra sessão/máquina |
+
 ---
 
 ## O que é
@@ -144,6 +153,18 @@ Pede uma key gratuita em https://nvd.nist.gov/developers/request-an-api-key — 
 
 ---
 
+### Primeiro passo após instalar: `caspar doctor`
+
+Verifica a integridade da base de conhecimento antes do primeiro scan — regras órfãs, chains
+a apontar para directivas inexistentes, scores fora de gama. Read-only, sai com 1 se houver erro:
+
+```bash
+caspar doctor            # verificação básica
+caspar doctor --strict   # + auditoria de narrativas (afirmações de impacto sem cautela)
+```
+
+---
+
 ## Uso rápido — 4 modos de scan
 
 ### Modo 1 — ficheiro único
@@ -251,7 +272,43 @@ explorer.exe ~/relatorios/ccss_*.html   # WSL2
 
 ### JSON / SARIF
 
-Disponíveis via `--format json` / `--format sarif`. SARIF integra directamente com o GitHub Security tab.
+Disponíveis via `--format json` / `--format sarif`. O JSON inclui o **manifesto de
+reprodutibilidade** (versão do CASPAR, SHA-256 da base de conhecimento, target e nº de regras):
+dois scans com manifesto igual e `input_hash` igual têm, por construção, scores iguais — a
+afirmação de determinismo torna-se auditável a partir do próprio relatório.
+
+O SARIF integra directamente com o **GitHub Code Scanning** — os findings do CASPAR aparecem
+na Security tab e como anotações nos PRs (*shift-left* para configs versionadas):
+
+```yaml
+# .github/workflows/config-audit.yml
+- run: caspar scan configs/nginx.conf --report -f sarif -o out/
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: out/            # apanha o ccss_*.sarif gerado
+```
+
+---
+
+## Acompanhamento contínuo e ciclo de aprendizagem
+
+O scan pontual é metade da história; a outra metade é **direção e crescimento da base**:
+
+```bash
+caspar watch /etc/nginx/ --notify        # vigiar: re-scan a cada alteração, alerta se piorar
+caspar history nginx.conf                # listar scans passados (gravados automaticamente)
+caspar trend                             # drift quantificado: sparkline por input, 1º→último score
+caspar trend nginx                       #   só inputs que contenham 'nginx'
+
+caspar scan cfg --assess-unknown         # Camada 3: candidatas (LLM+RAG, nunca no score)
+caspar promote cfg                       # candidata → regra permanente (com revisão)
+caspar promote --stats                   # quanto da base veio do ciclo? o que falta rever?
+caspar plugin manual nginx <pdf|url>     # juntar manual à base de conhecimento RAG (retroativo)
+```
+
+`trend` responde "para onde vai o risco desta config?"; `promote --stats` responde "quanto é
+que o sistema já aprendeu para além do benchmark?" — as regras promovidas ficam marcadas na
+`justification`, por isso a contagem é auditável.
 
 ---
 

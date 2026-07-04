@@ -686,6 +686,36 @@ caspar history                     # todos os scans recentes
 caspar history nginx.conf --last 5
 ```
 
+**`trend` — drift de configuração, quantificado.** O `history` lista scans; o `trend` mostra a
+**direção**: uma sparkline por input, primeiro→último score e o veredicto (risco subiu/desceu/estável):
+
+```bash
+caspar trend            # todos os inputs com 2+ scans
+caspar trend nginx      # só inputs que contenham 'nginx'
+```
+```
+  ▂▄▆█▆▄▂▁  9.1 → 2.3   ▼ 6.8  (risk reduced)
+      8 scans · 2026-06-20 → 2026-07-04 · /etc/nginx/nginx.conf
+```
+
+**`promote --stats` — medir o ciclo de aprendizagem.** As regras promovidas (candidata→regra via
+`promote`) ficam **marcadas na justificação**, por isso a base sabe responder: quanto do conhecimento
+veio do ciclo, e quanto ainda espera revisão (sem `good_value`)? É a métrica de avaliação empírica do
+ciclo humano-no-loop:
+
+```bash
+caspar promote --stats
+```
+
+**Manifesto de reprodutibilidade.** Cada scan grava no resultado (rodapé do terminal + relatório JSON)
+a versão do CASPAR, o SHA-256 da base de conhecimento e o nº de regras do target. **Manifesto igual +
+config igual ⇒ scores iguais, por construção** — qualquer pessoa audita a afirmação de determinismo a
+partir do próprio relatório, sem confiar em quem o gerou:
+
+```
+  reproducible: caspar 0.1.0 · kb sha256:34ce3970acaa · 18 rules (nginx)
+```
+
 **`watch` — auditoria contínua de drift (alerta em tempo real).** Vigia um ficheiro, um diretório ou um
 serviço e, sempre que a config muda, imprime **uma linha de alerta** com o novo score e o que mudou —
 **vermelho se o risco piorou**, verde se melhorou. Deteção determinística por hash de conteúdo (Linux
@@ -812,6 +842,15 @@ funde todos os índices do target (benchmark + manual + NISTIR), por isso o LLM 
 > **Escape hatch:** ainda existe `scan --assess-unknown --docs <doc>` para juntar *pontualmente* um
 > documento extra a um scan, sem o ingerir permanentemente. É a exceção, não o mecanismo principal — o
 > caminho normal é `plugin add --manual`, que constrói a base uma vez.
+
+**E para plugins já instalados?** `caspar plugin manual <target> <path|url>` ingere o manual a
+qualquer momento — o caminho retroativo para plugins adicionados antes do manual existir (ou via
+`fetch` sem `--manual`):
+
+```bash
+caspar plugin manual nginx https://nginx.org/en/docs/dirindex.pdf
+caspar plugin manual apache-httpd ./manual_apache.pdf
+```
 
 > **Fronteira de design (importante para a defesa):** o RAG vive no **build-time** (ingestão) e na
 > **Camada 3 (opt-in)** — **nunca** no scoring determinístico do runtime. Mais conhecimento melhora a
