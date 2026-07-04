@@ -1,5 +1,5 @@
 # CASPAR — dependências Python
-# Instalação: pip install -r requirement.txt
+# Instalação: pip install -r requirements.txt
 #
 # NOTA sobre PDFs: a extracção de benchmarks CIS usa o utilitário de sistema
 # `pdftotext` (pacote poppler-utils), não uma biblioteca Python. Em Debian/Ubuntu:

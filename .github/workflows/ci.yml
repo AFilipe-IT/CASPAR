@@ -1,0 +1,43 @@
+# CASPAR CI — corre a suite completa (527 testes) a cada push/PR.
+#
+# A suite inteira é offline-safe: LLM usa stub, fetch/HTTP são mockados, e os
+# testes que precisam de fixtures ausentes fazem skip gracioso. Medido em
+# WSL2: ~35s, sem rede. Nada de Ollama no CI — coerente com o invariante
+# build-time (LLM) / runtime (determinístico) do projeto.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # pdftotext (extração de PDFs) e sqlite3 (restaurar a DB canónica) —
+      # os mesmos que a imagem Docker instala.
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils sqlite3
+
+      - name: Python deps
+        run: |
+          pip install -e ".[dev]"
+          pip install openpyxl requests pypdf
+
+      # A DB nunca é commitada (*.db no .gitignore); restaura-se do dump
+      # canónico, como a imagem Docker faz. Sem ela, parte dos testes de
+      # cobertura faz skip — restaurá-la dá a cobertura completa.
+      - name: Restore canonical DB
+        run: sqlite3 ccss.db < data/ccss_canonical.sql
+
+      - name: Run tests
+        run: python -m pytest tests/ -q
