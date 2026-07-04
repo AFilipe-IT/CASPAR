@@ -275,7 +275,8 @@ def test_notify_system_is_best_effort_when_no_tool(monkeypatch):
     """No wall / notify-send present → still writes to PTYs, never raises."""
     import cli.main as m
     monkeypatch.setattr("shutil.which", lambda *_: None)
-    monkeypatch.setattr(m, "_write_to_ptys", lambda *_: None)
+    # _notify_system resolves _write_to_ptys from its home module — patch there.
+    monkeypatch.setattr("cli.commands.scan_cmds._write_to_ptys", lambda *_: None)
     m._notify_system("anything")   # must not raise
 
 

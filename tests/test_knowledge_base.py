@@ -26,7 +26,10 @@ def _plugin_tree(tmp_path):
 
 def test_discovers_benchmark_and_manual_by_target_name(tmp_path):
     base, _ = _plugin_tree(tmp_path)
-    with patch.object(m, "_plugin_dirs", lambda: [base]):
+    # _find_knowledge_docs resolves _plugin_dirs from cli._knowledge (its home
+    # module) — patch it there, where it is used.
+    import cli._knowledge as kb
+    with patch.object(kb, "_plugin_dirs", lambda: [base]):
         # target NAME uses a hyphen; dir uses underscore — both must resolve.
         names = [p.name for p in m._find_knowledge_docs("apache-httpd")]
     assert "CIS_Apache.pdf" in names
@@ -37,7 +40,8 @@ def test_no_runtime_flag_needed(tmp_path):
     # The point of the model: knowledge is found from disk, so a scan needs no
     # --docs to have RAG context.
     base, _ = _plugin_tree(tmp_path)
-    with patch.object(m, "_plugin_dirs", lambda: [base]):
+    import cli._knowledge as kb
+    with patch.object(kb, "_plugin_dirs", lambda: [base]):
         docs = m._find_knowledge_docs("apache-httpd")
     assert docs, "knowledge base should be non-empty without any flag"
 
@@ -117,7 +121,8 @@ def test_fetch_then_install_forwards_manual(tmp_path, monkeypatch):
     def _fake_add(source, manual, dry_run, no_llm, yes, verbose_list, model):
         seen["manual"] = manual
         seen["source"] = source
-    monkeypatch.setattr(m, "plugin_add", _fake_add)
+    # plugin_fetch invokes plugin_add via its home module's global — patch there.
+    monkeypatch.setattr("cli.commands.plugin_cmds.plugin_add", _fake_add)
 
     res = CliRunner().invoke(
         m.plugin_fetch,
@@ -125,6 +130,34 @@ def test_fetch_then_install_forwards_manual(tmp_path, monkeypatch):
     assert res.exit_code == 0, res.output
     assert seen.get("manual") == "https://x/docs.pdf"
     assert seen.get("source") == str(bench)
+
+
+def test_plugin_manual_ingests_into_installed_plugin(tmp_path, monkeypatch):
+    """`plugin manual <target> <path>` — the retroactive ingestion path for
+    plugins installed before the manual existed (e.g. via fetch)."""
+    import cli.commands.plugin_cmds as pc
+    base = tmp_path / "plugins"
+    pdir = base / "nginx"
+    pdir.mkdir(parents=True)
+    src = tmp_path / "docs.txt"
+    src.write_text("nginx manual")
+    monkeypatch.setattr(pc, "_plugin_dirs", lambda: [base])
+
+    res = CliRunner().invoke(pc.plugin_manual, ["nginx", str(src)])
+    assert res.exit_code == 0, res.output
+    assert (pdir / "manual_docs.txt").exists()
+
+
+def test_plugin_manual_unknown_target_lists_installed(tmp_path, monkeypatch):
+    import cli.commands.plugin_cmds as pc
+    base = tmp_path / "plugins"
+    (base / "redis").mkdir(parents=True)
+    (base / "redis" / "__init__.py").write_text("")
+    monkeypatch.setattr(pc, "_plugin_dirs", lambda: [base])
+
+    res = CliRunner().invoke(pc.plugin_manual, ["nope", "x.pdf"])
+    assert res.exit_code == 2
+    assert "redis" in res.output
 
 
 def test_fetch_manual_without_then_install_warns(tmp_path, monkeypatch):
