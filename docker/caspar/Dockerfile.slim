@@ -16,7 +16,7 @@ WORKDIR /app
 
 # Runtime-only Python deps (no dev tools, no build chain).
 COPY pyproject.toml .
-RUN pip install --no-cache-dir click pydantic pypdf openpyxl requests
+RUN pip install --no-cache-dir click pydantic pypdf openpyxl requests pyyaml
 
 # Copy only the code paths exercised by `scan`.
 COPY config_assessment/__init__.py ./config_assessment/

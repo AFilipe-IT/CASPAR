@@ -38,7 +38,7 @@ WORKDIR /home/caspar/app
 
 # --- Python dependencies (layer-cached on pyproject.toml) -------------------
 COPY pyproject.toml .
-RUN pip install --no-cache-dir click pydantic openpyxl requests pypdf
+RUN pip install --no-cache-dir click pydantic openpyxl requests pypdf pyyaml
 
 # --- Application code -------------------------------------------------------
 COPY . .

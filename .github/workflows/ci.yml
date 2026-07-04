@@ -31,7 +31,7 @@ jobs:
       - name: Python deps
         run: |
           pip install -e ".[dev]"
-          pip install openpyxl requests pypdf
+          pip install openpyxl requests pypdf pyyaml
 
       # A DB nunca é commitada (*.db no .gitignore); restaura-se do dump
       # canónico, como a imagem Docker faz. Sem ela, parte dos testes de

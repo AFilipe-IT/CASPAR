@@ -10,6 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0",
     "click>=8.1",
+    "pyyaml>=6.0",   # IaC: Kubernetes manifest parsing (yaml_flat)
     # Phase 2+ dependencies (uncomment when needed):
     # "llama-index>=0.10",
     # "anthropic>=0.25",

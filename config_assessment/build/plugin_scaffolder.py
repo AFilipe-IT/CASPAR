@@ -45,6 +45,8 @@ def _class_name(service_name: str) -> str:
 # Map config_format → the generic parser module to delegate to.
 _PARSER_MODULE = {
     "key_value": "config_assessment.parsers.key_value",
+    "yaml": "config_assessment.parsers.yaml_flat",
+    "dockerfile": "config_assessment.parsers.dockerfile",
 }
 
 

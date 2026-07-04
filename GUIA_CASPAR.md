@@ -1006,6 +1006,27 @@ valor — ver §17.)*
 
 ---
 
+## 21-B. IaC — Kubernetes e Dockerfile
+
+O framework generaliza de daemons runtime para **Infrastructure-as-Code** sem tocar no core: dois
+parsers genéricos (`parsers/yaml_flat.py` aplaina manifests YAML em Directives com contexto
+`spec.containers[0].securityContext`; `parsers/dockerfile.py` emite instruções + directivas
+sintéticas como `from_tag=latest`) e dois plugins (`kubernetes`, `dockerfile`) com **regras curadas
+do CIS** e métricas CCSS revistas à mão — build 100% determinístico (`build/curated_build.py`, sem
+LLM em nenhum ponto deste caminho).
+
+```bash
+caspar scan deployment.yaml     # privileged, hostNetwork, runAsUser 0, SYS_ADMIN…
+caspar scan Dockerfile          # USER ausente = root por omissão (absence rule!), :latest implícito
+```
+
+Destaques para a defesa: o `FROM ubuntu` **sem tag** é detetado como `:latest` implícito; a ausência
+de `USER` dispara a máquina de absence rules existente; e a chain curada
+`privileged+hostNetwork → node takeover` mostra a amplificação em IaC. Tudo com linha e contexto
+exatos no relatório.
+
+---
+
 ## 22. Onde mexer (mapa rápido)
 
 | Quero… | Ficheiro |

@@ -1,0 +1,10 @@
+[
+  {
+    "chain_id": "k8s-privileged-hostnetwork-node-takeover",
+    "target_name": "kubernetes",
+    "misconfig_directives": ["privileged", "hostNetwork"],
+    "amplification": 1.3,
+    "justification": "A privileged container that also joins the node's network namespace combines kernel-level access with direct reachability of node-local services (kubelet API, cloud metadata endpoint): an intruder in the pod pivots to the node and its credentials in one step, instead of needing a separate escape and a separate lateral move.",
+    "cross_target": false
+  }
+]

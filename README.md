@@ -225,6 +225,29 @@ caspar --db outra.db scan /etc/apache2/
 
 ---
 
+## IaC — Kubernetes e Dockerfile (shift-left)
+
+O mesmo pipeline determinístico avalia **Infrastructure-as-Code antes do deploy**: manifests
+Kubernetes (deteção por `apiVersion`+`kind`) e Dockerfiles/Containerfiles (deteção por nome ou
+primeira instrução `FROM`). Nenhuma flag — o router de plugins escolhe o target sozinho:
+
+```bash
+caspar scan deployment.yaml        # K8s: privileged, hostNetwork, runAsUser 0, SYS_ADMIN, …
+caspar scan Dockerfile             # USER ausente (root por omissão), :latest implícito, EXPOSE 22
+caspar scan k8s/ --report -f sarif # diretório de manifests → SARIF p/ o PR (gate de CI)
+```
+
+Os findings apontam a **linha e o contexto exatos** (`pod.yaml:13 [spec.containers[0].securityContext]`,
+`Dockerfile:3 [stage:build]`), incluindo o caso subtil de `FROM ubuntu` **sem tag** — que puxa `:latest`
+implicitamente. Há uma attack chain curada (privileged + hostNetwork → node takeover).
+
+> **Nota de design:** as regras IaC são **curadas do CIS** (K8s Benchmark §5, Docker Benchmark) com
+> métricas CCSS revistas à mão e um build 100% determinístico (`build/curated_build.py`) — sem LLM em
+> lado nenhum deste caminho. Mostra o framework a generalizar de daemons runtime para IaC **sem tocar
+> no core** (2 parsers genéricos + 2 plugins; zero alterações a `runtime.py`).
+
+---
+
 ## Relatórios
 
 ### Terminal
