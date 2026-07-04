@@ -222,6 +222,48 @@ def _find_benchmark_file(target_name: str) -> Path | None:
     return None
 
 
+def _find_knowledge_docs(target_name: str) -> list[Path]:
+    """Every knowledge document available to the RAG for this target, discovered
+    from disk — no runtime flag needed. This is the build-time-knowledge model:
+    you drop the docs next to the plugin (or ship the shared CCSS reference) and
+    they are always retrievable at assessment time.
+
+    Collected, de-duplicated, in priority order:
+      1. the plugin's own docs — benchmark, service manual, any PDF/XML/txt in
+         `plugins/<target>/` (and a `docs/` subdir if present);
+      2. the shared CCSS reference (NISTIR 7502) at the project root, relevant
+         to every target.
+    """
+    docs: list[Path] = []
+    seen: set[str] = set()
+
+    def _add(p: Path) -> None:
+        rp = str(p.resolve())
+        if p.is_file() and rp not in seen:
+            seen.add(rp)
+            docs.append(p)
+
+    # The plugin dir on disk may use '_' where the target name uses '-'
+    # (apache-httpd → apache_httpd), so try both spellings.
+    variants = {target_name, target_name.replace("-", "_"),
+                target_name.replace("_", "-")}
+    for base in _plugin_dirs():
+        for name in variants:
+            pdir = base / name
+            if not pdir.is_dir():
+                continue
+            for pat in ("*.pdf", "*.xml", "*.txt", "docs/*.pdf", "docs/*.txt"):
+                for hit in sorted(pdir.glob(pat)):
+                    _add(hit)
+
+    # Shared CCSS reference (NISTIR 7502) — applies to every service.
+    for root in {Path.cwd(), Path(__file__).resolve().parent.parent}:
+        for name in ("nistir7502.pdf", "documentosccss/nistir7502.pdf"):
+            _add(root / name)
+
+    return docs
+
+
 class _CombinedRAG:
     """Query several RAG indexes and merge their top sections. Lets
     --assess-unknown draw context from the benchmark AND user-supplied --docs."""
@@ -240,16 +282,23 @@ class _CombinedRAG:
 
 
 def _assess_unknown_directives(result, docs_path: str | None) -> None:
-    """Layer 3: build a RAG index (benchmark + optional --docs) and run the LLM
-    over the surfaced unknown directives. Mutates result.unknown_directives.
-    Degrades gracefully — any failure just leaves the LLM fields empty."""
+    """Layer 3: build a RAG index over this target's KNOWLEDGE BASE and run the
+    LLM over the surfaced unknown directives. Mutates result.unknown_directives.
+    Degrades gracefully — any failure just leaves the LLM fields empty.
+
+    The RAG context is the knowledge already gathered for the target: its
+    benchmark, service manual, and the shared CCSS reference — discovered from
+    disk, not passed each run. --docs only ADDS an extra document on top."""
     from config_assessment.build.llm_client import make_client
     from config_assessment.build.rag import BenchmarkIndex
     from config_assessment.core.unknown_directives import assess_unknown_with_llm
 
+    sources = _find_knowledge_docs(result.target_name)
+    if docs_path:
+        sources.append(Path(docs_path))   # optional extra, added on top
+
     indexes = []
-    bench = _find_benchmark_file(result.target_name)
-    for src in (bench, Path(docs_path) if docs_path else None):
+    for src in sources:
         if src and src.exists():
             try:
                 indexes.append(BenchmarkIndex(str(src)))
@@ -259,7 +308,8 @@ def _assess_unknown_directives(result, docs_path: str | None) -> None:
 
     click.echo(click.style(
         f"  Assessing {len(result.unknown_directives)} uncovered directive(s) "
-        f"with LLM{' + RAG' if rag else ''} (non-deterministic)…", dim=True))
+        f"with LLM{f' + RAG ({len(indexes)} docs)' if rag else ''} "
+        f"(non-deterministic)…", dim=True))
     llm = make_client(backend="ollama", fallback_to_stub=True)
     assess_unknown_with_llm(
         result.unknown_directives, service=result.target_name,
@@ -749,9 +799,48 @@ def plugin_group():
     """Manage CASPAR plugins."""
 
 
+def _ingest_manual(manual: str, plugin_dir: Path) -> Path | None:
+    """Copy/download a service manual into the plugin dir, so it becomes part of
+    the target's RAG knowledge base at BUILD time (retrieved on every scan, not
+    passed each run). `manual` is a local path OR an http(s) URL to a PDF/text
+    (e.g. https://archive.apache.org/dist/httpd/docs/…). Best-effort."""
+    import shutil
+    from urllib.parse import urlparse
+    from urllib.request import urlopen, Request
+
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    if manual.startswith(("http://", "https://")):
+        fname = Path(urlparse(manual).path).name or "manual.pdf"
+        dest = plugin_dir / f"manual_{fname}"
+        try:
+            req = Request(manual, headers={"User-Agent": "caspar-plugin-add"})
+            with urlopen(req, timeout=30) as r, open(dest, "wb") as f:
+                shutil.copyfileobj(r, f)
+        except Exception as exc:
+            click.echo(click.style(
+                f"  Could not download manual from {manual}: {exc}", fg="yellow"),
+                err=True)
+            return None
+        click.echo(f"  Manual saved: {click.style(str(dest), fg='cyan')}")
+        return dest
+    src = Path(manual)
+    if not src.exists():
+        click.echo(click.style(f"  Manual not found: {manual}", fg="yellow"),
+                   err=True)
+        return None
+    dest = plugin_dir / f"manual_{src.name}"
+    shutil.copy(src, dest)
+    click.echo(f"  Manual saved: {click.style(str(dest), fg='cyan')}")
+    return dest
+
+
 @plugin_group.command("add")
 @click.option("--source", "-s", required=True, type=click.Path(exists=True),
               help="CIS Benchmark PDF")
+@click.option("--manual", "manual", default=None,
+              help="Service manual to add to the target's RAG knowledge (a local "
+                   "PDF/text path OR an http(s) URL, e.g. the Apache docs). "
+                   "Ingested at build time; retrieved on every scan.")
 @click.option("--dry-run", is_flag=True, help="Show spec without installing")
 @click.option("--no-llm", is_flag=True,
               help="Heuristic extraction only (skip LLM for ambiguous)")
@@ -760,7 +849,7 @@ def plugin_group():
               help="List all extracted controls, not just a preview")
 @click.option("--model", "-m", default="qwen2.5:14b", show_default=True)
 @click.pass_context
-def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
+def plugin_add(ctx, source, manual, dry_run, no_llm, yes, verbose_list, model) -> None:
     """Install a new plugin from a CIS Benchmark PDF."""
     from pathlib import Path as _Path
     from config_assessment.build.plugin_detector import detect_service_from_pdf
@@ -810,6 +899,22 @@ def plugin_add(ctx, source, dry_run, no_llm, yes, verbose_list, model) -> None:
         ctx, info, src_name, usable, value_rules, absence_rules,
         PluginSpec, scaffold_plugin, dry_run, yes, verbose_list, no_llm,
         source, model)
+
+    # Add the service manual to the target's RAG knowledge base (build-time
+    # ingestion). Placed in the plugin dir, it's retrieved on every future scan
+    # via _find_knowledge_docs — no runtime flag needed.
+    if manual and not dry_run:
+        tid = info["target_id"]
+        found = False
+        for base in _plugin_dirs():
+            for name in {tid, tid.replace("-", "_"), tid.replace("_", "-")}:
+                pdir = base / name
+                if pdir.is_dir():
+                    _ingest_manual(manual, pdir)
+                    found = True
+                    break
+            if found:
+                break
     return
 
 
@@ -986,13 +1091,17 @@ def _plugin_add_finish(ctx, info, src_name, usable, value_rules, absence_rules,
                    "(default /tmp: the container mounts /workspace read-only).")
 @click.option("--then-install", is_flag=True,
               help="Run 'plugin add' on the downloaded benchmark afterwards.")
+@click.option("--manual", "manual", default=None,
+              help="Service manual to add to the target's RAG knowledge (a local "
+                   "PDF/text path OR an http(s) URL). Ingested at build time via "
+                   "--then-install; retrieved on every scan.")
 @click.option("--yes", "-y", is_flag=True,
               help="Skip confirmation prompts during --then-install.")
 @click.option("--model", "-m", default="qwen2.5:14b", show_default=True,
               help="LLM model used by --then-install.")
 @click.pass_context
 def plugin_fetch(ctx, service, list_only, search_term, output, then_install,
-                 yes, model) -> None:
+                 manual, yes, model) -> None:
     """Download a benchmark from a public source and optionally install it.
 
     \b
@@ -1055,8 +1164,15 @@ def plugin_fetch(ctx, service, list_only, search_term, output, then_install,
     click.echo(click.style(f"  ✓ Downloaded: {path}", fg="green"))
 
     if not then_install:
-        click.echo(f"\nInstall with: "
-                   f"{click.style(f'caspar plugin add --source {path}', bold=True)}")
+        hint = f"caspar plugin add --source {path}"
+        if manual:
+            # --manual only takes effect during install; without --then-install
+            # there's no plugin to ingest it into. Fold it into the printed hint.
+            hint += f" --manual {manual}"
+            click.echo(click.style(
+                "  Note: --manual is ingested during install; add --then-install "
+                "(or run the command below).", fg="yellow"), err=True)
+        click.echo(f"\nInstall with: {click.style(hint, bold=True)}")
         click.echo()
         return
 
@@ -1065,8 +1181,8 @@ def plugin_fetch(ctx, service, list_only, search_term, output, then_install,
     # entrypoint), so always auto-confirm plugin add — otherwise it blocks on
     # the [y/N] "Generate plugin?" prompt with no TTY to answer it.
     click.echo()
-    ctx.invoke(plugin_add, source=path, dry_run=False, no_llm=False,
-               yes=True, verbose_list=False, model=model)
+    ctx.invoke(plugin_add, source=path, manual=manual, dry_run=False,
+               no_llm=False, yes=True, verbose_list=False, model=model)
 
 
 @cli.command()

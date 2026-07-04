@@ -247,9 +247,10 @@ def test_cli_then_install_invokes_plugin_add(tmp_path):
     payload = json.dumps(_fake_stig_json())
     seen = {}
 
-    def fake_add(source, dry_run, no_llm, yes, verbose_list, model):
+    def fake_add(source, manual, dry_run, no_llm, yes, verbose_list, model):
         seen["source"] = source
         seen["yes"] = yes
+        seen["manual"] = manual
 
     with patch("config_assessment.fetch.benchmark_fetcher._http_get",
                return_value=payload), \
@@ -259,6 +260,7 @@ def test_cli_then_install_invokes_plugin_add(tmp_path):
                   "--then-install", "--yes"])
     assert res.exit_code == 0, res.output
     assert seen.get("source", "").endswith(".xml")
+    assert seen.get("manual") is None  # no --manual → forwarded as None
 
 
 def test_cli_then_install_auto_confirms_without_yes_flag(tmp_path):
@@ -267,7 +269,7 @@ def test_cli_then_install_auto_confirms_without_yes_flag(tmp_path):
     payload = json.dumps(_fake_stig_json())
     seen = {}
 
-    def fake_add(source, dry_run, no_llm, yes, verbose_list, model):
+    def fake_add(source, manual, dry_run, no_llm, yes, verbose_list, model):
         seen["yes"] = yes
 
     with patch("config_assessment.fetch.benchmark_fetcher._http_get",

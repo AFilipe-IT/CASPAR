@@ -406,7 +406,7 @@ caspar history                                     # scores ao longo do tempo
 **6 — Avaliação LLM de directivas desconhecidas** (opt-in, precisa de Ollama → imagem `:full`):
 
 ```bash
-caspar scan nginx.conf --assess-unknown --docs manual_nginx.txt
+caspar scan nginx.conf --assess-unknown   # RAG recupera o conhecimento ingerido no build-time
 ```
 ✓ *Sucesso:* as directivas `UNCOVERED` ganham um veredicto LLM de **baixa confiança** (separado,
 nunca no score).
@@ -781,29 +781,42 @@ UNCOVERED DIRECTIVES  (5)  3 suspicious
 ```
 
 **Camada 3 — avaliação por LLM + RAG (não-determinística, opt-in via `--assess-unknown`).** Para cada
-directiva desconhecida, o LLM (Ollama) é *grounded* em contexto RAG — o benchmark do plugin **mais**
-documentação opcional que forneças com `--docs` — e estima se é uma misconfiguration, com impacto e
-justificação. Os resultados são **candidatos de baixa confiança, nunca somados ao score CCSS**: aparecem
-marcados à parte. É essencialmente "gerar uma regra candidata em tempo de scan", que podes depois
-validar e promover à base com `caspar promote`.
+directiva desconhecida, o LLM (Ollama) é *grounded* na **base de conhecimento do target** — o benchmark
+do plugin, o manual do serviço ingerido no build-time, e a referência partilhada NISTIR 7502 (CCSS) — e
+estima se é uma misconfiguration, com impacto e justificação. Os resultados são **candidatos de baixa
+confiança, nunca somados ao score CCSS**: aparecem marcados à parte. É essencialmente "gerar uma regra
+candidata em tempo de scan", que podes depois validar e promover à base com `caspar promote`.
+
+**O conhecimento constrói-se uma vez, consulta-se sempre.** Este é o ponto-chave do modelo RAG do CASPAR:
+tu **não** carregas documentos a cada scan. O conhecimento é ingerido no **build-time** — quando adicionas
+o plugin — e fica guardado na pasta do plugin. Depois, em qualquer scan, `_find_knowledge_docs` descobre
+esses documentos **do disco** (resolvendo `apache-httpd`↔`apache_httpd`) e o LLM recupera deles. Nenhuma
+flag é precisa: a RAG já tem o conhecimento que precisa.
 
 ```bash
-caspar scan nginx.conf                              # Camadas 1+2 (determinístico)
-caspar scan nginx.conf --assess-unknown             # + Camada 3 (LLM+RAG)
-caspar scan nginx.conf --assess-unknown --docs manual_nginx.pdf   # + o manual do serviço
+# BUILD-TIME — ingerir o conhecimento uma vez, ao adicionar o plugin
+caspar plugin add -s CIS_Apache.pdf --manual manual_apache.pdf
+caspar plugin add -s CIS_Apache.pdf --manual https://archive.apache.org/dist/httpd/docs/manual.pdf
+
+# RUNTIME — a Camada 3 já recupera do conhecimento construído, sem passar nada
+caspar scan nginx.conf                    # Camadas 1+2 (determinístico)
+caspar scan nginx.conf --assess-unknown   # + Camada 3 (LLM+RAG, conhecimento do disco)
 ```
 
-**Sim, isto é RAG — e podes passar manuais para aumentar o conhecimento do LLM.** O `--docs` aceita
-**qualquer documento** (o manual do serviço, o NISTIR 7502 do CCSS, um STIG, texto ou **PDF** — via
-`pdftotext`, já na imagem). O documento é *chunked* por estrutura (headings/parágrafos), indexado por
-TF-IDF, e as secções mais relevantes para cada directiva são recuperadas e injetadas no prompt do LLM.
-O `_CombinedRAG` funde o benchmark do plugin **com** os teus `--docs`, por isso o LLM responde ancorado
-em ambos.
+O `--manual` aceita **um ficheiro local OU um URL** (o manual do serviço, um STIG, texto ou **PDF** — via
+`pdftotext`, já na imagem; ex. os docs do Apache em `archive.apache.org`). O documento é copiado para a
+pasta do plugin como `manual_*`, *chunked* por estrutura (headings/parágrafos) e indexado por TF-IDF; as
+secções mais relevantes para cada directiva são recuperadas e injetadas no prompt do LLM. O `_CombinedRAG`
+funde todos os índices do target (benchmark + manual + NISTIR), por isso o LLM responde ancorado em todos.
 
-> **Fronteira de design (importante para a defesa):** o RAG vive no **build-time** e na **Camada 3
-> (opt-in)** — **nunca** no scoring determinístico do runtime. Passar mais documentos melhora a
+> **Escape hatch:** ainda existe `scan --assess-unknown --docs <doc>` para juntar *pontualmente* um
+> documento extra a um scan, sem o ingerir permanentemente. É a exceção, não o mecanismo principal — o
+> caminho normal é `plugin add --manual`, que constrói a base uma vez.
+
+> **Fronteira de design (importante para a defesa):** o RAG vive no **build-time** (ingestão) e na
+> **Camada 3 (opt-in)** — **nunca** no scoring determinístico do runtime. Mais conhecimento melhora a
 > *extração de regras* e a *avaliação de desconhecidas*, mas **por design não altera os scores CCSS**
-> (que são aritmética pura, reprodutível). O `CCSS`/NISTIR é a *fórmula*; passá-lo como `--docs` ajuda o
+> (que são aritmética pura, reprodutível). O `CCSS`/NISTIR é a *fórmula*; ingeri-lo na base ajuda o
 > LLM a *justificar* submétricas, não a *calcular* o score.
 
 > **Nota de honestidade:** isto **não** é um "detetor de zero-days". Uma directiva desconhecida pode ser
