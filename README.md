@@ -25,6 +25,18 @@ caspar plugin fetch nginx --then-install       # descarrega + instala
 caspar plugin fetch mysql -o ~/benchmarks/     # só descarrega
 ```
 
+#### Base de conhecimento do serviço (RAG build-time)
+
+Além do benchmark, cada alvo pode ter uma **base de conhecimento** própria — o manual do serviço, um STIG extra, o NISTIR 7502 (CCSS) — usada pela avaliação por LLM de directivas desconhecidas (Camada 3, `scan --assess-unknown`). Esse conhecimento é **ingerido uma vez, no build-time, e recuperado do disco em cada scan** — nunca se passa um documento por scan. Adiciona um manual (ficheiro local **ou** URL) com `--manual`, em qualquer dos caminhos de instalação:
+
+```bash
+caspar plugin add -s CIS_Apache.pdf --manual manual_apache.pdf
+caspar plugin add -s CIS_Apache.pdf --manual https://archive.apache.org/dist/httpd/docs/manual.pdf
+caspar plugin fetch nginx --then-install --manual https://.../nginx-docs.pdf
+```
+
+O manual é copiado para a pasta do plugin (no volume persistente, em Docker), *chunked* por estrutura e indexado por TF-IDF. Em cada scan, `_find_knowledge_docs` descobre-o do disco — sem flag de runtime. O RAG vive **apenas** no build-time e na Camada 3 (opt-in); **nunca** toca no scoring CCSS determinístico.
+
 O catálogo cobre **43 alvos**, agrupados por categoria:
 
 - **Web / app servers:** nginx, apache, apache-windows, tomcat, iis, iis-site, jboss

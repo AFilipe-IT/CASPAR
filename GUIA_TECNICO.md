@@ -298,7 +298,7 @@ extensibilidade para a tese:
 - **CIS Benchmark**: o documento que diz o que é uma boa/má configuração.
 - **CCE**: Common Configuration Enumeration — IDs de configurações, usados como ground truth.
 - **CVE / NVD / KEV**: vulnerabilidades conhecidas / base de dados nacional / lista de exploradas ativamente.
-- **RAG**: Retrieval-Augmented Generation — extrair a secção certa do benchmark para dar ao LLM.
+- **RAG**: Retrieval-Augmented Generation — extrair a secção certa da base de conhecimento (benchmark, manual do serviço ingerido no build-time, NISTIR/CCSS) para dar ao LLM. Vive no build-time e na Camada 3 (`--assess-unknown`), nunca no scoring.
 - **Build time vs runtime**: a separação central — trabalho pesado uma vez, scans determinísticos sempre.
 - **Attack chain**: combinação de misconfigs mais perigosa que a soma das partes.
 - **Profile (AV/Au)**: as métricas que dependem do sistema concreto, decididas no scan.
