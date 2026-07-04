@@ -148,6 +148,26 @@ def test_plugin_manual_ingests_into_installed_plugin(tmp_path, monkeypatch):
     assert (pdir / "manual_docs.txt").exists()
 
 
+def test_plugin_manual_prefers_external_volume(tmp_path, monkeypatch):
+    """In Docker, built-in plugin dirs live INSIDE the image — a manual written
+    there dies with --rm. With $CASPAR_PLUGINS_DIR set, the manual must land in
+    the external (persistent) dir, even for a built-in plugin."""
+    import cli.commands.plugin_cmds as pc
+    builtin = tmp_path / "builtin"
+    external = tmp_path / "external"
+    (builtin / "nginx").mkdir(parents=True)      # plugin only exists built-in
+    src = tmp_path / "docs.txt"
+    src.write_text("manual")
+    monkeypatch.setattr(pc, "_plugin_dirs",
+                        lambda: [builtin, external])
+    monkeypatch.setenv("CASPAR_PLUGINS_DIR", str(external))
+
+    res = CliRunner().invoke(pc.plugin_manual, ["nginx", str(src)])
+    assert res.exit_code == 0, res.output
+    assert (external / "nginx" / "manual_docs.txt").exists()   # persisted
+    assert not (builtin / "nginx" / "manual_docs.txt").exists()  # not in-image
+
+
 def test_plugin_manual_unknown_target_lists_installed(tmp_path, monkeypatch):
     import cli.commands.plugin_cmds as pc
     base = tmp_path / "plugins"

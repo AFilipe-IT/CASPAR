@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from pathlib import Path
 
 import click
 
@@ -98,7 +99,9 @@ def plugin_add(ctx, source, manual, dry_run, no_llm, yes, verbose_list, model) -
     if manual and not dry_run:
         tid = info["target_id"]
         found = False
-        for base in _plugin_dirs():
+        # External dir first (the persistent volume in Docker) — a manual
+        # written into an in-image plugin dir would be lost with --rm.
+        for base in reversed(_plugin_dirs()):
             for name in {tid, tid.replace("-", "_"), tid.replace("_", "-")}:
                 pdir = base / name
                 if pdir.is_dir():
@@ -287,23 +290,39 @@ def plugin_manual(target, manual) -> None:
       caspar plugin manual apache-httpd ./manual_apache.pdf
     """
     variants = {target, target.replace("-", "_"), target.replace("_", "-")}
+    match = None
     for base in _plugin_dirs():
         for name in variants:
-            pdir = base / name
-            if pdir.is_dir():
-                if _ingest_manual(manual, pdir) is None:
-                    sys.exit(1)
-                click.echo(click.style(
-                    f"  It will ground 'scan --assess-unknown' for "
-                    f"'{target}' from now on.", dim=True))
-                return
-    installed = sorted({d.name for b in _plugin_dirs() if b.is_dir()
-                        for d in b.iterdir() if d.is_dir()
-                        and (d / "__init__.py").exists()})
+            if (base / name).is_dir():
+                match = name
+                break
+        if match:
+            break
+    if match is None:
+        installed = sorted({d.name for b in _plugin_dirs() if b.is_dir()
+                            for d in b.iterdir() if d.is_dir()
+                            and (d / "__init__.py").exists()})
+        click.echo(click.style(
+            f"No installed plugin '{target}'. Installed: {', '.join(installed) or '(none)'}",
+            fg="red"), err=True)
+        sys.exit(2)
+
+    # Destination: the EXTERNAL plugins dir when set (a mounted volume in
+    # Docker) — a built-in plugin's dir lives inside the image, so a manual
+    # written there would vanish with the --rm container. _find_knowledge_docs
+    # scans both dirs and merges, so retrieval works either way.
+    external = os.environ.get("CASPAR_PLUGINS_DIR")
+    pdir = (Path(external) / match) if external else None
+    if pdir is None:
+        for base in _plugin_dirs():
+            if (base / match).is_dir():
+                pdir = base / match
+                break
+    if _ingest_manual(manual, pdir) is None:
+        sys.exit(1)
     click.echo(click.style(
-        f"No installed plugin '{target}'. Installed: {', '.join(installed) or '(none)'}",
-        fg="red"), err=True)
-    sys.exit(2)
+        f"  It will ground 'scan --assess-unknown' for "
+        f"'{target}' from now on.", dim=True))
 
 
 @plugin_group.command("fetch")

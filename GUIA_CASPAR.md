@@ -1013,15 +1013,15 @@ valor — ver §17.)*
 | Adicionar um alvo ao `fetch` | `config_assessment/fetch/catalog.json` (só o slug) |
 | Perceber a lógica de download | `config_assessment/fetch/benchmark_fetcher.py` |
 | Mudar a extracção de benchmarks | `config_assessment/build/benchmark_extractor.py` |
-| RAG: indexar benchmark / manual / CCSS (`--docs`) | `config_assessment/build/rag.py` (`parse_document`, `BenchmarkIndex`) |
+| RAG: indexar benchmark / manual / CCSS | `config_assessment/build/rag.py` + descoberta/ingestão em `cli/_knowledge.py` |
 | Regras de deteção de directivas desconhecidas | `config_assessment/core/unknown_directives.py` |
 | Mexer nas fórmulas CCSS / cap de impacto das chains | `config_assessment/core/ccss.py` |
 | Perfis de ambiente (production/internal/dev) | `config_assessment/core/runtime.py` (`ENV_PROFILES`) |
 | Remediação assistida (`caspar fix`) | `config_assessment/reports/remediation.py` |
-| Auditoria contínua (`caspar watch`) — loop e alerta | `config_assessment/core/watch.py` + `cli/main.py` |
+| Auditoria contínua (`caspar watch`) — loop e alerta | `config_assessment/core/watch.py` + `cli/commands/scan_cmds.py` |
 | Integridade da DB / auditoria de narrativas | `config_assessment/core/db/doctor.py` |
 | Moderar justificações de chains do apache | `config_assessment/plugins/apache_httpd/chains.json` |
-| Adicionar um comando CLI | `cli/main.py` |
+| Adicionar um comando CLI | `cli/commands/*_cmds.py` (+ registo em `cli/main.py`) |
 | Mudar um relatório (HTML/dashboard/SARIF) | `config_assessment/reports/` |
 | Reseed versionado da DB (bump ao mudar o canonical) | `config_assessment/core/db/reseed.py` |
 | Ver a interface de um plugin | `config_assessment/plugins/<serviço>/` |

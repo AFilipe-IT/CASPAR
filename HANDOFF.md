@@ -49,12 +49,12 @@ sem internet, mesmo resultado sempre.
   - `target.py` (interface `Target`: detect, parse_config, get_profile, metadata)
   - `models.py` (dataclasses: Directive, Misconfiguration[tem campo `narrative`], SystemProfile, ScanResult, TargetMetadata, AttackChain)
   - `ccss.py` (fórmulas NISTIR 7502), `runtime.py` (motor: scan, register_plugin, _select_plugin)
-  - `rag.py` (BenchmarkIndex/TF-IDF sobre benchmark + manual + NISTIR; ver `_find_knowledge_docs`/`_ingest_manual` em cli/main.py), `cve_enricher.py`, `input_resolver.py`
+  - `rag.py` (BenchmarkIndex/TF-IDF sobre benchmark + manual + NISTIR; ver `_find_knowledge_docs`/`_ingest_manual` em cli/_knowledge.py), `cve_enricher.py`, `input_resolver.py`
   - `report_html.py`, `report_dashboard.py`, `report_dashboard_online.py`
   - `db/schema.sql`, `db/database.py`
 - `plugins/apache_httpd/` — plugin Apache + **código de build genérico** (ver armadilha abaixo)
 - `plugins/nginx/` — plugin Nginx (parser, rules, __init__, build_nginx.py, CIS PDF)
-- `cli/main.py` — comandos scan/build/targets/refresh; `_discover_plugins()` importa cada `plugins.*`
+- `cli/` — main.py é só o entry point (grupo + registo); implementação em `cli/_*.py` e `cli/commands/*_cmds.py`; `_discover_plugins()` (em `cli/_discovery.py`) importa cada `plugins.*`
 
 ## Armadilhas e invariantes (LER antes de mexer)
 

@@ -115,9 +115,23 @@ ScanResult → terminal / HTML / JSON / SARIF
 | `CIS_NGINX_Benchmark_v3.0.0.pdf` | O benchmark-fonte para o RAG |
 
 
-### CLI (`cli/main.py`)
+### CLI (`cli/`)
 
-Define os comandos: `scan`, `build`, `targets`, `refresh`. É o ponto de entrada de tudo. A função `scan` orquestra: resolve input → corre runtime → imprime terminal → gera relatórios → limpa temporários.
+`cli/main.py` é só o ponto de entrada: define o grupo `cli` e regista os comandos (e re-exporta os
+nomes históricos, por isso `from cli.main import X` continua a funcionar). A implementação vive em:
+
+| Módulo | Contém |
+|--------|--------|
+| `cli/_output.py` | Impressão no terminal + export SARIF |
+| `cli/_discovery.py` | Auto-descoberta de plugins (`_plugin_dirs`, `_discover_plugins`) |
+| `cli/_knowledge.py` | Base de conhecimento RAG build-time (descoberta + ingestão de manuais) |
+| `cli/commands/scan_cmds.py` | `scan`, `watch` |
+| `cli/commands/plugin_cmds.py` | `plugin add` / `fetch` / `manual` |
+| `cli/commands/build_cmds.py` | `build`, `fetch-exploits`, `refresh` |
+| `cli/commands/report_cmds.py` | `targets`, `diff`, `badge`, `explain`, `history`, `trend`, `report` |
+| `cli/commands/manage_cmds.py` | `suppress`, `doctor`, `fix`, `promote` |
+
+A função `scan` orquestra: resolve input → corre runtime → imprime terminal → gera relatórios → limpa temporários.
 
 ---
 
