@@ -1006,6 +1006,34 @@ valor — ver §17.)*
 
 ---
 
+## 21-A. IaC Azure — Terraform / Bicep / ARM (mapeamento de vocabulário)
+
+O desafio que este target resolve: o CIS Azure escreve controlos em língua de **portal** ("Ensure
+that 'Secure transfer required' is set to 'Enabled'"), mas um `.tf` diz `https_traffic_only_enabled`
+e um `.bicep`/ARM diz `supportsHttpsTrafficOnly`. Extração direta produziria regras que nunca fazem
+match. O build do `azure-iac` (`plugins/azure_iac/build_azure.py`) acrescenta um estágio de
+**mapeamento de vocabulário**: o LLM, ancorado via RAG na secção do benchmark, emite o atributo exato
+em cada linguagem + métricas CCSS → **um controlo = duas regras** (vocabulário terraform + ARM), um
+build serve as três linguagens. Validações honestas: controlos "portal-only" são contados e saltados;
+mapeamentos com impacto C:N/I:N/A:N ou nomes implausíveis são rejeitados (observado com qwen2.5:7b).
+
+```bash
+# build (uma vez, precisa de Ollama):
+python -m config_assessment.plugins.azure_iac.build_azure \
+  -b CIS_Microsoft_Azure/CIS_..._Storage_...pdf --model qwen2.5:14b --dry-run  # rever primeiro
+# scan (determinístico, sempre):
+caspar scan main.tf          # deteta azurerm; findings com linha + recurso exatos
+caspar scan main.bicep
+caspar scan azuredeploy.json
+```
+
+Parsers: `parsers/hcl_flat.py` (HCL subset, stdlib), `parsers/bicep_flat.py`, `parsers/arm_json.py`
+— os três aplanam para o mesmo modelo de Directives (nome-folha; pais no contexto). A
+não-determinismo da extração fica confinado ao build (como sempre); a DB congela e o manifesto
+atesta-a.
+
+---
+
 ## 21-B. IaC — Kubernetes e Dockerfile
 
 O framework generaliza de daemons runtime para **Infrastructure-as-Code** sem tocar no core: dois

@@ -225,26 +225,50 @@ caspar --db outra.db scan /etc/apache2/
 
 ---
 
-## IaC — Kubernetes e Dockerfile (shift-left)
+## IaC — Terraform / Bicep / ARM, Kubernetes e Dockerfile (shift-left)
 
-O mesmo pipeline determinístico avalia **Infrastructure-as-Code antes do deploy**: manifests
-Kubernetes (deteção por `apiVersion`+`kind`) e Dockerfiles/Containerfiles (deteção por nome ou
-primeira instrução `FROM`). Nenhuma flag — o router de plugins escolhe o target sozinho:
+O mesmo pipeline determinístico avalia **Infrastructure-as-Code antes do deploy**. Nenhuma flag —
+o router de plugins escolhe o target sozinho:
 
 ```bash
+caspar scan main.tf                # Azure/Terraform (deteta pelo provider azurerm)
+caspar scan main.bicep             # Bicep (vocabulário ARM)
+caspar scan azuredeploy.json       # ARM template (deteta pelo $schema)
 caspar scan deployment.yaml        # K8s: privileged, hostNetwork, runAsUser 0, SYS_ADMIN, …
 caspar scan Dockerfile             # USER ausente (root por omissão), :latest implícito, EXPOSE 22
-caspar scan k8s/ --report -f sarif # diretório de manifests → SARIF p/ o PR (gate de CI)
+caspar scan infra/ --report -f sarif  # diretório → SARIF p/ o PR (gate de CI)
 ```
 
-Os findings apontam a **linha e o contexto exatos** (`pod.yaml:13 [spec.containers[0].securityContext]`,
-`Dockerfile:3 [stage:build]`), incluindo o caso subtil de `FROM ubuntu` **sem tag** — que puxa `:latest`
-implicitamente. Há uma attack chain curada (privileged + hostNetwork → node takeover).
+Os findings apontam a **linha e o contexto exatos** (`main.tf:3 [azurerm_recovery_services_vault.backup]`,
+`pod.yaml:13 [spec.containers[0].securityContext]`, `Dockerfile:3 [stage:build]`).
 
-> **Nota de design:** as regras IaC são **curadas do CIS** (K8s Benchmark §5, Docker Benchmark) com
-> métricas CCSS revistas à mão e um build 100% determinístico (`build/curated_build.py`) — sem LLM em
-> lado nenhum deste caminho. Mostra o framework a generalizar de daemons runtime para IaC **sem tocar
-> no core** (2 parsers genéricos + 2 plugins; zero alterações a `runtime.py`).
+### Azure IaC: extração com mapeamento de vocabulário (build-time, LLM+RAG)
+
+Os CIS Microsoft Azure Benchmarks falam a língua do **portal** ("Ensure that *'Secure transfer
+required'* is set to *'Enabled'*"); os ficheiros IaC falam `https_traffic_only_enabled` (Terraform)
+ou `supportsHttpsTrafficOnly` (Bicep/ARM). O build do target `azure-iac` resolve isso com um estágio
+de **mapeamento de vocabulário**: o LLM, ancorado via RAG na própria secção do benchmark, mapeia cada
+controlo para o atributo concreto em **ambos** os vocabulários — cada controlo vira duas regras, e um
+único build serve `.tf`, `.bicep` e `.json`. Controlos sem expressão em IaC são declarados
+"portal-only" e contados, não inventados; mapeamentos sem impacto ou com nomes implausíveis são
+rejeitados na validação.
+
+```bash
+caspar-full python -m config_assessment.plugins.azure_iac.build_azure \
+  -b CIS_Microsoft_Azure/CIS_..._Foundations_...pdf -b CIS_..._Storage_...pdf \
+  --model qwen2.5:14b            # uma vez; runtime continua determinístico
+```
+
+### Kubernetes e Dockerfile: regras curadas
+
+K8s (CIS §5) e Dockerfile (CIS Docker) usam regras **curadas à mão** com build 100% determinístico
+(`build/curated_build.py`) — sem LLM nesse caminho. Inclui a chain curada privileged+hostNetwork e a
+absence rule do `USER` (root por omissão).
+
+> **Para a defesa:** a base de conhecimento passa a ter **três proveniências** — LLM-extraída
+> (apache/nginx/…/azure-iac), curada (kubernetes/dockerfile) e promovida (ciclo `promote`) — todas a
+> alimentar o mesmo scoring determinístico, e tudo **sem tocar no core** (5 parsers genéricos + 4
+> plugins IaC; zero alterações a `runtime.py`).
 
 ---
 
