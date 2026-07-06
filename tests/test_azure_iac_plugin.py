@@ -140,6 +140,24 @@ class TestVocabularyMappingBuild:
         out = run_build([_fake_benchmark(tmp_path)], str(db), llm=_NoImpactLLM())
         assert out["misconfigs"] == 0 and out["failed"] == 1
 
+    def test_unmatchable_values_are_filtered(self, tmp_path):
+        """JSON blobs, prose, pipe-alternatives and templated ARM ids as
+        bad_value never match a scalar — the build must drop them (observed
+        with qwen2.5:14b on the full Azure benchmarks)."""
+        from config_assessment.plugins.azure_iac.build_azure import _clean_vocab
+        bad_shapes = [
+            {"attribute": "logs", "bad_value": '[{"category":"x"}]', "good_value": "y"},
+            {"attribute": "sku_name", "bad_value": "Standard_LRS|Standard_ZRS", "good_value": "Standard_GRS"},
+            {"attribute": "security_rule", "bad_value": "80, 443, or range including 80", "good_value": "exclude"},
+            {"attribute": "startIpAddress", "bad_value": "0.0.0.0/subscriptions/x", "good_value": ""},
+            {"attribute": "rotationPolicy", "bad_value": "{}", "good_value": "{...}"},
+        ]
+        assert all(_clean_vocab(s) is None for s in bad_shapes)
+        # …but a real scalar mapping survives
+        ok = _clean_vocab({"attribute": "min_tls_version",
+                           "bad_value": "TLS1_0", "good_value": "TLS1_2"})
+        assert ok == ("min_tls_version", "TLS1_0", "TLS1_2")
+
     def test_dotted_attribute_normalised_to_leaf(self, tmp_path):
         """'properties.softDeleteEnabled' from the LLM must become the leaf
         'softDeleteEnabled' — parsers emit leaf names (parents in context)."""
@@ -154,6 +172,47 @@ class TestVocabularyMappingBuild:
             names = {r.directive for r in d.get_all_misconfigurations("azure-iac")}
         assert "supportsHttpsTrafficOnly" in names
         assert "properties.supportsHttpsTrafficOnly" not in names
+
+
+class TestValueCanonicalisation:
+    """Off/OFF/Disabled all fold to false so a rule meets the config on one
+    form — the fix for the case/synonym drift seen across benchmarks."""
+
+    def test_canon_folds_boolean_synonyms(self):
+        from config_assessment.plugins.azure_iac.canon import canon_value
+        for v in ("off", "OFF", "Off", "Disabled", "false", "No"):
+            assert canon_value(v) == "false"
+        for v in ("on", "ON", "Enabled", "true", "Yes"):
+            assert canon_value(v) == "true"
+
+    def test_canon_leaves_meaningful_values_exact(self):
+        from config_assessment.plugins.azure_iac.canon import canon_value
+        for v in ("TLS1_0", "Standard_LRS", "Microsoft.Storage", "90", "P2Y"):
+            assert canon_value(v) == v
+
+    def test_rule_off_matches_config_Off_end_to_end(self, tmp_path):
+        """The whole point: a rule extracted as bad='off' flags a .tf that
+        writes 'Off' — impossible with a raw case-sensitive exact match."""
+        class _OffLLM(_FakeLLM):
+            def complete(self, prompt, system=""):
+                return json.dumps({
+                    "mappable": True,
+                    "terraform": {"attribute": "require_secure_transport",
+                                  "bad_value": "off", "good_value": "on"},
+                    "arm": {"attribute": ""},
+                    "ac": "M", "c": "P", "i": "P", "a": "N",
+                    "justification": "Insecure transport allowed.",
+                    "recommendation": "Require secure transport.",
+                })
+        db = tmp_path / "kb.db"
+        run_build([_fake_benchmark(tmp_path)], str(db), llm=_OffLLM())
+        f = tmp_path / "db.tf"
+        f.write_text('resource "azurerm_postgresql_server" "db" {\n'
+                     '  require_secure_transport = "Off"\n}\n')
+        with Database(str(db)) as d:
+            result = runtime.scan(str(f), d)
+        assert any(i.directive == "require_secure_transport"
+                   for i in result.issues)
 
 
 class TestOneControlThreeLanguages:

@@ -83,22 +83,44 @@ def _extract_json(raw: str) -> dict | None:
         return None
 
 
+# A bad_value only ever matches a scalar written in a config file. These shapes
+# never can, so a rule built on them is dead weight — reject at build time.
+def _is_matchable_value(v: str) -> bool:
+    v = v.strip()
+    if not v or v.lower() in ("none", "null"):
+        return False
+    if v[0] in "[{" or v[-1] in "]}":       # JSON blob / object / list
+        return False
+    if "|" in v:                            # alternatives ("Standard_LRS|Standard_ZRS")
+        return False
+    if len(v) > 40 or " " in v.strip():     # prose ("80, 443, or range including…")
+        # allow short quoted multi-word literals but not sentences
+        if not (len(v) <= 40 and v.count(" ") <= 1):
+            return False
+    if any(w in v for w in ("subscriptions/", "resourceGroups/", "<", "...")):
+        return False                        # templated placeholder / ARM id
+    return True
+
+
 def _clean_vocab(d) -> tuple[str, str, str] | None:
-    """(attribute, bad, good) or None if this vocabulary wasn't mapped."""
+    """(attribute, bad, good) or None if this vocabulary wasn't cleanly mapped.
+
+    Filters the dead-weight shapes seen on real qwen runs: JSON blobs and
+    prose as bad_value (never match a scalar), templated ARM ids, dotted
+    paths (parsers emit leaf names), implausible identifiers."""
     if not isinstance(d, dict):
         return None
-    attr = str(d.get("attribute", "")).strip()
-    # The parsers emit LEAF names (parents go into Directive.context), so a
-    # dotted path from the LLM ("properties.softDeleteEnabled") would never
-    # match — keep only the leaf, whatever the model wrote.
-    attr = attr.split(".")[-1].strip()
-    bad = str(d.get("bad_value", "")).strip()
-    good = str(d.get("good_value", "")).strip()
-    if not attr or not bad or bad.lower() in ("none", "null", ""):
-        return None                     # unmatchable placeholder — refuse
+    attr = str(d.get("attribute", "")).strip().split(".")[-1].strip()
+    bad = str(d.get("bad_value", "")).strip().strip('"\'')
+    good = str(d.get("good_value", "")).strip().strip('"\'')
+    if not attr or not _is_matchable_value(bad):
+        return None
     if not re.fullmatch(r"[A-Za-z_][\w\-]*", attr):
         return None                     # not a plausible leaf identifier
-    return attr, bad, good
+    # Fold boolean/state synonyms (off/OFF/Disabled → false) so the rule meets
+    # the parsed config on one canonical form (the plugin canonicalises too).
+    from config_assessment.plugins.azure_iac.canon import canon_value
+    return attr, canon_value(bad), canon_value(good)
 
 
 def extract_azure_rules(benchmark_path: str, llm, *,
@@ -178,13 +200,18 @@ def extract_azure_rules(benchmark_path: str, llm, *,
 
 def run_build(benchmarks: list[str], db_path: str = "ccss.db", *,
               model: str = "qwen2.5:14b", max_sections: int | None = None,
-              dry_run: bool = False, llm=None) -> dict:
+              dry_run: bool = False, llm=None, timeout: int = 300) -> dict:
     from config_assessment.build.curated_build import run_curated_build
     from config_assessment.build.llm_client import make_client
     from config_assessment.plugins.azure_iac import AzureIaCPlugin
 
     if llm is None:
         llm = make_client(backend="ollama", model=model, fallback_to_stub=True)
+        # 14b on modest hardware can exceed the client's 120s default on long
+        # sections (and on the first call, while the model loads) — this build
+        # is a batch job, so patience beats dropped sections.
+        if hasattr(llm, "timeout"):
+            llm.timeout = timeout
 
     all_entries: list = []
     totals = {"sections": 0, "mapped": 0, "skipped": 0, "failed": 0}
@@ -197,7 +224,10 @@ def run_build(benchmarks: list[str], db_path: str = "ccss.db", *,
               f"IaC-expressible / {stats['failed']} failed "
               f"(of {stats['sections']} sections)")
 
-    # De-duplicate (same attribute+bad_value may appear in several benchmarks).
+    # De-duplicate on (attribute, bad_value): the SAME rule from several
+    # benchmarks collapses into one. Different bad_values for the same
+    # attribute are KEPT — they come from different resource types and only
+    # one can match a given file, so both are legitimate.
     seen, unique = set(), []
     for e in all_entries:
         key = (e[0], e[1])
@@ -205,10 +235,26 @@ def run_build(benchmarks: list[str], db_path: str = "ccss.db", *,
             seen.add(key)
             unique.append(e)
 
+    # Surface attributes that carry MORE THAN ONE distinct bad_value, so a
+    # reviewer can confirm they're genuinely different resource types (fine)
+    # and not the LLM contradicting itself (needs a look before trusting).
+    from collections import defaultdict
+    by_attr: dict = defaultdict(set)
+    for e in unique:
+        by_attr[e[0]].add(e[1])
+    collisions = {a: v for a, v in by_attr.items() if len(v) > 1}
+    if collisions:
+        print(f"\n  ⚠ {len(collisions)} attribute(s) map to multiple bad_values "
+              "(review — likely distinct resource types, possibly LLM drift):")
+        for a, vals in sorted(collisions.items()):
+            print(f"      {a}: {sorted(vals)}")
+
     if dry_run:
+        print()
         for e in unique:
-            print(f"  {e[0]:38} {e[1]:12} → {e[2]:14} {e[3]}")
-        print(f"\n[dry-run] {len(unique)} rules would be written.")
+            print(f"  {e[0]:38} {e[1]:14} → {e[2]:16} {e[3]}")
+        print(f"\n[dry-run] {len(unique)} rules would be written "
+              f"({len(all_entries) - len(unique)} duplicates collapsed).")
         return {"misconfigs": 0, **totals}
 
     stats = run_curated_build(
@@ -224,10 +270,14 @@ if __name__ == "__main__":
     ap.add_argument("--db", default="ccss.db")
     ap.add_argument("--model", default="qwen2.5:14b")
     ap.add_argument("--max-sections", type=int, default=None)
+    ap.add_argument("--timeout", type=int, default=300,
+                    help="Seconds per LLM call (default 300; the client's own "
+                         "default of 120 drops long sections on 14b models).")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     out = run_build(args.benchmarks, args.db, model=args.model,
-                    max_sections=args.max_sections, dry_run=args.dry_run)
+                    max_sections=args.max_sections, dry_run=args.dry_run,
+                    timeout=args.timeout)
     print(f"azure-iac: {out.get('misconfigs', 0)} rules seeded "
           f"({out['mapped']} controls mapped, {out['skipped']} portal-only, "
           f"{out['failed']} failed)")

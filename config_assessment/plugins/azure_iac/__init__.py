@@ -30,6 +30,7 @@ from config_assessment.core.runtime import register_plugin
 from config_assessment.core.target import (
     Target, CONFIDENCE_EXACT_FILENAME, CONFIDENCE_SYNTAX_MARKER)
 from config_assessment.parsers import arm_json, bicep_flat, hcl_flat
+from config_assessment.plugins.azure_iac.canon import canon_value
 
 CHAINS: list = []   # curated/generated later, at build time
 
@@ -60,10 +61,17 @@ def _is_azure_iac_file(p: Path) -> bool:
 
 def _parse_one(p: Path) -> list[Directive]:
     if p.suffix.lower() == ".bicep":
-        return bicep_flat.parse_file(str(p))
-    if p.suffix.lower() == ".tf":
-        return hcl_flat.parse_file(str(p))
-    return arm_json.parse_file(str(p))
+        directives = bicep_flat.parse_file(str(p))
+    elif p.suffix.lower() == ".tf":
+        directives = hcl_flat.parse_file(str(p))
+    else:
+        directives = arm_json.parse_file(str(p))
+    # Canonicalise boolean/state values (Off/Disabled → false) so a config
+    # meets the rules on the same form the build stored (see canon.py). Only
+    # boolean-like words fold; TLS1_0, Standard_LRS, numbers stay byte-exact.
+    for d in directives:
+        d.value = canon_value(d.value)
+    return directives
 
 
 class AzureIaCPlugin(Target):
