@@ -31,8 +31,17 @@ sudo apt-get update && sudo apt-get install -y \
 # clonar + ambiente
 git clone https://github.com/AFilipe-IT/CASPAR.git caspar && cd caspar
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-pip install openpyxl requests pypdf pyyaml
+
+# IMPORTANTE: atualizar o pip primeiro. O pip antigo do python3.10-venv (Ubuntu
+# 22.04) tem um resolver que entra em backtracking infinito num `-e ".[dev]"`
+# (ResolutionTooDeep). Atualizar + instalar deps directamente evita isso:
+pip install --upgrade pip
+pip install "pydantic>=2.0" "click>=8.1" "pyyaml>=6.0" pytest pytest-cov \
+            openpyxl requests pypdf
+pip install -e . --no-deps          # instala o pacote CASPAR sem re-resolver
+
+# sanidade dos imports
+python -c "import click, pydantic, yaml, cli.main; print('imports OK')"
 
 # restaurar a base de conhecimento
 sqlite3 ccss.db < data/ccss_canonical.sql

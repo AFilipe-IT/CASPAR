@@ -44,8 +44,12 @@ sudo apt-get update && sudo apt-get install -y python3-venv poppler-utils sqlite
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
-pip install openpyxl requests pypdf pyyaml
+# Atualiza o pip PRIMEIRO — o pip antigo do python3.10 (Ubuntu 22.04) rebenta
+# num `-e ".[dev]"` com ResolutionTooDeep. Instala as deps directamente:
+pip install --upgrade pip
+pip install "pydantic>=2.0" "click>=8.1" "pyyaml>=6.0" pytest pytest-cov \
+            openpyxl requests pypdf
+pip install -e . --no-deps
 ```
 
 ### 2.3 Restaurar a base de conhecimento
