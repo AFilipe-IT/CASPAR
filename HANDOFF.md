@@ -1,121 +1,338 @@
-# CCSS-Scan — Briefing de Continuação (handoff para Claude Code / VSCode)
+# CASPAR — Briefing de Continuação (handoff)
 
-> Dá este ficheiro ao Claude no VSCode no início da sessão. Resume o estado do
-> projeto, as decisões tomadas, as armadilhas conhecidas e o que falta. Para
-> detalhe completo, lê `GUIA_TECNICO.md` e `README.md` (estão actualizados).
+> **Propósito:** dá este ficheiro a uma IA (ou a ti, noutra sessão/máquina) no
+> início. Resume, com FACTOS VERIFICADOS, o que o projeto é, onde está, as
+> decisões e invariantes que não se podem violar, e o que falta. Para detalhe:
+> [README.md](README.md) (vitrine + comandos), [GUIA_CASPAR.md](GUIA_CASPAR.md)
+> (utilizador/demo), [GUIA_TECNICO.md](GUIA_TECNICO.md) (arquitectura interna),
+> [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) (setup + build Docker).
+>
+> **Última actualização:** 2026-07-06. Se números abaixo divergirem do repo,
+> o repo manda — corre os comandos da secção "Verificação" e actualiza este
+> ficheiro.
 
 ---
 
-## O que é o projeto
+## 1. O que é o CASPAR
 
-CCSS-Scan: framework Python de scoring de configurações de segurança baseada no
-NISTIR 7502 (CCSS). Projeto académico para submissão ao **INForum 2026** (ainda
-não submetido). Lê a config de um serviço, compara contra o CIS Benchmark,
-atribui um score 0–10 auditável e reprodutível.
+Framework Python que lê a configuração de um serviço (ficheiro, directório,
+serviço instalado, imagem Docker, **ou ficheiro IaC**), a compara contra um
+benchmark de segurança (CIS / DISA STIG) e atribui a cada problema um score
+**CCSS 0–10** (Common Configuration Scoring System, **NISTIR 7502**) — com
+narrativa, CVEs reais (NVD + CISA KEV), e detecção de *attack chains*.
 
-**Decisão de arquitectura central (o argumento académico):** separação estrita
-**build-time / runtime**. O trabalho pesado (LLM Ollama, RAG sobre a base de
-conhecimento — CIS PDF, manual do serviço, NISTIR/CCSS —, CVE lookup) acontece
-UMA vez no build e fica gravado em SQLite. Cada scan é
-depois 100% determinístico: parse → lookup → aritmética → relatório. Sem LLM,
-sem internet, mesmo resultado sempre.
+**A decisão de arquitectura central (o argumento académico):** separação
+estrita **build-time / runtime**.
 
-## Ambiente
+- **Build-time** (corre UMA vez, por serviço): LLM local (Ollama), RAG sobre a
+  base de conhecimento, lookups de rede. Produz regras + scores gravados em
+  SQLite. Não-determinístico, pesado, offline-após-corrido.
+- **Runtime** (cada scan): parse → lookup exacto → aritmética CCSS → relatório.
+  **100% determinístico, zero LLM, zero rede.** Mesmo input ⇒ mesmo score,
+  sempre — e isto é **auditável** pelo *manifesto de reprodutibilidade* (ver §5).
 
-- WSL2 Ubuntu, projeto em `~/ccss_scan/`, venv em `.venv/` (`source .venv/bin/activate`)
-- Comando `ccss` instalado via `pip install -e .`
-- LLM: Ollama `qwen2.5:14b` (local; ~3 min/narrativa nesta máquina — CPU/GPU modesta)
-- Base de dados: `ccss.db` (SQLite) na raiz do projeto
-- `pytest tests/ -v` → 183 testes a passar
+Estado: submissão **INForum 2026 já submetida** (pasta `caspar_inforum2026/`).
+Foco actual: dissertação (avaliação empírica) + extensão IaC.
 
-## Estado: Fase 1 ✅, Fase 2 ✅, Fase 3 funcional ✅
+---
 
-**Fase 2 — Apache (fechada, validada):**
-- Plugin completo: parser, rules, 30 misconfigurations
-- 3 stages LLM (métricas, attack chains, narrativas), CVE enrichment (NVD+KEV)
-- 9 attack chains; 4 modos de scan; relatórios terminal/HTML/dashboard/JSON/SARIF
-- 0% mismatch contra ground truth CCE (validação quantitativa via MAE)
-- Teste de cobertura automatizado (`tests/test_full_coverage.py`)
+## 1b. Inventário de funcionalidades (o que o projeto FAZ)
 
-**Fase 3 — Nginx (funcional, paridade de relatório):**
-- Plugin em `plugins/nginx/`: parser próprio (sintaxe `{}`/`;`), rules, detecção, build
-- 8 misconfigurations ancoradas em secções CIS NGINX v3.0.0 REAIS
-- Build (Stage 1) + narrativas (Stage 3) funcionam para Nginx
-- Validado em 3 imagens Docker reais (nginx:latest, nginx:1.25, bitnami/nginx)
+Visão de capacidades — o *quê*, antes do *onde* (§4) e do *como-não-partir* (§6).
 
-## Arquitectura: o que mexer onde
+**Análise / scoring (núcleo):**
+- Score **CCSS 0–10** por misconfiguration (NISTIR 7502), determinístico e
+  reprodutível; base + temporal (GEL/GRL de CVEs).
+- **4 modos de input:** ficheiro · directório (segue `include`s) · serviço
+  instalado (`--live`) · imagem Docker (`docker://`).
+- **Detecção de attack chains** — combinações de misconfigs que se amplificam
+  (score amplificado, não somado); 27 chains na DB.
+- **Enriquecimento por CVE real** — NVD + CISA KEV, cross-reference por versão
+  detectada; exploits (Exploit-DB) quando há versão.
+- **Detecção de directivas desconhecidas (3 camadas):** L1-2 determinísticas
+  (surfacing + triagem heurística, sempre); L3 opt-in (`--assess-unknown`) usa
+  LLM+RAG e produz candidatos de baixa confiança **nunca somados ao score**.
+- **Perfis de ambiente** (`--profile production|internal|dev`) ajustam a
+  exposição (AV) usada no scoring.
 
-- `core/` — genérico, NÃO depende de nenhum serviço:
-  - `target.py` (interface `Target`: detect, parse_config, get_profile, metadata)
-  - `models.py` (dataclasses: Directive, Misconfiguration[tem campo `narrative`], SystemProfile, ScanResult, TargetMetadata, AttackChain)
-  - `ccss.py` (fórmulas NISTIR 7502), `runtime.py` (motor: scan, register_plugin, _select_plugin)
-  - `rag.py` (BenchmarkIndex/TF-IDF sobre benchmark + manual + NISTIR; ver `_find_knowledge_docs`/`_ingest_manual` em cli/_knowledge.py), `cve_enricher.py`, `input_resolver.py`
-  - `report_html.py`, `report_dashboard.py`, `report_dashboard_online.py`
-  - `db/schema.sql`, `db/database.py`
-- `plugins/apache_httpd/` — plugin Apache + **código de build genérico** (ver armadilha abaixo)
-- `plugins/nginx/` — plugin Nginx (parser, rules, __init__, build_nginx.py, CIS PDF)
-- `cli/` — main.py é só o entry point (grupo + registo); implementação em `cli/_*.py` e `cli/commands/*_cmds.py`; `_discover_plugins()` (em `cli/_discovery.py`) importa cada `plugins.*`
+**Alvos suportados (10):** apache-httpd, nginx, ssh, mysql, redis, tomcat,
+docker (daemon) · **IaC:** kubernetes, dockerfile, azure-iac
+(Terraform/Bicep/ARM). Fontes: CIS Benchmark (PDF), DISA STIG (XCCDF), curada.
+Formatos parseados: key-value, YAML, Dockerfile, HCL, Bicep, ARM JSON.
 
-## Armadilhas e invariantes (LER antes de mexer)
+**Gestão de plugins (build-time):**
+- `plugin add` (extrai regras de um PDF CIS ou XCCDF STIG via LLM+RAG),
+  `plugin fetch` (descarrega STIGs públicos — catálogo de **44 serviços** —,
+  `--then-install`), `plugin manual` (ingere manual do serviço na base RAG).
+- `build_azure` — extração + **mapeamento de vocabulário** (portal→IaC, §6.7).
+- `curated_build` — build determinístico para rulesets curados (k8s/dockerfile).
 
-1. **Plugins auto-registam-se no import.** O `_discover_plugins()` do CLI importa
-   cada `plugins.*` e isso dispara `register_plugin()`. Em testes isolados que
-   chamam `runtime.scan` directamente, é preciso importar o plugin primeiro
-   (ver a fixture `_register_plugins` em `tests/test_full_coverage.py`).
+**Relatórios e saída:**
+- Terminal colorido; **HTML** rico; **dashboard** (offline/online); **JSON**;
+  **SARIF** (integra com GitHub Code Scanning / anotações de PR).
+- **Gates de CI:** `--threshold`, `--exit-code` (Critical→2, >threshold→1).
+- `report --merge` (sumário executivo multi-scan); `badge` (shields.io).
 
-2. **Lookup é por match EXACTO** `(target_name, directive, bad_value)`. Se o
-   parser guardar um valor diferente do que está no banco, não dispara. Foi
-   isto que partiu o LoadModule (guardava o caminho `.so`; o banco tem só o
-   nome do módulo). Corrigido no parser do Apache.
+**Ciclo de vida / operação:**
+- `watch` — auditoria contínua (ficheiro/dir/`--live`), alerta em 1 linha ao
+  mudar, `--log`, `--notify`; `history` (grava cada scan); **`trend`** (deriva
+  do score no tempo, sparkline).
+- `fix` — remediação assistida (reescreve valores inseguros; passos manuais).
+- `promote` — candidata (L3) → regra permanente determinística; **`--stats`**
+  mede o ciclo de aprendizagem.
+- `suppress` — aceitar risco conhecido (excluído de scans/exit-code futuros).
+- `explain` — origem completa de uma regra (secção CIS, CCSS, CVEs, narrativa),
+  sem scan; `diff` (delta entre dois scans JSON); `doctor` (integridade da DB).
 
-3. **Código de build genérico vive em `plugins/apache_httpd/`** mas serve AMBOS
-   os plugins: `llm_pipeline.py`, `chain_pipeline.py`, `narrative_pipeline.py`,
-   `build_llm.py`, `build_narratives.py`. O Nginx importa-os de lá. Idealmente
-   migrariam para `core/` (refactor pendente). NÃO duplicar — reutilizar.
+**Garantias transversais:**
+- **Manifesto de reprodutibilidade** em cada scan (§5) — score auditável.
+- **RAG build-time** — conhecimento ingerido uma vez, consultado sempre (§5).
+- **Persistência Docker** — plugins/DB sobrevivem `--rm` via volume `caspar_data`.
+- **594 testes** + CI; runtime **offline e determinístico** por construção.
 
-4. **Build é idempotente** (já corrigido): `db.delete_misconfigurations_not_in()`
-   apaga órfãs antes de inserir. A lista `ENTRIES` de cada `build_*.py` é a
-   fonte única da verdade. Reduzir a lista e refazer o build remove as antigas.
+---
 
-5. **Worst-case para AV/Au:** se há um `listen`/`Listen` não-loopback, AV=Network
-   para todas as misconfigs do serviço. KEV força GEL:High.
+## 2. Estado actual (verificado 2026-07-06)
 
-6. **Numeração de secções CIS:** o regex do `rag.py` aceita IDs de 2+ níveis
-   (`8.1` Apache, `2.5.1` Nginx). Cada `MisconfigEntry` deve apontar a uma
-   secção REAL do PDF — verificar com o `BenchmarkIndex` antes do build, senão o
-   LLM gera narrativas sem contexto (foi o que aconteceu e corrigimos).
+- **Branch:** `master`, working tree limpo (tudo committed).
+- **Testes:** **594** recolhidos, todos verdes offline. CI em GitHub Actions
+  (`.github/workflows/ci.yml`) corre a suite completa a cada push (é offline-safe).
+- **DB canónica** (`data/ccss_canonical.sql`, restaura para `ccss.db`): **470
+  regras / 27 chains** em **10 targets**:
 
-7. **Prompts são target-agnostic:** `narrative_pipeline.py` recebe `service_name`.
-   Não voltar a colar "Apache"/"httpd" hardcoded.
+| Target | Regras | Proveniência das regras |
+|---|---|---|
+| apache-httpd | 35 | LLM (validado por MAE vs CCE) |
+| nginx | 18 | LLM (revisão manual) |
+| ssh | 17 | LLM |
+| mysql | 23 | LLM |
+| redis | 36 | STIG |
+| tomcat | 49 | STIG |
+| docker | 57 | LLM (config runtime do daemon) |
+| **kubernetes** | 10 | **curada** (CIS K8s §5) |
+| **dockerfile** | 5 | **curada** (CIS Docker) |
+| **azure-iac** | 220 | **LLM + mapeamento de vocabulário** (CIS Azure) |
 
-## Preferências de trabalho
+- **3 proveniências de conhecimento**, todas a alimentar o MESMO scoring
+  determinístico: **LLM-extraída** · **curada** · **promovida** (ciclo `promote`).
 
-- Patches `fix_*.py` cirúrgicos > reescrever ficheiros inteiros.
-- Validar SEMPRE com teste funcional antes de aplicar.
-- Escrita académica em **Português Europeu** (não brasileiro).
-- Decisão tomada: **Nginx sem CCE/MAE** (validação por revisão manual; o Apache
-  é o caso quantitativo). Só directivas com secção CIS dedicada.
+---
 
-## O que falta (candidatos, por valor)
+## 3. Ambiente
 
-- **Resultados para o artigo INForum** (provavelmente prioritário): números
-  consolidados — nº misconfigs, MAE Apache, tempos de build, deteções em imagens
-  Docker reais.
-- **Attack chains do Nginx** (tem 0 vs 9 do Apache).
-- **Teste de cobertura do Nginx** (como `tests/test_full_coverage.py` do Apache).
-- **Refactor:** mover código de build genérico `apache_httpd/` → `core/`.
-- **Fundamentação teórica das bandas de amplificação** das chains (×1.2–1.8) —
-  é heurística original do trabalho, precisa de justificação na tese.
-- Plugins SSH / Ubuntu / Docker.
-- Fixes triviais: `datetime.utcnow()` deprecated em test_apache.py/test_runtime.py;
-  limpar `*.Zone.Identifier`.
+- **Directório:** `~/caspar/` (WSL2 Ubuntu). Venv em `.venv/`.
+- **Comando:** `caspar` (via `pip install -e .`) ou `python -m cli.main …`.
+  ⚠️ Não existe `python` global com deps — usa **sempre** o venv:
+  `source .venv/bin/activate` (ou `.venv/bin/python -m …`).
+- **Deps runtime:** pydantic, click, **pyyaml** (parser K8s). Build: openpyxl,
+  requests, pypdf. Sistema: `poppler-utils` (pdftotext), `sqlite3`.
+- **LLM:** Ollama local. `qwen2.5:14b` (melhor) ou `7b` (~3-4× mais rápido).
+  ~1-2 min/secção no 14b nesta máquina (CPU/GPU modesta) — os builds LLM são
+  demorados e comem RAM (14b ≈ 9GB). **Correr testes SEMPRE um processo de cada
+  vez** (5 pytests paralelos já esgotaram a RAM e derrubaram o WSL).
+- **DB:** `ccss.db` (SQLite) na raiz; nunca committed (`*.db` gitignored),
+  restaura-se do dump.
 
-## Como verificar que está tudo bem
+---
+
+## 4. Arquitectura — o que mexer onde
+
+**`config_assessment/core/`** — genérico, NÃO depende de nenhum serviço:
+- `target.py` — interface `Target` (4 métodos: `detect`, `parse_config`,
+  `get_profile`, `metadata`). **Adicionar um target = criar um plugin, zero
+  alterações ao core.**
+- `models.py` — dataclasses (Directive, Misconfiguration, SystemProfile,
+  ScanResult[tem `manifest`], AttackChain, TargetMetadata).
+- `ccss.py` — fórmulas NISTIR 7502 (base_score, temporal_score). **Aritmética
+  pura — é o coração determinístico.**
+- `runtime.py` — motor: `scan()`, `register_plugin()`, `_select_plugin()`,
+  detecção de chains, unknown-directives (Camadas 1-2).
+- `manifest.py` — manifesto de reprodutibilidade (§5).
+- `db/database.py`, `db/schema.sql` — SQLite; `db/doctor.py` (integridade);
+  `db/reseed.py` (semear DB do dump num volume, idempotente).
+- `input_resolver.py` (file/dir/live/docker), `watch.py`, `unknown_directives.py`.
+- `enrichment/cve_enricher.py`, `version_prefetch.py` (NVD + KEV).
+- `reports/` (html, dashboard, sarif via `_to_sarif`, scan_features, remediation).
+- `build/` — `rag.py` (BenchmarkIndex/TF-IDF), `llm_client.py` (Ollama+stub),
+  `benchmark_extractor.py` (PDF CIS + XCCDF STIG), `plugin_scaffolder.py`,
+  `curated_build.py` (build determinístico p/ regras curadas), `generic_build.py`.
+- `fetch/benchmark_fetcher.py` + `catalog.json` (fetch de STIGs públicos).
+
+**`config_assessment/parsers/`** — parsers genéricos, um por formato:
+- `key_value.py` (apache/nginx/ssh/…), `yaml_flat.py` (K8s),
+  `dockerfile.py`, `hcl_flat.py` (Terraform), `bicep_flat.py`, `arm_json.py`.
+
+**`config_assessment/plugins/<target>/`** — um dir por target. Padrão mínimo:
+`__init__.py` (subclasse `Target` + `register_plugin(...)`), `parser.py` (fino,
+delega num parser genérico), `rules.py`, `chains.json` (opcional). O
+`apache_httpd/` também aloja **código de build partilhado** (ver invariante §6.3).
+
+**`cli/`** — `main.py` é só o entry point (grupo + registo dos comandos;
+re-exporta nomes históricos). Implementação em:
+`_output.py` (terminal+SARIF), `_discovery.py` (auto-descoberta de plugins),
+`_knowledge.py` (base RAG build-time), e `commands/{scan,plugin,build,report,
+manage}_cmds.py`. **Adicionar um comando = `commands/*_cmds.py` + registar em
+`main.py`.**
+
+**Comandos:** scan, watch · plugin (add/fetch/manual) · build, fetch-exploits,
+refresh · targets, diff, badge, explain, history, **trend**, report ·
+suppress, doctor, fix, **promote** (`--stats`).
+
+---
+
+## 5. Features-chave recentes (para não reinventar)
+
+- **Manifesto de reprodutibilidade** (`core/manifest.py`): cada `ScanResult`
+  grava versão do CASPAR + **SHA-256 da base de conhecimento** + nº regras.
+  Rodapé do scan e campo `manifest` no JSON. *Mesmo manifesto + mesmo input ⇒
+  mesmos scores*, verificável por terceiros. **É a forma auditável da tese.**
+- **RAG build-time** (`cli/_knowledge.py`): conhecimento (benchmark + manual +
+  NISTIR) ingerido UMA vez (`plugin add --manual`, `plugin manual <target>
+  <path|url>`), descoberto do disco em cada scan via `_find_knowledge_docs` —
+  **sem flag de runtime**. `--docs` é só escape hatch. PDFs ganham um `.md`
+  sidecar (pdftotext, determinístico, auditável) na ingestão.
+- **`trend`** — deriva do score no tempo (sparkline por input; `history` grava
+  cada scan automaticamente).
+- **`promote --stats`** — mede o ciclo de aprendizagem: quantas regras vieram
+  de candidatas promovidas (marcadas na justificação), quantas esperam revisão.
+- **NISTIR 7502 viaja no repo e na imagem Docker** (excepção explícita a
+  `*.pdf` em `.gitignore` e `.dockerignore`) — a base CCSS partilhada da
+  Camada 3 tem de existir em qualquer máquina, offline.
+
+---
+
+## 6. Invariantes e armadilhas (LER antes de mexer)
+
+1. **Runtime é determinístico e sem LLM.** Nada de rede/LLM/aleatoriedade no
+   caminho do `scan`. RAG e LLM vivem só no build-time e na Camada 3 (opt-in,
+   `--assess-unknown`, cujos resultados são candidatos de baixa confiança
+   **nunca somados ao score CCSS**).
+
+2. **Lookup é match EXACTO** `(target_name, directive, bad_value)`. Se o parser
+   guardar um valor diferente do que está na DB, a regra não dispara. Isto já
+   partiu o `LoadModule` (caminho `.so` vs nome do módulo) e o vocabulário
+   Azure. **Ver invariante 7.**
+
+3. **Código de build partilhado vive em `plugins/apache_httpd/`** mas serve
+   vários plugins (`llm_pipeline.py`, `chain_pipeline.py`,
+   `narrative_pipeline.py`). Nginx/SSH importam-no de lá. NÃO duplicar. Migrá-lo
+   para `core/build/` é um refactor pendente (ver §8).
+
+4. **Builds são idempotentes** (upsert por chave / delete-not-in). A lista
+   `ENTRIES` de cada `build_*.py` é a fonte da verdade. `curated_build.py` e
+   `build_azure.py` fazem upsert — re-correr não duplica.
+
+5. **Worst-case para AV/Au:** um `Listen`/`listen` não-loopback ⇒ AV=Network
+   para todas as misconfigs do serviço; KEV força GEL:High. IaC assume AV=N/Au=N.
+
+6. **Plugins auto-registam-se no import.** `_discover_plugins()` importa cada
+   `plugins.*`, disparando `register_plugin()`. Em testes que chamam
+   `runtime.scan` directamente, importar `cli.main as m; m._discover_plugins()`
+   primeiro (ver `tests/test_iac_plugins.py`, `test_azure_iac_plugin.py`).
+
+7. **Azure IaC — o problema do vocabulário (importante para a defesa).** O CIS
+   Azure fala língua de *portal* ("Ensure 'Secure transfer required' is
+   Enabled"); os ficheiros falam `https_traffic_only_enabled` (Terraform) ou
+   `supportsHttpsTrafficOnly` (Bicep/ARM). `build_azure.py` acrescenta um estágio
+   de **mapeamento de vocabulário**: o LLM (ancorado via RAG no benchmark) mapeia
+   cada controlo para o atributo exacto em AMBOS os vocabulários → 1 controlo =
+   2 regras, 1 build serve `.tf`/`.bicep`/`.json`. Validações aprendidas em runs
+   reais (qwen2.5): rejeita caminhos com pontos (guarda a folha — parsers põem
+   pais no contexto), rejeita `bad_value` None/JSON-blob/prosa/pipe-alternativas
+   (`_is_matchable_value`), rejeita impacto C:N/I:N/A:N (score 0 = regra morta).
+   `canon.py` normaliza sinónimos booleanos (`off`/`OFF`/`Disabled` → `false`)
+   nos DOIS lados (regra e config parseada), para casarem numa forma canónica —
+   **sem tocar no runtime nem nos outros targets**.
+
+8. **Regenerar a DB canónica após um build.** Depois de `build_azure`/curated
+   gravarem em `ccss.db`, **tens de** regenerar o dump para as regras viajarem:
+   ```bash
+   # a caspar_meta é precisa (reseed) e o .dump só a inclui se existir na DB:
+   sqlite3 ccss.db "CREATE TABLE IF NOT EXISTS caspar_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL); INSERT OR REPLACE INTO caspar_meta VALUES('base_db_version','2');"
+   sqlite3 ccss.db .dump > data/ccss_canonical.sql
+   ```
+   Sem a `caspar_meta` no dump, `tests/test_reseed.py` parte. (Já mordeu.)
+
+9. **PDFs de benchmark são material licenciado** — gitignored, NÃO viajam no
+   git nem na imagem (excepto o NISTIR). Por isso 13 testes RAG do apache fazem
+   *skip* num clone limpo/CI — normal, não é falha. Copiar os PDFs à mão só é
+   preciso para correr um build LLM.
+
+10. **Imagens Docker: `latest` primeiro, `full` depois** (`caspar:full` é
+    `FROM caspar:latest`). Ordem inversa = código velho na `full`. O build LLM
+    (`plugin add`, `build_azure`) precisa da `:full` (Ollama embutido). Os
+    comandos/regras novos só entram nas imagens após **rebuild** — ver
+    [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) §3.
+
+---
+
+## 7. Validação da metodologia (estado + opções)
+
+**Já implementado:**
+- **MAE vs ground truth CCE** (`plugins/apache_httpd/validate_mae.py`): scores
+  Apache vs faixas de severidade DISA do dataset CCE oficial. É a evidência
+  quantitativa mais forte. ⚠️ Precisa de `openpyxl` instalado para correr.
+- **Cobertura** (`tests/test_full_coverage.py`): recall sobre configs
+  vulneráveis conhecidas.
+- **Reprodutibilidade** (manifesto, §5): consistência interna verificável.
+
+**Fixtures de demonstração** em `test_target/`: `azure_storage_vulnerable.tf`,
+`pod_vulnerable.yaml`, `Dockerfile.vulnerable` (cada um dispara misconfigs
+reais + a linha/recurso exactos).
+
+**Opções por explorar** (candidatas à secção de avaliação da tese):
+Precision/Recall/F1 num corpus rotulado · comparação com baselines
+(tfsec/checkov/kube-score) · `promote --stats` a medir o valor incremental do
+LLM · concordância inter-avaliador (Cohen's κ) nas submétricas CIA · ablação
+(com/sem RAG, 7b vs 14b). **Limitação a declarar:** azure-iac/k8s/dockerfile
+não têm ground truth CCE — validam-se por rótulos + baselines, não por MAE.
+
+---
+
+## 8. O que falta / próximos passos (por valor)
+
+1. **Avaliação empírica para a dissertação** (prioritário) — correr `validate_mae`
+   (instalar `openpyxl`) para o número Apache; montar P/R/F1 + baseline; correr
+   `promote --stats` num corpus. Ver §7.
+2. **Rever as ~11 colisões do build Azure** — atributos com múltiplos bad_values
+   (o build lista-os com ⚠). A maioria é legítima (recursos diferentes); duas
+   são ruído de case (`pricing_tier Free/free`) que a `canon.py` podia cobrir.
+3. **Rebuild + push das imagens Docker** — para as imagens públicas ganharem
+   Azure IaC, pyyaml, NISTIR, comandos novos. `latest`→`full` (invariante 10).
+4. **Refactor:** mover build partilhado `apache_httpd/` → `core/build/`
+   (invariante 3).
+5. **Attack chains para mais targets** (nginx tem poucas; azure/k8s têm 1).
+6. **Fundamentar as bandas de amplificação** das chains (×1.2–1.8) na tese —
+   é heurística original, precisa de justificação.
+7. Dívidas menores: 2 warnings de deprecação do pytest (fixture class-scoped em
+   `test_llm_pipeline.py`); versão `0.1.0` duplicada (`pyproject.toml` +
+   `manifest.py`) — sincronizar no bump.
+
+---
+
+## 9. Verificação (corre isto para confirmar o estado)
 
 ```bash
-source .venv/bin/activate
-pytest tests/ -v                              # deve dar 183 passed
-caspar targets                                  # lista apache-httpd, dummy, nginx
-caspar scan test_nginx.conf                     # 3 Medium
-caspar scan docker://nginx:latest --report --format dashboard --output ~/relatorios/
+cd ~/caspar && source .venv/bin/activate
+
+python -m pytest tests/ -q                 # ~594 passed (uns skips se faltam PDFs)
+caspar doctor                              # ✓ healthy
+caspar targets                             # 10 targets, incl. azure-iac/kubernetes/dockerfile
+caspar scan test_nginx.conf                # ≈5.7 [Medium]
+caspar scan test_target/azure_storage_vulnerable.tf   # ≈8.5 [High] (Terraform)
+caspar scan test_target/pod_vulnerable.yaml           # ≈10.0 [Critical] + chain
+
+# contagens da DB (devem bater com a tabela do §2):
+sqlite3 ccss.db "SELECT target_name, count(*) FROM misconfigurations GROUP BY target_name"
 ```
+
+## 10. Preferências de trabalho
+
+- **A dissertação é escrita em INGLÊS.** (Estes guias de projecto e os
+  comentários/output do código estão em Português Europeu — mantê-los; só o
+  texto académico da tese é que é em inglês.)
+- Patches cirúrgicos > reescrever ficheiros inteiros. Validar SEMPRE com um
+  teste/scan funcional real antes de dar por concluído.
+- Testes: **um processo de cada vez** (RAM do WSL). Medir `free -h` à volta de
+  builds LLM.
+- Ao mexer em regras/DB: regenerar o dump (invariante 8) e correr a suite.
