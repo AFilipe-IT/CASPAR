@@ -260,16 +260,41 @@ caspar-full python -m config_assessment.plugins.azure_iac.build_azure \
   --model qwen2.5:14b            # uma vez; runtime continua determinístico
 ```
 
-### Kubernetes e Dockerfile: regras curadas
+### Kubernetes, Dockerfile e Ubuntu OS: regras curadas
 
-K8s (CIS §5) e Dockerfile (CIS Docker) usam regras **curadas à mão** com build 100% determinístico
+K8s (CIS §5), Dockerfile (CIS Docker) e **Ubuntu** (CIS Ubuntu 22.04 L1 — subconjunto config-based:
+`sysctl` kernel/rede + `/etc/login.defs`) usam regras **curadas à mão** com build 100% determinístico
 (`build/curated_build.py`) — sem LLM nesse caminho. Inclui a chain curada privileged+hostNetwork e a
 absence rule do `USER` (root por omissão).
 
-> **Para a defesa:** a base de conhecimento passa a ter **três proveniências** — LLM-extraída
-> (apache/nginx/…/azure-iac), curada (kubernetes/dockerfile) e promovida (ciclo `promote`) — todas a
-> alimentar o mesmo scoring determinístico, e tudo **sem tocar no core** (5 parsers genéricos + 4
-> plugins IaC; zero alterações a `runtime.py`).
+```bash
+caspar scan /etc/sysctl.conf         # Ubuntu OS: hardening de kernel/rede
+caspar scan test_target/ubuntu_demo/sysctl.conf   # fixture de demo
+```
+
+> **Para a defesa:** a base de conhecimento tem **três proveniências** — LLM-extraída
+> (apache/nginx/…/azure-iac), curada (kubernetes/dockerfile/ubuntu) e promovida (ciclo `promote`) —
+> todas a alimentar o mesmo scoring determinístico, e tudo **sem tocar no core** (zero alterações a
+> `runtime.py`).
+
+---
+
+## Avaliação e comparação com baselines
+
+Dois scripts reproduzíveis produzem o material de avaliação (`scripts/`):
+
+```bash
+python -m scripts.evaluate                  # composição da KB · MAE vs CCE · recall nas fixtures
+python -m scripts.baseline_compare --oscap  # CASPAR vs Trivy (IaC/Docker) e OpenSCAP (Ubuntu OS)
+```
+
+- **Correção:** MAE vs *ground truth* CCE oficial (Apache) — **0% mismatch (20/20)**.
+- **Deteção:** recall nas fixtures vulneráveis — **100% (14/14)**.
+- **Baselines:** o `baseline_compare` corre o **Trivy** (`.tf`, Dockerfile) e o **OpenSCAP**
+  (Ubuntu OS, subconjunto config-based) no mesmo alvo. O contraste não é "quem encontra mais": ambos
+  detetam misconfigs, mas o CASPAR anexa um **score CCSS reproduzível + narrativa** onde os outros dão
+  um rótulo fixo / pass-fail. (Nota: em WSL o OpenSCAP dá `notapplicable` — precisa de VM Ubuntu para
+  pass/fail reais.)
 
 ---
 

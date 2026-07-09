@@ -55,10 +55,15 @@ Visão de capacidades — o *quê*, antes do *onde* (§4) e do *como-não-partir
 - **Perfis de ambiente** (`--profile production|internal|dev`) ajustam a
   exposição (AV) usada no scoring.
 
-**Alvos suportados (10):** apache-httpd, nginx, ssh, mysql, redis, tomcat,
-docker (daemon) · **IaC:** kubernetes, dockerfile, azure-iac
-(Terraform/Bicep/ARM). Fontes: CIS Benchmark (PDF), DISA STIG (XCCDF), curada.
-Formatos parseados: key-value, YAML, Dockerfile, HCL, Bicep, ARM JSON.
+**Alvos suportados (11):** apache-httpd, nginx, ssh, mysql, redis, tomcat,
+docker (daemon), ubuntu (OS hardening — sysctl/login.defs) · **IaC:**
+kubernetes, dockerfile, azure-iac (Terraform/Bicep/ARM). Fontes: CIS Benchmark
+(PDF), DISA STIG (XCCDF), curada. Formatos parseados: key-value, YAML,
+Dockerfile, HCL, Bicep, ARM JSON.
+
+**Avaliação / baselines** (`scripts/`): `evaluate.py` (composição da KB, MAE vs
+CCE, recall nas fixtures); `baseline_compare.py` (CASPAR vs **Trivy** em IaC/
+Docker; CASPAR vs **OpenSCAP** `--oscap` em Ubuntu OS). Ver §7.
 
 **Gestão de plugins (build-time):**
 - `plugin add` (extrai regras de um PDF CIS ou XCCDF STIG via LLM+RAG),
@@ -88,17 +93,17 @@ Formatos parseados: key-value, YAML, Dockerfile, HCL, Bicep, ARM JSON.
 - **Manifesto de reprodutibilidade** em cada scan (§5) — score auditável.
 - **RAG build-time** — conhecimento ingerido uma vez, consultado sempre (§5).
 - **Persistência Docker** — plugins/DB sobrevivem `--rm` via volume `caspar_data`.
-- **594 testes** + CI; runtime **offline e determinístico** por construção.
+- **602 testes** + CI; runtime **offline e determinístico** por construção.
 
 ---
 
-## 2. Estado actual (verificado 2026-07-06)
+## 2. Estado actual (verificado 2026-07-09)
 
 - **Branch:** `master`, working tree limpo (tudo committed).
-- **Testes:** **594** recolhidos, todos verdes offline. CI em GitHub Actions
+- **Testes:** **602** recolhidos, todos verdes offline. CI em GitHub Actions
   (`.github/workflows/ci.yml`) corre a suite completa a cada push (é offline-safe).
-- **DB canónica** (`data/ccss_canonical.sql`, restaura para `ccss.db`): **470
-  regras / 27 chains** em **10 targets**:
+- **DB canónica** (`data/ccss_canonical.sql`, restaura para `ccss.db`): **488
+  regras / 27 chains** em **11 targets**:
 
 | Target | Regras | Proveniência das regras |
 |---|---|---|
@@ -109,6 +114,7 @@ Formatos parseados: key-value, YAML, Dockerfile, HCL, Bicep, ARM JSON.
 | redis | 36 | STIG |
 | tomcat | 49 | STIG |
 | docker | 57 | LLM (config runtime do daemon) |
+| **ubuntu** | 18 | **curada** (CIS Ubuntu 22.04 L1, subconjunto config) |
 | **kubernetes** | 10 | **curada** (CIS K8s §5) |
 | **dockerfile** | 5 | **curada** (CIS Docker) |
 | **azure-iac** | 220 | **LLM + mapeamento de vocabulário** (CIS Azure) |
@@ -266,26 +272,38 @@ suppress, doctor, fix, **promote** (`--stats`).
 
 ---
 
-## 7. Validação da metodologia (estado + opções)
+## 7. Validação da metodologia (estado + resultados)
 
-**Já implementado:**
-- **MAE vs ground truth CCE** (`plugins/apache_httpd/validate_mae.py`): scores
-  Apache vs faixas de severidade DISA do dataset CCE oficial. É a evidência
-  quantitativa mais forte. ⚠️ Precisa de `openpyxl` instalado para correr.
-- **Cobertura** (`tests/test_full_coverage.py`): recall sobre configs
-  vulneráveis conhecidas.
+**Correr tudo:** `python -m scripts.evaluate` (relatório consolidado) e
+`python -m scripts.baseline_compare [--oscap]` (comparação com baselines).
+
+**Resultados verificados (2026-07-09):**
+- **Correção — MAE vs ground truth CCE** (`plugins/apache_httpd/validate_mae.py`):
+  Apache **20/20 matched, 0 mismatch (0.0%), gate PASS** contra as faixas de
+  severidade DISA do dataset CCE oficial. É a evidência quantitativa mais forte.
+  (Precisa de `openpyxl` — já instalado no venv.)
+- **Deteção — recall nas fixtures vulneráveis** (`scripts/evaluate.py`):
+  **100% (14/14)** — nginx, azure-iac, kubernetes, dockerfile.
 - **Reprodutibilidade** (manifesto, §5): consistência interna verificável.
+- **Baseline Trivy** (`scripts/baseline_compare.py`): CASPAR vs Trivy no MESMO
+  ficheiro — `azure_storage_vulnerable.tf` (9 vs 13), `Dockerfile.vulnerable`
+  (4 vs 5). Achado: o Trivy apanhou `https_traffic_only_enabled` que o build LLM
+  perdeu (mapeou o sinónimo `secure_transfer_required`) — blind spots distintos.
+- **Baseline OpenSCAP** (`--oscap`): corre `oscap` no sistema vivo (CIS L1),
+  filtra o subconjunto config-based que o target `ubuntu` cobre. **Nota honesta:**
+  em WSL o OVAL dá `notapplicable` (37 regras sobreponíveis, 0 pass/fail) — para
+  números pass/fail reais é preciso uma VM Ubuntu provisionada. A diferença de
+  escopo (CASPAR pontua FICHEIROS; OpenSCAP audita ESTADO do sistema) é ela
+  própria um achado da tese.
 
 **Fixtures de demonstração** em `test_target/`: `azure_storage_vulnerable.tf`,
-`pod_vulnerable.yaml`, `Dockerfile.vulnerable` (cada um dispara misconfigs
-reais + a linha/recurso exactos).
+`pod_vulnerable.yaml`, `Dockerfile.vulnerable`, `ubuntu_demo/sysctl.conf`.
 
-**Opções por explorar** (candidatas à secção de avaliação da tese):
-Precision/Recall/F1 num corpus rotulado · comparação com baselines
-(tfsec/checkov/kube-score) · `promote --stats` a medir o valor incremental do
-LLM · concordância inter-avaliador (Cohen's κ) nas submétricas CIA · ablação
-(com/sem RAG, 7b vs 14b). **Limitação a declarar:** azure-iac/k8s/dockerfile
-não têm ground truth CCE — validam-se por rótulos + baselines, não por MAE.
+**Opções por explorar** (para reforçar a tese): Precision/Recall/F1 num corpus
+rotulado maior · `promote --stats` a medir o valor incremental do LLM ·
+concordância inter-avaliador (Cohen's κ) nas submétricas CIA · ablação (com/sem
+RAG, 7b vs 14b). **Limitação a declarar:** azure-iac/k8s/dockerfile/ubuntu não
+têm ground truth CCE — validam-se por recall nas fixtures + baselines, não por MAE.
 
 ---
 
@@ -315,12 +333,17 @@ não têm ground truth CCE — validam-se por rótulos + baselines, não por MAE
 ```bash
 cd ~/caspar && source .venv/bin/activate
 
-python -m pytest tests/ -q                 # ~594 passed (uns skips se faltam PDFs)
+python -m pytest tests/ -q                 # ~602 passed (uns skips se faltam PDFs)
 caspar doctor                              # ✓ healthy
-caspar targets                             # 10 targets, incl. azure-iac/kubernetes/dockerfile
+caspar targets                             # 11 targets (+ dummy), incl. ubuntu/azure-iac/k8s/dockerfile
 caspar scan test_nginx.conf                # ≈5.7 [Medium]
 caspar scan test_target/azure_storage_vulnerable.tf   # ≈8.5 [High] (Terraform)
 caspar scan test_target/pod_vulnerable.yaml           # ≈10.0 [Critical] + chain
+caspar scan test_target/ubuntu_demo/sysctl.conf       # ≈5.8 [Medium] (Ubuntu OS)
+
+# avaliação + baselines (material da tese):
+python -m scripts.evaluate                 # KB · MAE 0% · recall 100%
+python -m scripts.baseline_compare --oscap # CASPAR vs Trivy / OpenSCAP
 
 # contagens da DB (devem bater com a tabela do §2):
 sqlite3 ccss.db "SELECT target_name, count(*) FROM misconfigurations GROUP BY target_name"

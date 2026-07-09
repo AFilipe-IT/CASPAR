@@ -1055,6 +1055,26 @@ exatos no relatório.
 
 ---
 
+## 21-C. OS hardening — Ubuntu (subconjunto config-based) + baseline OpenSCAP
+
+O target `ubuntu` cobre o **subconjunto config-based** do CIS Ubuntu 22.04 L1 Server: hardening de
+kernel/rede via `sysctl` (`/etc/sysctl.conf`, `sysctl.d/`) e política de passwords via
+`/etc/login.defs`. Curado, determinístico, **separado do plugin `ssh`** (que já cobre o `sshd_config`).
+
+```bash
+caspar scan /etc/sysctl.conf                       # hardening real da máquina
+caspar scan test_target/ubuntu_demo/sysctl.conf    # fixture de demo
+```
+
+**Fronteira de escopo (achado da tese):** o OpenSCAP avalia o **estado do sistema vivo** (permissões,
+módulos de kernel, serviços a correr); o CASPAR avalia **ficheiros de configuração**. A comparação
+justa (`scripts/baseline_compare.py --oscap`) é no subconjunto sobreponível — os controlos que ambos
+lêem de um ficheiro. Aí o diferencial do CASPAR (score CCSS reproduzível + narrativa) contrasta com o
+pass/fail binário do OpenSCAP. Nota: correr o OpenSCAP num WSL dá `notapplicable` (os probes OVAL
+precisam de um sistema real); para números pass/fail é preciso uma VM Ubuntu provisionada.
+
+---
+
 ## 22. Onde mexer (mapa rápido)
 
 | Quero… | Ficheiro |
