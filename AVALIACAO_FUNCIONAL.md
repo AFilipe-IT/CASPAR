@@ -91,10 +91,13 @@ build LLM mapeou como sinónimo `secure_transfer_required`).
 
 ### 4.2 OpenSCAP (Ubuntu OS) — **aqui é que o 22.04 real conta**
 
-Primeiro, o CASPAR sobre o `sysctl.conf` **real** da máquina:
+Primeiro, o CASPAR sobre o `sysctl.conf` **real** da máquina. O `/etc/sysctl.conf`
+é legível sem privilégios, por isso **não precisas de sudo** aqui:
 
 ```bash
-sudo caspar scan /etc/sysctl.conf        # ou: python -m cli.main scan /etc/sysctl.conf
+python -m cli.main scan /etc/sysctl.conf
+# (o comando curto 'caspar' só existe após 'pip install -e .'; e com sudo o
+#  venv não é visto — usa 'sudo .venv/bin/python -m cli.main …' se precisares)
 ```
 
 Depois o OpenSCAP no mesmo sistema, e a comparação automática:
