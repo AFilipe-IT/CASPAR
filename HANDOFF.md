@@ -290,11 +290,16 @@ suppress, doctor, fix, **promote** (`--stats`).
   (4 vs 5). Achado: o Trivy apanhou `https_traffic_only_enabled` que o build LLM
   perdeu (mapeou o sinónimo `secure_transfer_required`) — blind spots distintos.
 - **Baseline OpenSCAP** (`--oscap`): corre `oscap` no sistema vivo (CIS L1),
-  filtra o subconjunto config-based que o target `ubuntu` cobre. **Nota honesta:**
-  em WSL o OVAL dá `notapplicable` (37 regras sobreponíveis, 0 pass/fail) — para
-  números pass/fail reais é preciso uma VM Ubuntu provisionada. A diferença de
-  escopo (CASPAR pontua FICHEIROS; OpenSCAP audita ESTADO do sistema) é ela
-  própria um achado da tese.
+  filtra o subconjunto config-based que o target `ubuntu` cobre. **Validado num
+  Ubuntu 22.04 real (2026-07-09): 38 regras sobreponíveis, 24 fail / 1 pass
+  REAIS** (no WSL de dev dava `notapplicable` — os probes OVAL precisam de um
+  sistema real). A diferença de escopo (CASPAR pontua FICHEIROS; OpenSCAP audita
+  ESTADO do sistema vivo) é ela própria um achado da tese.
+
+**→ A PARTE PRÁTICA ESTÁ FECHADA E VALIDADA** num Ubuntu 22.04 real: 602 testes,
+13/13 smoke, MAE 0%, recall 100%, e 3 baselines (Trivy IaC, Trivy Docker,
+OpenSCAP OS com pass/fail reais). O material consolidado para a tese está em
+[DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md).
 
 **Fixtures de demonstração** em `test_target/`: `azure_storage_vulnerable.tf`,
 `pod_vulnerable.yaml`, `Dockerfile.vulnerable`, `ubuntu_demo/sysctl.conf`.
