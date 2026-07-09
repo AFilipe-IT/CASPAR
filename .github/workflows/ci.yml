@@ -15,12 +15,16 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      matrix:
+        # 3.10 = minimum supported (Ubuntu 22.04's stock python); 3.12 = dev.
+        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       # pdftotext (extração de PDFs) e sqlite3 (restaurar a DB canónica) —
