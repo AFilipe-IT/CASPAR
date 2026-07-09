@@ -10,6 +10,7 @@
 > | [GUIA_CASPAR.md](GUIA_CASPAR.md) | Guia de utilizador + demonstração | queres perceber e demonstrar, do zero |
 > | [GUIA_TECNICO.md](GUIA_TECNICO.md) | Arquitectura interna | vais mexer no código |
 > | [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) | Setup + build das imagens Docker | vais testar numa máquina nova |
+> | [AVALIACAO_FUNCIONAL.md](AVALIACAO_FUNCIONAL.md) | Roteiro de avaliação funcional (Ubuntu 22.04) | vais avaliar o projeto de ponta a ponta |
 > | [HANDOFF.md](HANDOFF.md) | Briefing de continuação (histórico) | retomas o projeto noutra sessão/máquina |
 
 ---
