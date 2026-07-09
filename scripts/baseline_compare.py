@@ -110,12 +110,15 @@ def _oscap_findings(profile: str = "cis_level1_server") -> dict:
     with tempfile.NamedTemporaryFile(suffix=".xml", delete=False) as tf:
         results_xml = tf.name
     try:
-        # eval returns non-zero when any rule fails — that's expected, not an error.
+        # eval returns non-zero when any rule fails — that's expected, not an
+        # error. Capture as BYTES (no text=True): oscap can emit non-UTF-8 on
+        # stderr (paths/locale), which would crash decoding. We don't read the
+        # streams anyway — the results go to the --results XML that ET parses.
         subprocess.run(
             ["oscap", "xccdf", "eval",
              "--profile", f"xccdf_org.ssgproject.content_profile_{profile}",
              "--results", results_xml, str(ds)],
-            capture_output=True, text=True, timeout=600)
+            capture_output=True, timeout=600)
         tree = ET.parse(results_xml)
     except (OSError, subprocess.SubprocessError, ET.ParseError) as exc:
         return {"skipped": f"oscap error: {exc}"}
