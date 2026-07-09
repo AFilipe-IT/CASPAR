@@ -75,6 +75,82 @@ def _oscap_available() -> bool:
     return bool(shutil.which("oscap"))
 
 
+def _oscap_datastream() -> Path | None:
+    """Newest installed Ubuntu SSG datastream (SSG ships up to 22.04)."""
+    base = Path("/usr/share/xml/scap/ssg/content")
+    if not base.is_dir():
+        return None
+    dss = sorted(base.glob("ssg-ubuntu*-ds.xml"))
+    return dss[-1] if dss else None
+
+
+# CASPAR's ubuntu target covers these config-based control families; we compare
+# OpenSCAP against CASPAR only on this overlapping subset (fair basis — both
+# read the same kind of config value). OpenSCAP rule ids carry these tokens.
+_OVERLAP_TOKENS = ("sysctl", "accept_redirects", "source_route", "rp_filter",
+                   "send_redirects", "syncookies", "icmp_echo", "ip_forward",
+                   "randomize_va_space", "suid_dumpable", "log_martians",
+                   "pass_max_days", "pass_min_days", "pass_warn_age",
+                   "encrypt_method", "login.defs", "password_maximum_age")
+
+
+def _oscap_findings(profile: str = "cis_level1_server") -> dict:
+    """Run `oscap xccdf eval` on the LIVE system with the CIS profile and
+    return the results for the config-based subset CASPAR also covers.
+
+    OpenSCAP scores whole-system state; we filter to the overlapping controls
+    so the comparison is like-for-like (a config-file value, not a stat/module
+    check). Best-effort — returns a skip reason if content is missing."""
+    ds = _oscap_datastream()
+    if ds is None:
+        return {"skipped": "no Ubuntu SSG datastream (apt install ssg-debderived)"}
+    import tempfile
+    import xml.etree.ElementTree as ET
+
+    with tempfile.NamedTemporaryFile(suffix=".xml", delete=False) as tf:
+        results_xml = tf.name
+    try:
+        # eval returns non-zero when any rule fails — that's expected, not an error.
+        subprocess.run(
+            ["oscap", "xccdf", "eval",
+             "--profile", f"xccdf_org.ssgproject.content_profile_{profile}",
+             "--results", results_xml, str(ds)],
+            capture_output=True, text=True, timeout=600)
+        tree = ET.parse(results_xml)
+    except (OSError, subprocess.SubprocessError, ET.ParseError) as exc:
+        return {"skipped": f"oscap error: {exc}"}
+
+    # rule-result carries idref + a <result> child. The result element uses
+    # whatever default namespace the document declares, so match by localname.
+    overlap = {"pass": 0, "fail": 0, "other": 0, "counts": {}, "rules": []}
+    for el in tree.iter():
+        if not el.tag.endswith("rule-result"):
+            continue
+        idref = (el.get("idref") or "").lower()
+        if not any(tok in idref for tok in _OVERLAP_TOKENS):
+            continue
+        res = "unknown"
+        for child in el:
+            if child.tag.endswith("}result") or child.tag == "result":
+                res = (child.text or "unknown").strip()
+                break
+        overlap["counts"][res] = overlap["counts"].get(res, 0) + 1
+        if res == "pass":
+            overlap["pass"] += 1
+        elif res == "fail":
+            overlap["fail"] += 1
+        else:
+            overlap["other"] += 1
+        overlap["rules"].append({"id": idref.split("_rule_")[-1], "result": res})
+
+    Path(results_xml).unlink(missing_ok=True)
+    return {"datastream": ds.name, "profile": profile,
+            "overlap_matched": len(overlap["rules"]),
+            "overlap_pass": overlap["pass"], "overlap_fail": overlap["fail"],
+            "overlap_other": overlap["other"],
+            "result_breakdown": overlap["counts"], "rules": overlap["rules"][:40]}
+
+
 # Files scanned by each IaC/container baseline (Trivy).
 _TRIVY_TARGETS = [
     "test_target/azure_storage_vulnerable.tf",
@@ -82,7 +158,7 @@ _TRIVY_TARGETS = [
 ]
 
 
-def run() -> dict:
+def run(with_oscap: bool = False) -> dict:
     report = {"trivy": {}, "oscap": {"available": _oscap_available()}}
     for rel in _TRIVY_TARGETS:
         if not (ROOT / rel).exists():
@@ -92,6 +168,10 @@ def run() -> dict:
             "caspar": _caspar_findings(rel),
             "trivy": _trivy_findings(rel),
         }
+    # OpenSCAP evaluates the LIVE system, so it's opt-in (slower, and only
+    # meaningful on the machine being audited). --oscap turns it on.
+    if with_oscap and _oscap_available():
+        report["oscap"]["result"] = _oscap_findings()
     return report
 
 
@@ -118,24 +198,55 @@ def _print(report: dict) -> None:
             # Overlap by directive name vs Trivy title/id is fuzzy — report the
             # counts and let the thesis discuss specific overlaps qualitatively.
     print("\n" + "=" * 68)
-    if report["oscap"]["available"]:
-        print("  OpenSCAP: installed — run the OS-config comparison separately")
-        print("  (needs an Ubuntu config target; see handoff §8).")
+    print("  CASPAR vs OpenSCAP — Ubuntu OS hardening (config-based subset)")
+    print("=" * 68)
+    osc = report["oscap"]
+    if not osc["available"]:
+        print("\n  OpenSCAP not installed — `sudo apt-get install openscap-scanner`")
+    elif "result" not in osc:
+        print("\n  OpenSCAP installed. Re-run with --oscap to evaluate the live")
+        print("  system (CIS L1 Server) on the overlapping sysctl/login.defs subset.")
+    elif "skipped" in osc["result"]:
+        print(f"\n  skipped: {osc['result']['skipped']}")
     else:
-        print("  OpenSCAP: NOT installed — `sudo apt-get install openscap-scanner`")
-        print("  (needed for the Ubuntu OS-config baseline).")
+        r = osc["result"]
+        cu = _caspar_findings("test_target/ubuntu_demo/sysctl.conf") \
+            if (ROOT / "test_target/ubuntu_demo/sysctl.conf").exists() else None
+        print(f"\n  OpenSCAP ({r['datastream']}, {r['profile']}):")
+        print(f"     {r['overlap_matched']} overlapping config-based rules found")
+        bd = " ".join(f"{k}:{v}" for k, v in sorted(r["result_breakdown"].items()))
+        print(f"     verdict breakdown: {bd or '(none)'}")
+        actionable = r["overlap_pass"] + r["overlap_fail"]
+        if actionable == 0:
+            print("     ⚠ no pass/fail verdicts on THIS host — OpenSCAP's OVAL "
+                  "probes\n       need a real (non-WSL) system with the config "
+                  "applied. Run on a\n       provisioned Ubuntu VM for actionable "
+                  "pass/fail numbers.")
+        else:
+            print(f"     pass:{r['overlap_pass']}  fail:{r['overlap_fail']}  "
+                  f"(binary verdict, no score)")
+        if cu:
+            print(f"\n  CASPAR (same control family, on a config file):")
+            print(f"     {cu['count']} findings · score {cu['score']}/10 "
+                  f"[{cu['severity']}]   (reproducible CCSS + narrative per finding)")
+        print("\n  → Both cover the same control family; CASPAR scores a config")
+        print("    FILE deterministically, OpenSCAP audits live-system STATE.")
+        print("    That scope difference is itself a thesis finding.")
     print("=" * 68 + "\n")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--oscap", action="store_true",
+                    help="Also run OpenSCAP on the LIVE system (CIS L1) and "
+                         "compare on the overlapping config-based subset.")
     args = ap.parse_args()
     if not (ROOT / "ccss.db").exists():
         print("ccss.db not found — restore from data/ccss_canonical.sql",
               file=sys.stderr)
         sys.exit(2)
-    report = run()
+    report = run(with_oscap=args.oscap)
     print(json.dumps(report, indent=2)) if args.json else _print(report)
 
 
