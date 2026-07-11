@@ -120,6 +120,39 @@ nº de regras (rodapé do scan, campo `manifest` no JSON). *Mesmo manifesto +
 mesmo input ⇒ mesmos scores*, verificável por terceiros. É a forma auditável da
 afirmação de determinismo.
 
+### 3.7 Attack chains e a amplificação (heurística proposta)
+Uma *attack chain* dispara quando (a) todas as suas directivas estão presentes e
+(b) pelo menos uma é uma misconfiguration confirmada. O score amplificado é:
+
+> `amplified = max(temporal_score dos constituintes) × factor`, capado a 10.0.
+
+**Justificação do factor (×1.2–1.8) — a apresentar como contribuição, não como
+valor derivado do NISTIR:**
+- *Princípio:* o risco de uma combinação **excede** o do pior componente isolado
+  — duas misconfigs podem abrir um caminho de ataque que nenhuma permite sozinha
+  (ex.: `privileged + hostNetwork` no K8s → *node takeover*: escape do container
+  E alcance dos serviços do nó). É o princípio de **attack graphs/trees**
+  (Sheyner, Schneier) e do encadeamento reconhecido no CVSS/MITRE ATT&CK.
+- *Porquê multiplicador (não soma):* somar seria arbitrário e sairia da escala;
+  multiplicar o pior constituinte, com **cap em 10.0**, mantém a escala CCSS e
+  reflecte que a chain *agrava* o pior problema, não que inventa um score novo.
+- *A gama:* ×1.2 = agravamento marginal; ×1.8 = a combinação abre um caminho
+  qualitativamente novo. O factor é **por-chain, declarado no `chains.json` com
+  justificação textual** — cada chain diz *porquê* aquele valor.
+- *Honestidade (para a defesa):* é uma **heurística de calibração qualitativa,
+  curada por perito**; a validação empírica da gama fica como **trabalho futuro**.
+
+### 3.8 Base de conhecimento RAG e o manual do serviço
+Para a avaliação de directivas desconhecidas (Camada 3, opt-in), o LLM é ancorado
+por RAG numa base de conhecimento por-target: o benchmark, o **manual do serviço**,
+e a referência partilhada NISTIR 7502. Modelo: **ingerir uma vez (build-time),
+consultar sempre (runtime)** — o documento é copiado para a pasta do plugin
+(`manual_*`), *chunked* e indexado por TF-IDF; `_find_knowledge_docs` descobre-o
+do disco em cada scan **sem flag**. Três caminhos de ingestão:
+`plugin add --manual <path|url>` (na instalação), `plugin fetch --then-install
+--manual` (via fetch), e `plugin manual <target> <path|url>` (retroativo). Aceita
+ficheiro local ou URL. **Nunca toca no scoring determinístico** — só a Camada 3.
+
 ---
 
 ## 4. VALIDAÇÃO (resultados finais — Ubuntu 22.04 real, 2026-07-09)

@@ -314,22 +314,27 @@ têm ground truth CCE — validam-se por recall nas fixtures + baselines, não p
 
 ## 8. O que falta / próximos passos (por valor)
 
-1. **Avaliação empírica para a dissertação** (prioritário) — correr `validate_mae`
-   (instalar `openpyxl`) para o número Apache; montar P/R/F1 + baseline; correr
-   `promote --stats` num corpus. Ver §7.
-2. **Rever as ~11 colisões do build Azure** — atributos com múltiplos bad_values
-   (o build lista-os com ⚠). A maioria é legítima (recursos diferentes); duas
-   são ruído de case (`pricing_tier Free/free`) que a `canon.py` podia cobrir.
-3. **Rebuild + push das imagens Docker** — para as imagens públicas ganharem
-   Azure IaC, pyyaml, NISTIR, comandos novos. `latest`→`full` (invariante 10).
-4. **Refactor:** mover build partilhado `apache_httpd/` → `core/build/`
+> **CÓDIGO FECHADO (2026-07-11).** A parte prática está completa e validada
+> (ver §7). Os itens abaixo são **polimento opcional** — NENHUM bloqueia a tese.
+> O foco passou a ser a **escrita da dissertação** ([[caspar-practical-closed]];
+> material-fonte em [DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md)).
+>
+> ✅ **Feito** (já não pendente): avaliação empírica (MAE 0%, recall 100%, 3
+> baselines — `scripts/evaluate.py` + `baseline_compare.py`); justificação das
+> bandas de amplificação (DISSERTACAO_REFERENCIA §3.7 — é texto de tese, não
+> código).
+
+Polimento opcional que fica (por valor):
+1. **Rebuild + push das imagens Docker** — só importa se as imagens PÚBLICAS
+   forem usadas (a avaliação foi nativa). `latest`→`full` (invariante 10).
+2. **Colisões Azure** — `pricing_tier Free/free` etc.: a `canon.py` cobre
+   booleanos, faltam SKUs/tiers. Cosmético.
+3. **Refactor:** mover build partilhado `apache_httpd/` → `core/build/`
    (invariante 3).
-5. **Attack chains para mais targets** (nginx tem poucas; azure/k8s têm 1).
-6. **Fundamentar as bandas de amplificação** das chains (×1.2–1.8) na tese —
-   é heurística original, precisa de justificação.
-7. Dívidas menores: 2 warnings de deprecação do pytest (fixture class-scoped em
+4. **Mais attack chains** (nginx/azure/k8s têm poucas; mecanismo já provado).
+5. Dívidas menores: 2 warnings de deprecação do pytest (fixture class-scoped em
    `test_llm_pipeline.py`); versão `0.1.0` duplicada (`pyproject.toml` +
-   `manifest.py`) — sincronizar no bump.
+   `manifest.py`) — sincronizar num bump.
 
 ---
 
