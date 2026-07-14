@@ -17,6 +17,7 @@
 
 | # | Dimensão | Pergunta | Métrica principal | Ferramenta | Estado |
 |---|---|---|---|---|---|
+| 0 | Científica — motor de scoring | O motor CCSS replica a especificação? | 18/18 exemplos oficiais do NISTIR 7502 §4 | `tests/test_nistir7502_examples.py` | ✅ 18/18 |
 | 1 | Científica — correção | Os scores estão certos? | MAE / taxa de mismatch vs CCE | `scripts/evaluate.py` | ✅ 0% |
 | 1b | Científica — submétricas | Cada submétrica CCSS está certa? | Concordância exata + Cohen's κ por submétrica | protocolo §1.2 | 🔲 |
 | 2 | Funcional — deteção | Encontra as misconfigurations? | Recall (e precision) | `scripts/evaluate.py` | ✅ 100% recall |
@@ -32,6 +33,37 @@
 ---
 
 ## 1. Validação científica (correção dos scores)
+
+### 1.0 Replicação dos exemplos oficiais do NISTIR 7502 — ✅ 18/18
+
+A própria especificação CCSS (NISTIR 7502, §4) publica **12 exemplos
+resolvidos** (18 vetores base, 6 CCEs com dois casos), com impact subscore,
+exploitability subscore e base score calculados com a calculadora oficial do
+NVD. Replicá-los é a validação mais direta possível do motor de scoring: se o
+`ccss.py` reproduz os números da especificação, a matemática está certa **por
+construção**, independentemente da qualidade das submétricas extraídas.
+
+```bash
+python -m pytest tests/test_nistir7502_examples.py -v   # 21 passed
+```
+
+| O que se replica | Resultado |
+|---|---|
+| 18 vetores base (CCE-4675-5 … CCE-2776-3): impact + exploitability + base score | **18/18 exatos** |
+| Exemplo temporal §4.12 (GEL:L/GRL:M → 1.9 / 3.7), via equação oficial §3.2.2 | ✅ reproduz |
+| Defaults ND neutros (não alteram o score) em ambos os modelos | ✅ |
+
+**Desvio documentado (achado desta replicação):** o `temporal_score()` do
+CASPAR usa um modelo temporal **simplificado** — `BaseScore × GEL × GRL` com
+valores GRL `U/W/H/ND` (linhagem CVSS v2) e multiplicadores combinados em
+[0.81, 1.0] — enquanto a equação oficial usa GRL `N/L/M/H`, re-escala apenas o
+termo de exploitability e permite multiplicadores até 0.6×0.4=0.24. O modelo
+do CASPAR desconta portanto **no máximo ~19%** do score, contra reduções muito
+maiores permitidas pela norma quando há remediação forte — um desvio
+**conservador** (nunca subestima risco face à norma) mas que impede a
+replicação direta do exemplo temporal com a API do CASPAR. Isto separa duas
+coisas na dissertação: o **base score segue a norma exatamente** (18/18); o
+ajuste temporal é uma **variação declarada e justificada**. Ver tradeoff em §7.
 
 ### 1.1 MAE vs ground truth CCE (Apache) — ✅ medido
 
@@ -407,6 +439,7 @@ Mesma máquina, mesmo input, mesmo protocolo do §4.1:
 | RAG "ingerir uma vez, consultar sempre" | overhead por scan ≈ 0 com L3 off | custo de disco por manual; conhecimento desatualiza até re-ingestão | §4.3 |
 | Camada 3 (LLM) **opt-in** | default 100% determinístico | diretivas desconhecidas ficam sem avaliação por omissão | §2.4 |
 | Fator de amplificação por-chain curado | captura risco composto que scanners atómicos ignoram | heurística sem validação empírica da gama (declarado) | §1.4 |
+| Modelo temporal simplificado (GEL/GRL × BaseScore) | nunca desconta mais de ~19% — não subestima risco; API simples | desvia da equação oficial §3.2.2 (que desconta até ~50%+ com remediação forte); exemplo temporal do NISTIR não replica via API | §1.0 |
 | Python + SQLite | extensível, legível, zero infra | mais lento e pesado que um binário Go (Trivy) | §6.2 |
 
 Cada linha desta tabela deve aparecer na dissertação com o número que a
