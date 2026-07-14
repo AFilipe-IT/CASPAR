@@ -11,6 +11,7 @@
 > | [GUIA_TECNICO.md](GUIA_TECNICO.md) | Arquitectura interna | vais mexer no código |
 > | [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) | Setup + build das imagens Docker | vais testar numa máquina nova |
 > | [AVALIACAO_FUNCIONAL.md](AVALIACAO_FUNCIONAL.md) | Roteiro de avaliação funcional (Ubuntu 22.04) | vais avaliar o projeto de ponta a ponta |
+> | [VALIDACAO.md](VALIDACAO.md) | Plano de validação completo (científica, funcional, fiabilidade, desempenho, tradeoffs) | queres saber como a ferramenta se valida e mede |
 > | [DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md) | Material-fonte consolidado para a tese (funcionalidades, implementação, validações) | vais escrever a dissertação |
 > | [HANDOFF.md](HANDOFF.md) | Briefing de continuação (histórico) | retomas o projeto noutra sessão/máquina |
 
