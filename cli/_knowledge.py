@@ -168,7 +168,7 @@ def _ingest_manual(manual: str, plugin_dir: Path) -> Path | None:
         fname = Path(urlparse(manual).path).name or "manual.pdf"
         dest = plugin_dir / f"manual_{fname}"
         try:
-            req = Request(manual, headers={"User-Agent": "caspar-plugin-add"})
+            req = Request(manual, headers={"User-Agent": "aegis-plugin-add"})
             with urlopen(req, timeout=30) as r, open(dest, "wb") as f:
                 shutil.copyfileobj(r, f)
         except Exception as exc:

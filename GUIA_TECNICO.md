@@ -198,23 +198,23 @@ O Stage 2 pede ao LLM para identificar estas combinações e atribuir um **facto
 cd ~/ccss_scan && source .venv/bin/activate
 
 # ── Construir a base (build time) ──
-caspar build --benchmark plugins/apache_httpd/Benchmark.pdf --model qwen2.5:14b
+sca build --benchmark plugins/apache_httpd/Benchmark.pdf --model qwen2.5:14b
 python3 -m plugins.apache_httpd.build_narratives --db ccss.db --model qwen2.5:14b
-caspar refresh                              # CVE enrichment
+sca refresh                              # CVE enrichment
 
 # ── Fazer scans (runtime) ──
-caspar scan /tmp/httpd.conf                 # ficheiro
-caspar scan /etc/apache2/                   # pasta
-caspar scan --live apache2                  # serviço instalado
-caspar scan docker://httpd:2.4              # imagem docker
+sca scan /tmp/httpd.conf                 # ficheiro
+sca scan /etc/apache2/                   # pasta
+sca scan --live apache2                  # serviço instalado
+sca scan docker://httpd:2.4              # imagem docker
 
 # ── Com relatório ──
-caspar scan docker://ccss-test-apache:vulnerable --report --output ~/relatorios/
-caspar scan /etc/apache2/ --report --format json
-caspar scan /etc/apache2/ --threshold 7.0   # exit 1 se score > 7 (CI/CD)
+sca scan docker://ccss-test-apache:vulnerable --report --output ~/relatorios/
+sca scan /etc/apache2/ --report --format json
+sca scan /etc/apache2/ --threshold 7.0   # exit 1 se score > 7 (CI/CD)
 
 # ── Utilitários ──
-caspar targets                              # lista plugins
+sca targets                              # lista plugins
 pytest tests/ -v                          # corre os testes
 python3 fix_ac_consistency.py --db ccss.db --dry-run   # verifica narrativas
 ```
@@ -224,7 +224,7 @@ python3 fix_ac_consistency.py --db ccss.db --dry-run   # verifica narrativas
 ## 8. Receitas de modificação comuns
 
 **"Quero adicionar uma misconfiguration nova ao Apache"**
-→ Não edites código. Corre `caspar build` de novo (o LLM extrai do benchmark) ou adiciona ao `build_apache.py` (fallback). Depois `build_narratives` para gerar a narrativa, e `refresh` para CVEs.
+→ Não edites código. Corre `sca build` de novo (o LLM extrai do benchmark) ou adiciona ao `build_apache.py` (fallback). Depois `build_narratives` para gerar a narrativa, e `refresh` para CVEs.
 
 **"Quero mudar como o HTML aparece"**
 → Só `core/report_html.py`. A função `generate_html` constrói tudo; `render_issue` faz cada card; `mrow` faz cada linha de métrica. O CSS está na variável `CSS` no topo.

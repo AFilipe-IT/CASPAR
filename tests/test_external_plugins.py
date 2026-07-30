@@ -1,7 +1,7 @@
 """
 tests/test_external_plugins.py
 ------------------------------
-$CASPAR_PLUGINS_DIR lets fetched plugins live outside the image (on a mounted
+$AEGIS_PLUGINS_DIR lets fetched plugins live outside the image (on a mounted
 volume) so they survive a --rm container. These tests verify that a plugin
 placed in the external directory is (a) on the package __path__ and (b)
 discovered/imported as config_assessment.plugins.<id>, while built-in plugins
@@ -18,11 +18,11 @@ import pytest
 
 @pytest.fixture
 def external_dir(tmp_path, monkeypatch):
-    """Point CASPAR_PLUGINS_DIR at a fresh dir and reload the plugins package
+    """Point AEGIS_PLUGINS_DIR at a fresh dir and reload the plugins package
     so its __path__ picks it up. Cleaned up automatically."""
     ext = tmp_path / "plugins"
     ext.mkdir()
-    monkeypatch.setenv("CASPAR_PLUGINS_DIR", str(ext))
+    monkeypatch.setenv("AEGIS_PLUGINS_DIR", str(ext))
     import config_assessment.plugins as pkg
     importlib.reload(pkg)
     yield ext
@@ -30,7 +30,7 @@ def external_dir(tmp_path, monkeypatch):
     for m in list(sys.modules):
         if m.startswith("config_assessment.plugins.extplug"):
             del sys.modules[m]
-    monkeypatch.delenv("CASPAR_PLUGINS_DIR", raising=False)
+    monkeypatch.delenv("AEGIS_PLUGINS_DIR", raising=False)
     importlib.reload(pkg)
 
 
@@ -77,7 +77,7 @@ def test_builtin_wins_on_name_clash(external_dir):
 
 
 def test_no_external_dir_uses_builtin_only(monkeypatch):
-    monkeypatch.delenv("CASPAR_PLUGINS_DIR", raising=False)
+    monkeypatch.delenv("AEGIS_PLUGINS_DIR", raising=False)
     import config_assessment.plugins as pkg
     importlib.reload(pkg)
     from cli.main import _plugin_dirs

@@ -2,32 +2,32 @@
 set -e
 
 export OLLAMA_HOST=http://localhost:11434
-MODEL="${CASPAR_MODEL:-mistral:7b}"
+MODEL="${AEGIS_MODEL:-mistral:7b}"
 
 # Seed the persistent data dir (DB + plugins volume) before anything else, so
 # fetched plugins survive a --rm container. Idempotent.
-DATA_DIR="${CASPAR_DATA_DIR:-/home/caspar/data}"
-DB="${CASPAR_DB:-$DATA_DIR/ccss.db}"
-PLUGINS_DIR="${CASPAR_PLUGINS_DIR:-$DATA_DIR/plugins}"
-SEED_DB="/home/caspar/app/ccss.seed.db"
+DATA_DIR="${AEGIS_DATA_DIR:-/home/aegis/data}"
+DB="${AEGIS_DB:-$DATA_DIR/ccss.db}"
+PLUGINS_DIR="${AEGIS_PLUGINS_DIR:-$DATA_DIR/plugins}"
+SEED_DB="/home/aegis/app/ccss.seed.db"
 mkdir -p "$DATA_DIR" "$PLUGINS_DIR" 2>/dev/null || true
 # Fall back to a writable location if the data volume is owned by another uid
 # (stale volume from an older image) — avoids "readonly database" crashes.
-if [ ! -w "$DATA_DIR" ] || ! ( : > "$DATA_DIR/.caspar-write-test" 2>/dev/null ); then
-    echo "caspar: data volume '$DATA_DIR' not writable; using non-persistent /tmp." >&2
-    echo "caspar: to restore persistence, run: docker volume rm caspar_data" >&2
-    DATA_DIR=/tmp/caspar-data; DB="$DATA_DIR/ccss.db"; PLUGINS_DIR="$DATA_DIR/plugins"
+if [ ! -w "$DATA_DIR" ] || ! ( : > "$DATA_DIR/.aegis-write-test" 2>/dev/null ); then
+    echo "sca: data volume '$DATA_DIR' not writable; using non-persistent /tmp." >&2
+    echo "sca: to restore persistence, run: docker volume rm aegis_data" >&2
+    DATA_DIR=/tmp/aegis-data; DB="$DATA_DIR/ccss.db"; PLUGINS_DIR="$DATA_DIR/plugins"
     mkdir -p "$PLUGINS_DIR"
-    export CASPAR_DATA_DIR="$DATA_DIR" CASPAR_DB="$DB" CASPAR_PLUGINS_DIR="$PLUGINS_DIR"
+    export AEGIS_DATA_DIR="$DATA_DIR" AEGIS_DB="$DB" AEGIS_PLUGINS_DIR="$PLUGINS_DIR"
 else
-    rm -f "$DATA_DIR/.caspar-write-test" 2>/dev/null || true
+    rm -f "$DATA_DIR/.aegis-write-test" 2>/dev/null || true
 fi
 if [ ! -f "$DB" ] && [ -f "$SEED_DB" ]; then
     cp "$SEED_DB" "$DB"
 fi
 # Refresh built-in knowledge base in an existing volume if the image is newer,
 # preserving user-installed plugins (no-op on fresh seed / when up to date).
-CASPAR_DB="$DB" python3 - "$DB" "$SEED_DB" <<'PY' 2>/dev/null || true
+AEGIS_DB="$DB" python3 - "$DB" "$SEED_DB" <<'PY' 2>/dev/null || true
 import sys
 from config_assessment.core.db.reseed import refresh_builtins_if_stale
 refresh_builtins_if_stale(sys.argv[1], sys.argv[2])
@@ -54,7 +54,7 @@ if echo "$*" | grep -qE "plugin add|plugin fetch|build" && \
     NEEDS_LLM=1
 fi
 
-# Args extra a passar ao caspar. CRÍTICO: forçar o mesmo modelo que descarregamos
+# Args extra a passar ao sca. CRÍTICO: forçar o mesmo modelo que descarregamos
 # aqui — o CLI usa por omissão qwen2.5:14b, que não existe na imagem, e o Ollama
 # devolve 404 em /api/chat para um modelo não descarregado.
 EXTRA_ARGS=()
@@ -88,16 +88,16 @@ if [ "$NEEDS_LLM" -eq 1 ]; then
     fi
     echo "✅ Modelo pronto."
 
-    # Garantir que o caspar usa exatamente o modelo carregado — exceto se o
+    # Garantir que o sca usa exatamente o modelo carregado — exceto se o
     # utilizador já tiver indicado um modelo explicitamente.
     if ! echo "$*" | grep -qE -- "--model|(^| )-m( |$)"; then
         EXTRA_ARGS+=(--model "$MODEL")
     fi
 fi
 
-# Executar caspar (sem abortar antes de terminar o Ollama)
+# Executar sca (sem abortar antes de terminar o Ollama)
 set +e
-caspar "$@" "${EXTRA_ARGS[@]}"
+sca "$@" "${EXTRA_ARGS[@]}"
 EXIT_CODE=$?
 set -e
 

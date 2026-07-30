@@ -1,4 +1,4 @@
-# AMiSA / CASPAR — Referência para a Dissertação
+# AMiSA / AEGIS — Referência para a Dissertação
 
 > **Propósito:** documento único e verificado com tudo o que a dissertação
 > precisa — funcionalidades, arquitectura/implementação, e validação com
@@ -7,7 +7,7 @@
 >
 > **Metodologia:** AMiSA — *A methodology for the automated and quantitative
 > assessment of security misconfigurations in systems and services*.
-> **Prova de conceito:** CASPAR (o código deste repositório).
+> **Prova de conceito:** AEGIS (o código deste repositório).
 > **Estado:** parte prática FECHADA e validada (2026-07-09). Adenda pós-fecho:
 > replicação NISTIR 7502 18/18 (2026-07-14) e experiência de determinismo da
 > extração LLM (2026-07-18), motivadas pelo feedback dos revisores do INForum
@@ -113,14 +113,14 @@ caminhos com pontos, `bad_value` inválido (JSON/prosa/None), impacto nulo;
 canonicalização de sinónimos booleanos (`off`/`Disabled`→`false`).
 
 ### 3.5 Fronteira de escopo: config vs estado do sistema
-O CASPAR avalia **ficheiros de configuração**. Ferramentas como o OpenSCAP
+O AEGIS avalia **ficheiros de configuração**. Ferramentas como o OpenSCAP
 avaliam o **estado do sistema vivo** (permissões, módulos de kernel, serviços).
 O target `ubuntu` cobre o **subconjunto config-based** do CIS Ubuntu (sysctl,
 login.defs) — o terreno sobreponível, onde a comparação é justa. Esta distinção
 é, ela própria, um resultado da tese.
 
 ### 3.6 Manifesto de reprodutibilidade
-Cada `ScanResult` grava versão do CASPAR + **SHA-256 da base de conhecimento** +
+Cada `ScanResult` grava versão do AEGIS + **SHA-256 da base de conhecimento** +
 nº de regras (rodapé do scan, campo `manifest` no JSON). *Mesmo manifesto +
 mesmo input ⇒ mesmos scores*, verificável por terceiros. É a forma auditável da
 afirmação de determinismo.
@@ -176,7 +176,7 @@ modelo temporal simplificado está documentado em VALIDACAO.md §1.0 e §7. É a
 evidência de que a *aritmética* está certa, independente do LLM.
 
 ### 4.3 Correção das classificações — MAE vs ground truth CCE (Apache)
-Scores do CASPAR vs faixas de severidade DISA do dataset **CCE oficial**:
+Scores do AEGIS vs faixas de severidade DISA do dataset **CCE oficial**:
 
 | Métrica | Valor |
 |---|---|
@@ -200,7 +200,7 @@ Scores do CASPAR vs faixas de severidade DISA do dataset **CCE oficial**:
 ### 4.5 Comparação com baselines
 
 **Trivy (IaC / containers)** — mesmo ficheiro de input:
-| Ficheiro | CASPAR | Trivy |
+| Ficheiro | AEGIS | Trivy |
 |---|---|---|
 | azure_storage_vulnerable.tf | 9 findings · 8.5/10 CCSS | 13 findings · labels (2C/3H/7M/1L) |
 | Dockerfile.vulnerable | 4 findings · 9.0/10 CCSS | 5 findings · labels (2H/2M/1L) |
@@ -211,14 +211,14 @@ distintos.
 
 **OpenSCAP (Ubuntu OS hardening)** — subconjunto config-based sobreponível,
 avaliado no sistema vivo (CIS L1 Server, `ssg-ubuntu2204-ds.xml`):
-| Métrica | OpenSCAP | CASPAR |
+| Métrica | OpenSCAP | AEGIS |
 |---|---|---|
 | Controlos sobreponíveis | 38 | 18 regras (sysctl + login.defs) |
 | **Veredicto** | **24 fail · 1 pass** (binário) | score CCSS 0–10 + narrativa |
 | Avalia | estado do sistema vivo | ficheiro de configuração |
 | Reprodutível | depende do estado da máquina | sim (manifesto) |
 
-→ Ambos cobrem os mesmos controlos; o **diferencial do CASPAR** é o score
+→ Ambos cobrem os mesmos controlos; o **diferencial do AEGIS** é o score
 reproduzível + narrativa, contra o pass/fail binário do OpenSCAP.
 
 ### 4.6 Reprodutibilidade (runtime)
@@ -262,7 +262,7 @@ e o NISTIR §4.2.
 - **IaC/OS sem ground truth CCE:** azure-iac, kubernetes, dockerfile e ubuntu
   não têm dataset CCE oficial — validam-se por recall nas fixtures + baselines,
   não por MAE. O Apache é o caso quantitativo (CCE).
-- **Escopo config-based:** o CASPAR não avalia estado de sistema (permissões,
+- **Escopo config-based:** o AEGIS não avalia estado de sistema (permissões,
   módulos), que é o domínio do OpenSCAP — por design.
 - **Qualidade da extração LLM:** depende do modelo; o `--dry-run` + validações
   mitigam, e a L3/`promote` recuperam a cauda.
@@ -314,7 +314,7 @@ tratá-los como checklist):
 
 ## 7. Documentos relacionados
 - [README.md](README.md) — vitrine + comandos
-- [GUIA_CASPAR.md](GUIA_CASPAR.md) — guia de utilizador/demo
+- [GUIA_AEGIS.md](GUIA_AEGIS.md) — guia de utilizador/demo
 - [GUIA_TECNICO.md](GUIA_TECNICO.md) — arquitectura interna
 - [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) — setup + build Docker
 - [AVALIACAO_FUNCIONAL.md](AVALIACAO_FUNCIONAL.md) — roteiro de avaliação

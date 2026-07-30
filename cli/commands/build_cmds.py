@@ -26,7 +26,7 @@ def build(ctx, benchmark, model, ollama_url, target, dry_run) -> None:
 
     \b
     Example:
-      caspar build --benchmark plugins/apache_httpd/Benchmark.pdf
+      sca build --benchmark plugins/apache_httpd/Benchmark.pdf
     """
     if target == "apache-httpd":
         from config_assessment.plugins.apache_httpd.build_llm import run_build
@@ -66,9 +66,9 @@ def fetch_exploits(ctx, product, versions) -> None:
 
     \b
     Runs the network lookups once, at build time, so scans stay offline.
-      caspar fetch-exploits                        # all plugins, curated versions
-      caspar fetch-exploits -p apache-httpd        # one product, curated versions
-      caspar fetch-exploits -p apache-httpd -V 2.4.49
+      sca fetch-exploits                        # all plugins, curated versions
+      sca fetch-exploits -p apache-httpd        # one product, curated versions
+      sca fetch-exploits -p apache-httpd -V 2.4.49
     """
     _discover_plugins()
     from config_assessment.core.runtime import registered_plugins
@@ -124,8 +124,8 @@ def refresh(ctx, target, nvd_key, dry_run) -> None:
 
     \b
     Example:
-      caspar refresh
-      caspar refresh --dry-run
+      sca refresh
+      sca refresh --dry-run
     """
     from config_assessment.plugins.apache_httpd.refresh_cve import refresh_cve
     stats = refresh_cve(

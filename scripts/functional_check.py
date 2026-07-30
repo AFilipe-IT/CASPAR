@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/functional_check.py — end-to-end functional smoke test of CASPAR.
+scripts/functional_check.py — end-to-end functional smoke test of AEGIS.
 
 Exercises every user-facing capability against the real DB and reports PASS/FAIL
 per check, so a functional evaluation on a fresh machine is one command. This is
@@ -121,7 +121,7 @@ def _manifest():
     man = r.manifest
     assert man.get("db_sha256"), "no db_sha256 in manifest"
     assert man.get("caspar_version"), "no version in manifest"
-    return f"kb sha256:{man['db_sha256'][:12]} · caspar {man['caspar_version']}"
+    return f"kb sha256:{man['db_sha256'][:12]} · sca {man['caspar_version']}"
 
 
 # ── 4. Report generation (each format writes a non-empty file) ──────────
@@ -185,7 +185,7 @@ def main() -> None:
         print(json.dumps(report, indent=2))
     else:
         print("\n" + "=" * 60)
-        print("  CASPAR — functional smoke test")
+        print("  AEGIS — functional smoke test")
         print("=" * 60)
         for c in report["checks"]:
             mark = "✓" if c["status"] == "PASS" else "✗"

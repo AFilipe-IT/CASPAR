@@ -1,19 +1,19 @@
-# CASPAR — Docker
+# AEGIS — Docker
 
-Distribuição em contentor do **CASPAR** (*Configuration Assessment and Security
+Distribuição em contentor do **AEGIS** (*Configuration Assessment and Security
 Posture Automated Review*). Duas imagens, conforme o caso de uso:
 
 | Imagem | Tamanho | Base | Inclui | Uso recomendado |
 |--------|--------:|------|--------|-----------------|
-| `caspar:latest` | **~430 MB** | `python:3.12-slim` | `scan` (ficheiro / directório / `docker://`), `targets`, `fetch-exploits`, relatórios; `build` / `plugin add` **com Ollama externo** | Produção, análise completa, *scan* de imagens Docker |
-| `caspar:slim` | **~125 MB** | `python:3.12-alpine` | apenas `scan` de ficheiros / directórios e `targets` | CI/CD, *pipelines*, ambientes restringidos |
+| `aegis:latest` | **~430 MB** | `python:3.12-slim` | `scan` (ficheiro / directório / `docker://`), `targets`, `fetch-exploits`, relatórios; `build` / `plugin add` **com Ollama externo** | Produção, análise completa, *scan* de imagens Docker |
+| `aegis:slim` | **~125 MB** | `python:3.12-alpine` | apenas `scan` de ficheiros / directórios e `targets` | CI/CD, *pipelines*, ambientes restringidos |
 
 Ambas restauram a base de dados canónica (`ccss.db`) a partir de
 `data/ccss_canonical.sql` **durante o build** — o `.db` nunca é copiado para a
-imagem. Ambas correm como utilizador **não-root** (`caspar`, uid 1000).
+imagem. Ambas correm como utilizador **não-root** (`sca`, uid 1000).
 
 > O contexto de build é a **raiz do repositório**. Os Dockerfiles são passados
-> com `-f`; não corras `docker build` de dentro de `docker/caspar/`.
+> com `-f`; não corras `docker build` de dentro de `docker/aegis/`.
 
 ---
 
@@ -21,10 +21,10 @@ imagem. Ambas correm como utilizador **não-root** (`caspar`, uid 1000).
 
 ```bash
 # A partir da raiz do repositório:
-docker build -t caspar:latest -f docker/caspar/Dockerfile .
-docker build -t caspar:slim   -f docker/caspar/Dockerfile.slim .
+docker build -t aegis:latest -f docker/aegis/Dockerfile .
+docker build -t aegis:slim   -f docker/aegis/Dockerfile.slim .
 
-docker images | grep caspar
+docker images | grep sca
 ```
 
 ---
@@ -33,17 +33,17 @@ docker images | grep caspar
 
 ### Ver alvos suportados
 ```bash
-docker run --rm caspar:latest targets
+docker run --rm aegis:latest targets
 ```
 
 ### Scan de ficheiro / directório local
 ```bash
 # Directório (monta em /scan)
-docker run --rm -v /etc/apache2:/scan caspar:latest scan /scan
+docker run --rm -v /etc/apache2:/scan aegis:latest scan /scan
 
 # Ficheiro único
 docker run --rm -v "$(pwd)/httpd.conf:/scan/httpd.conf" \
-  caspar:latest scan /scan/httpd.conf
+  aegis:latest scan /scan/httpd.conf
 ```
 
 A versão do serviço é **auto-detectada** (tag → binário → texto da config) e
@@ -55,24 +55,24 @@ usada para cruzar CVEs/exploits e amplificar os *scores* (F1):
   cache de 24 h). Com rede, pode amplificar; **sem rede ou sem versão, degrada
   graciosamente para ×1.0** e o relatório assinala o estado («exploit check
   unavailable» vs «checked clean»). Para um *scan* 100 % offline e reprodutível,
-  garante que a versão está na base (`caspar fetch-exploits`) ou não passes
+  garante que a versão está na base (`sca fetch-exploits`) ou não passes
   versão.
 
 ### Scan com relatório persistente
 ```bash
 docker run --rm \
   -v /etc/apache2:/scan \
-  -v "$(pwd)/reports:/home/caspar/reports" \
-  caspar:latest scan /scan --report --format dashboard --output /home/caspar/reports
+  -v "$(pwd)/reports:/home/aegis/reports" \
+  aegis:latest scan /scan --report --format dashboard --output /home/aegis/reports
 ```
 
-> ⚠️ **O `--output` tem de apontar para um path montado.** O CASPAR escreve o
+> ⚠️ **O `--output` tem de apontar para um path montado.** O AEGIS escreve o
 > relatório *dentro* do contentor; se esse path não tiver um volume do host
 > montado, o ficheiro fica no contentor e perde-se quando ele é removido
 > (`--rm`). A regra é simples: **o argumento de `--output` e o destino do `-v`
-> têm de ser o mesmo path** (acima, ambos `/home/caspar/reports`).
+> têm de ser o mesmo path** (acima, ambos `/home/aegis/reports`).
 
-### Scan de imagem Docker (`docker://`) — só `caspar:latest`
+### Scan de imagem Docker (`docker://`) — só `aegis:latest`
 Requer o *socket* do Docker do host. Como a imagem corre como não-root, é
 preciso conceder o grupo dono do *socket*. A versão é detectada a partir da tag
 (`httpd:2.4.49` → `2.4.49`) e cruzada com a base canónica para amplificar os
@@ -84,7 +84,7 @@ SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
 docker run --rm \
   --group-add "$SOCK_GID" \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  caspar:latest scan docker://nginx:latest
+  aegis:latest scan docker://nginx:latest
 ```
 
 `docker://` **com relatório persistente** — junta o *socket*, o `--group-add` e
@@ -94,24 +94,24 @@ o volume de relatórios montado no mesmo path do `--output`:
 docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --group-add "$(stat -c '%g' /var/run/docker.sock)" \
-  -v "$(pwd)/reports:/home/caspar/reports" \
-  caspar:latest scan docker://httpd:2.4.49 \
-  --report --format dashboard --output /home/caspar/reports
+  -v "$(pwd)/reports:/home/aegis/reports" \
+  aegis:latest scan docker://httpd:2.4.49 \
+  --report --format dashboard --output /home/aegis/reports
 ```
 
 ### Com docker-compose (inclui Ollama para *build-time*)
 ```bash
-cd docker/caspar
+cd docker/sca
 
 # Runtime apenas (Ollama fica em baixo):
-docker compose run --rm caspar targets
-docker compose run --rm caspar scan /scan
+docker compose run --rm sca targets
+docker compose run --rm sca scan /scan
 
 # Build-time (sobe o Ollama sob o profile "full"):
 docker compose --profile full up -d ollama
 docker compose --profile full exec ollama ollama pull qwen2.5:14b
-docker compose --profile full run --rm caspar plugin add \
-  --source /home/caspar/app/sources/benchmarks/CIS_PostgreSQL_13.pdf
+docker compose --profile full run --rm sca plugin add \
+  --source /home/aegis/app/sources/benchmarks/CIS_PostgreSQL_13.pdf
 ```
 
 ---
@@ -124,15 +124,15 @@ docker compose --profile full run --rm caspar plugin add \
 | `SEARCHSPLOIT_BIN` | (não definida) | Caminho do binário `searchsploit` (Exploit-DB) para enriquecimento de exploits, se disponível. Sem ele, o cruzamento usa apenas os dados já persistidos na base canónica. |
 
 A flag `--db` (predefinição `ccss.db`) permite apontar para outra base; com o
-volume `caspar_db` do compose, a base persiste entre execuções.
+volume `aegis_db` do compose, a base persiste entre execuções.
 
 ---
 
 ## Comparação de imagens
 
 ```
-caspar:latest    430MB
-caspar:slim      125MB
+aegis:latest    430MB
+aegis:slim      125MB
 ```
 
 A `slim` exclui o cliente Docker, `git`, `curl` e a *toolchain* de build. O
@@ -148,8 +148,8 @@ em *build-time* (~85 MB, sendo o CIS SSH 78 MB) — não são lidos pelo *scan*.
 
 | Imagem | run 1 | run 2 | run 3 | Resultado |
 |--------|------:|------:|------:|-----------|
-| `caspar:latest` | 0.44 s | 0.40 s | 0.45 s | 9.8/10 Critical |
-| `caspar:slim`   | 0.48 s | 0.44 s | 0.46 s | 9.8/10 Critical |
+| `aegis:latest` | 0.44 s | 0.40 s | 0.45 s | 9.8/10 Critical |
+| `aegis:slim`   | 0.48 s | 0.44 s | 0.46 s | 9.8/10 Critical |
 
 A análise de configuração é determinística e offline; o tempo é dominado pelo
 arranque do processo, não pela análise. (A única excepção é o passo F1 quando a
@@ -162,7 +162,7 @@ velocidade.
 Performance da dissertação — reproduzíveis com o bloco abaixo.)*
 
 ```bash
-for img in caspar:latest caspar:slim; do
+for img in aegis:latest aegis:slim; do
   echo "--- $img ---"
   for i in 1 2 3; do
     /usr/bin/time -f "run $i: %e s" \
@@ -177,8 +177,8 @@ done
 
 | Funcionalidade | Requisito | Sem ele |
 |----------------|-----------|---------|
-| `caspar build` / `caspar plugin add` | **Ollama** acessível em `OLLAMA_HOST` | Degrada graciosamente: o comando avisa que não há LLM e não corre. O *scan* continua a funcionar com a base canónica já incluída. |
-| `caspar scan docker://<img>` | *socket* Docker montado **+** `--group-add <gid>` | Erro claro «Docker não está disponível». Disponível só na `caspar:latest` (a `slim` não traz cliente Docker). |
+| `sca build` / `sca plugin add` | **Ollama** acessível em `OLLAMA_HOST` | Degrada graciosamente: o comando avisa que não há LLM e não corre. O *scan* continua a funcionar com a base canónica já incluída. |
+| `sca scan docker://<img>` | *socket* Docker montado **+** `--group-add <gid>` | Erro claro «Docker não está disponível». Disponível só na `aegis:latest` (a `slim` não traz cliente Docker). |
 | Enriquecimento de exploits ao vivo | `searchsploit` (`SEARCHSPLOIT_BIN`) | Usa apenas os CVEs/exploits já persistidos na base canónica (offline). |
 | F1 para versão **fora da base** | Rede + (opcional) `NVD_API_KEY` | Consulta o NVD ao vivo (*online-first*, cache 24 h). Sem rede, a amplificação degrada para ×1.0 e o relatório assinala «exploit check unavailable». Para versões na base, é tudo offline. |
 

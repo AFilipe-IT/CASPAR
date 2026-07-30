@@ -64,8 +64,8 @@ narratives_reference.txt
 # Generated documents
 *.docx
 
-# CASPAR user state
-.caspar-suppress.json
+# AEGIS user state
+.aegis-suppress.json
 
 # Material da dissertação (não pertence ao repo do código)
 *.zip

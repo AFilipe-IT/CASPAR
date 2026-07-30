@@ -14,7 +14,7 @@ Each case asserts three published numbers:
 
 The temporal example in §4.12 (GEL:L/GRL:M → 1.9 / 3.7) is replicated with
 the OFFICIAL temporal equation (§3.2.2) implemented locally, because
-CASPAR's temporal_score() deliberately uses a simplified model
+AEGIS's temporal_score() deliberately uses a simplified model
 (BaseScore × GEL × GRL with a reduced value set) — see the note in
 TestTemporalExample412.
 """
@@ -89,8 +89,8 @@ class TestTemporalExample412:
     §4.12 (CCE-2776-3): base AV:L/AC:L/Au:N/C:P/I:P/A:P with GEL:L/GRL:M
     → temporal exploitability 1.9, temporal score 3.7.
 
-    NOTE: this validates the OFFICIAL equation, not CASPAR's
-    temporal_score(). CASPAR intentionally uses a simplified temporal
+    NOTE: this validates the OFFICIAL equation, not AEGIS's
+    temporal_score(). AEGIS intentionally uses a simplified temporal
     model (BaseScore × GEL × GRL, GRL values U/W/H/ND) whose multipliers
     stay in [0.81, 1.0] — a conservative deviation from the spec, which
     scales only the exploitability term with multipliers down to 0.4.
@@ -104,7 +104,7 @@ class TestTemporalExample412:
         assert t_score == 3.7
 
     def test_nd_defaults_are_neutral_in_both_models(self):
-        # Spec: GEL:ND→1.0, GRL:ND→1.0 (no effect). CASPAR: ND→1.0 as well.
+        # Spec: GEL:ND→1.0, GRL:ND→1.0 (no effect). AEGIS: ND→1.0 as well.
         from config_assessment.core.ccss import temporal_score
         _, t_score = _official_temporal(
             "L", "L", "N", "P", "P", "P", gel="ND", grl="ND")

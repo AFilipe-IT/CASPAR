@@ -1,1 +1,1 @@
-"""CASPAR — Configuration Assessment package."""
+"""AEGIS — Configuration Assessment package."""

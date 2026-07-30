@@ -55,7 +55,7 @@ htmlcov/
 
 # The docker dir itself (Dockerfiles are passed via -f; no need in context).
 docker/
-# Exception: caspar:full needs the entrypoint script in the build context.
-!docker/caspar/entrypoint_full.sh
+# Exception: aegis:full needs the entrypoint script in the build context.
+!docker/aegis/entrypoint_full.sh
 # Exception: the :latest image COPYs the data-seeding script.
-!docker/caspar/seed_data.sh
+!docker/aegis/seed_data.sh

@@ -40,11 +40,11 @@ def targets() -> None:
 @click.argument("old_json", type=click.Path(exists=True))
 @click.argument("new_json", type=click.Path(exists=True))
 def diff(old_json, new_json) -> None:
-    """Compare two scan JSONs (caspar scan --report -f json).
+    """Compare two scan JSONs (sca scan --report -f json).
 
     \b
     Shows resolved issues, new issues, and the score delta:
-      caspar diff reports/scan_old.json reports/scan_new.json
+      sca diff reports/scan_old.json reports/scan_new.json
     """
     from config_assessment.reports.scan_features import load_scan, diff_scans
 
@@ -84,12 +84,12 @@ def diff(old_json, new_json) -> None:
 
 @click.command("badge")
 @click.argument("scan_json", type=click.Path(exists=True))
-@click.option("--label", default="CASPAR", show_default=True)
+@click.option("--label", default="AEGIS", show_default=True)
 @click.option("--url-only", is_flag=True, help="Print just the URL, not markdown.")
 def badge(scan_json, label, url_only) -> None:
     """Print a shields.io score badge (URL or markdown) for a scan JSON.
 
-      caspar badge reports/scan.json          # markdown for a README
+      sca badge reports/scan.json          # markdown for a README
     """
     from config_assessment.reports.scan_features import load_scan, badge_url, badge_markdown
     try:
@@ -111,7 +111,7 @@ def explain(ctx, directive, target) -> None:
 
     \b
     Benchmark section, CCSS submetrics, CVEs and narrative for a directive:
-      caspar explain keepalive_timeout --target nginx
+      sca explain keepalive_timeout --target nginx
     """
     from config_assessment.core.db.database import Database
 
@@ -126,7 +126,7 @@ def explain(ctx, directive, target) -> None:
     if not rules:
         click.echo(click.style(
             f"No rule '{directive}' for target '{target}'. "
-            f"See: caspar scan / caspar targets.", fg="yellow"), err=True)
+            f"See: sca scan / sca targets.", fg="yellow"), err=True)
         sys.exit(1)
 
     for m in rules:
@@ -165,8 +165,8 @@ def history(ctx, input_path, last) -> None:
     """Show past scan scores recorded in the DB (score trending).
 
     \b
-      caspar history                     # all recent scans
-      caspar history nginx.conf --last 5 # only this input
+      sca history                     # all recent scans
+      sca history nginx.conf --last 5 # only this input
     """
     from config_assessment.core.db.database import Database
 
@@ -221,8 +221,8 @@ def trend(ctx, input_filter, last) -> None:
     is HEADING — one sparkline per input, first→last score and net drift.
     `history` lists individual scans; `trend` shows the direction.
 
-      caspar trend                # every input with 2+ scans
-      caspar trend nginx          # only inputs matching 'nginx'
+      sca trend                # every input with 2+ scans
+      sca trend nginx          # only inputs matching 'nginx'
     """
     from config_assessment.core.db.database import Database
 
@@ -284,7 +284,7 @@ def report(scan_jsons, do_merge) -> None:
     \b
     Useful to see every service on a host at a glance — worst offender,
     per-target scores, totals:
-      caspar report reports/*.json
+      sca report reports/*.json
     """
     from config_assessment.reports.scan_features import load_scan, merge_scans
 

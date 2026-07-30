@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "caspar"
+name = "aegis"
 version = "0.1.0"
-description = "CASPAR — Configuration Assessment and Security Posture Automated Review (CCSS-based)"
+description = "AEGIS — Configuration Assessment and Security Posture Automated Review (CCSS-based)"
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",
@@ -25,7 +25,7 @@ dev = [
 ]
 
 [project.scripts]
-caspar = "cli.main:cli"
+sca = "cli.main:cli"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

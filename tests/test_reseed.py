@@ -54,7 +54,7 @@ def test_stale_volume_gets_builtins_refreshed(seed, tmp_path):
     # Simulate an OLD volume: stale justification + no version stamp.
     conn.execute("UPDATE attack_chains SET justification='OLD privilege escalation' "
                  "WHERE chain_id='load-module-status-userdir'")
-    conn.execute("DELETE FROM caspar_meta")           # pretend pre-versioning
+    conn.execute("DELETE FROM aegis_meta")           # pretend pre-versioning
     conn.commit(); conn.close()
 
     assert refresh_builtins_if_stale(work, seed) is True
@@ -63,7 +63,7 @@ def test_stale_volume_gets_builtins_refreshed(seed, tmp_path):
     j = conn.execute("SELECT justification FROM attack_chains "
                      "WHERE chain_id='load-module-status-userdir'").fetchone()[0]
     assert "OLD privilege escalation" not in j        # refreshed from seed
-    ver = conn.execute("SELECT value FROM caspar_meta "
+    ver = conn.execute("SELECT value FROM aegis_meta "
                        "WHERE key='base_db_version'").fetchone()[0]
     assert int(ver) == BASE_DB_VERSION
     conn.close()
@@ -73,7 +73,7 @@ def test_refresh_preserves_user_plugins(seed, tmp_path):
     work = tmp_path / "work.db"
     work.write_bytes(seed.read_bytes())
     conn = sqlite3.connect(str(work))
-    conn.execute("DELETE FROM caspar_meta")           # force stale
+    conn.execute("DELETE FROM aegis_meta")           # force stale
     _add_user_plugin(conn, "mongodb")
     conn.close()
 
@@ -94,7 +94,7 @@ def test_refresh_preserves_user_plugins(seed, tmp_path):
 def test_idempotent(seed, tmp_path):
     work = tmp_path / "work.db"
     work.write_bytes(seed.read_bytes())
-    conn = sqlite3.connect(str(work)); conn.execute("DELETE FROM caspar_meta"); conn.commit(); conn.close()
+    conn = sqlite3.connect(str(work)); conn.execute("DELETE FROM aegis_meta"); conn.commit(); conn.close()
     assert refresh_builtins_if_stale(work, seed) is True    # first: refreshes
     assert refresh_builtins_if_stale(work, seed) is False   # second: no-op
 

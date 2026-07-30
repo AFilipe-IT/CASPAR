@@ -1,9 +1,9 @@
 """
 config_assessment/fetch/benchmark_fetcher.py
 --------------------------------------------
-Automatic discovery and download of security benchmarks for a CASPAR service.
+Automatic discovery and download of security benchmarks for an AEGIS service.
 
-`caspar plugin add --source benchmark.pdf` already installs a plugin from a local
+`sca plugin add --source benchmark.pdf` already installs a plugin from a local
 CIS PDF or DISA STIG XCCDF file. This module supplies the *fetch* half: given a
 service name (e.g. "nginx"), find the right public benchmark and download it,
 producing a file that `plugin add` can consume unchanged.
@@ -22,7 +22,7 @@ The fetcher converts the JSON to a DISA-style XCCDF 1.1 XML file. That file goes
 straight through the existing XCCDF branch of `plugin add`
 (config_assessment.build.benchmark_extractor.XCCDFExtractor), so no new parser is
 needed. Network access uses only the stdlib (urllib) — no third-party deps, in
-keeping with the rest of CASPAR.
+keeping with the rest of AEGIS.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from xml.sax.saxutils import escape
 # XCCDF 1.1 — the namespace XCCDFExtractor defaults to and DISA STIGs use.
 _XCCDF_NS = "http://checklists.nist.gov/xccdf/1.1"
 _STIGVIEWER_EXPORT = "https://www.stigviewer.com/stigs/{slug}/export/json"
-_USER_AGENT = "caspar/0.1 (+benchmark-fetch)"
+_USER_AGENT = "sca/0.1 (+benchmark-fetch)"
 _TIMEOUT = 30
 
 
@@ -48,7 +48,7 @@ class FetchError(RuntimeError):
 
 
 class BenchmarkFetcher:
-    """Discover and download public benchmarks for CASPAR services.
+    """Discover and download public benchmarks for AEGIS services.
 
     Parameters
     ----------
@@ -114,7 +114,7 @@ class BenchmarkFetcher:
     def _fetch_stigviewer(self, source: dict, dest_dir: Path, service: str) -> str:
         """Download the stigviewer STIG JSON and write it as XCCDF XML.
 
-        `service` is the canonical CASPAR service key; it is prepended to the
+        `service` is the canonical AEGIS service key; it is prepended to the
         XCCDF <title> so plugin_add's extract_service_name() names the plugin
         after the service (e.g. "nginx") rather than the vendor in the STIG
         title (e.g. "F5 NGINX ..." → "f5").
@@ -153,7 +153,7 @@ class BenchmarkFetcher:
     def _fetch_github_release(self, source: dict, dest_dir: Path) -> str:
         """Download a matching asset from a GitHub release.
 
-        Kept for catalog extensibility (e.g. ComplianceAsCode). No CASPAR
+        Kept for catalog extensibility (e.g. ComplianceAsCode). No AEGIS
         service currently uses it — investigation found only OS-level content
         there — so it is exercised only when a catalog entry opts in.
         """
@@ -238,7 +238,7 @@ def _stig_json_to_xccdf(title: str, version: str, groups: list[dict]) -> str:
     """
     parts: list[str] = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<Benchmark xmlns="{_XCCDF_NS}" id="CASPAR_fetch">',
+        f'<Benchmark xmlns="{_XCCDF_NS}" id="AEGIS_fetch">',
         f"  <title>{escape(title)}</title>",
     ]
     if version:

@@ -24,7 +24,7 @@ import hashlib
 import platform
 from pathlib import Path
 
-CASPAR_VERSION = "0.1.0"
+AEGIS_VERSION = "0.1.0"
 
 
 def _sha256_file(path: str | Path, chunk: int = 1 << 20) -> str | None:
@@ -43,7 +43,7 @@ def build_manifest(db_path: str | Path, target_name: str,
                    rules_count: int | None = None) -> dict:
     """The provenance record embedded in every ScanResult (see module docstring)."""
     return {
-        "caspar_version": CASPAR_VERSION,
+        "caspar_version": AEGIS_VERSION,
         "python": platform.python_version(),
         "db_file": Path(str(db_path)).name,
         "db_sha256": _sha256_file(db_path),

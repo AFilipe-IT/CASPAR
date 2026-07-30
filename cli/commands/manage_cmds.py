@@ -29,14 +29,14 @@ logger = logging.getLogger("ccss")
 @click.option("--list", "list_only", is_flag=True, help="List suppressions.")
 @click.option("--remove", default=None, help="Remove a directive's suppression.")
 @click.option("--file", "supp_file", default=None,
-              help="Suppression file (default .caspar-suppress.json).")
+              help="Suppression file (default .aegis-suppress.json).")
 def suppress(directive, reason, bad_value, list_only, remove, supp_file) -> None:
     """Accept a misconfiguration as a known risk (suppressed in future scans).
 
     \b
-      caspar suppress keepalive_timeout -r "Approved by architecture 2026-06-15"
-      caspar suppress --list
-      caspar suppress --remove keepalive_timeout
+      sca suppress keepalive_timeout -r "Approved by architecture 2026-06-15"
+      sca suppress --list
+      sca suppress --remove keepalive_timeout
     """
     from datetime import date as _date
     from config_assessment.reports.scan_features import SuppressionStore
@@ -95,8 +95,8 @@ def doctor(ctx, strict) -> None:
     Flags orphan rules, chains referencing non-existent directives, out-of-range
     scores, and missing reseed metadata. --strict also audits narratives for
     over-reaching impact claims. Exit 1 if any 'error' is found.
-      caspar doctor
-      caspar doctor --strict
+      sca doctor
+      sca doctor --strict
     """
     from config_assessment.core.db.doctor import check
 
@@ -150,9 +150,9 @@ def fix(ctx, input_path, live, dry_run, in_place, output) -> None:
     guidance and absence rules are listed as manual steps. Nothing is written
     with --dry-run.
 
-      caspar fix nginx.conf --dry-run
-      caspar fix nginx.conf                 # writes nginx.conf.fixed
-      caspar fix nginx.conf --in-place
+      sca fix nginx.conf --dry-run
+      sca fix nginx.conf                 # writes nginx.conf.fixed
+      sca fix nginx.conf --in-place
     """
     from config_assessment.core.db.database import Database
     from config_assessment.core.input_resolver import resolve
@@ -277,7 +277,7 @@ def _promote_stats(db) -> None:
         click.echo(click.style(
             "  Promoted rules stay attributable (marked in their justification) "
             "and need review:\n  set a concrete good_value via "
-            "'caspar explain <directive> -t <target>'.", dim=True))
+            "'sca explain <directive> -t <target>'.", dim=True))
         click.echo()
 
 
@@ -301,9 +301,9 @@ def promote(ctx, input_path, only_directive, docs_path, show_stats, yes) -> None
     CCSS formulas), so future scans detect it deterministically. Review the
     good_value afterwards — promotion seeds the rule, it doesn't finalise it.
 
-      caspar promote nginx.conf                 # all confirmed candidates
-      caspar promote nginx.conf -d some_flag    # just one
-      caspar promote --stats                    # measure the learning loop
+      sca promote nginx.conf                 # all confirmed candidates
+      sca promote nginx.conf -d some_flag    # just one
+      sca promote --stats                    # measure the learning loop
     """
     from config_assessment.core.db.database import Database
     from config_assessment.core.input_resolver import resolve
@@ -375,5 +375,5 @@ def promote(ctx, input_path, only_directive, docs_path, show_stats, yes) -> None
                 logger.warning("Could not promote '%s': %s", u.name, exc)
     click.echo(click.style(
         f"\n  ✓ Promoted {n} rule(s). Review their good_value with "
-        f"'caspar explain <directive> -t {result.target_name}'.", fg="green"))
+        f"'sca explain <directive> -t {result.target_name}'.", fg="green"))
     click.echo()

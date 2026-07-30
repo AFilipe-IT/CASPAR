@@ -166,7 +166,7 @@ def _print_manifest_line(manifest: dict) -> None:
     if not manifest:
         return
     db_sha = manifest.get("db_sha256")
-    parts = [f"caspar {manifest.get('caspar_version', '?')}"]
+    parts = [f"sca {manifest.get('caspar_version', '?')}"]
     if db_sha:
         parts.append(f"kb sha256:{db_sha[:12]}")
     if manifest.get("rules_for_target") is not None:
@@ -309,5 +309,5 @@ def _to_sarif(result) -> dict:
     return {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{"tool": {"driver": {"name": "CASPAR", "version": "0.1.0", "rules": rules}}, "results": results}],
+        "runs": [{"tool": {"driver": {"name": "AEGIS", "version": "0.1.0", "rules": rules}}, "results": results}],
     }

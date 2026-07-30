@@ -1,12 +1,12 @@
-# CASPAR — Guia Comprensivo e Demonstração Prática
+# AEGIS — Guia Comprensivo e Demonstração Prática
 
-> Documento de leitura única para **perceber o que o CASPAR faz, porquê, e como usá-lo do zero**.
+> Documento de leitura única para **perceber o que o AEGIS faz, porquê, e como usá-lo do zero**.
 > Complementa o [GUIA_TECNICO.md](GUIA_TECNICO.md) (orientado à arquitectura interna) e o
 > [README.md](README.md) (referência de comandos). Aqui o foco é *entender e demonstrar*.
 
 **Índice**
 
-*Fundamentos:* 1. [O que é](#1-o-que-é-o-caspar-em-duas-frases) · 2. [O problema](#2-o-problema-que-resolve) ·
+*Fundamentos:* 1. [O que é](#1-o-que-é-o-aegis-em-duas-frases) · 2. [O problema](#2-o-problema-que-resolve) ·
 3. [As duas metades](#3-as-duas-metades-do-sistema-a-decisão-de-design-central) ·
 4. [Como o score é calculado](#4-como-o-score-é-calculado-ccss-resumido)
 
@@ -28,15 +28,15 @@
 
 ---
 
-## 1. O que é o CASPAR, em duas frases
+## 1. O que é o AEGIS, em duas frases
 
-CASPAR (*Configuration Assessment and Security Posture Automated Review*) lê a configuração de um
+AEGIS (*Configuration Assessment and Security Posture Automated Review*) lê a configuração de um
 serviço — um ficheiro, um directório, um serviço instalado, ou uma imagem Docker — e atribui a cada
 problema de configuração um **score de risco de 0 a 10**, com CVEs reais, narrativa técnica e cadeias
 de ataque. O score baseia-se no **CCSS (Common Configuration Scoring System, NISTIR 7502)**, o
 equivalente do CVSS mas para *misconfigurations* em vez de vulnerabilidades de código.
 
-**A ideia-chave:** um benchmark de segurança (CIS ou DISA STIG) diz *"o quê"* está mal; o CASPAR
+**A ideia-chave:** um benchmark de segurança (CIS ou DISA STIG) diz *"o quê"* está mal; o AEGIS
 acrescenta *"quão grave"*, de forma **determinística e reproduzível** — o mesmo input dá sempre o
 mesmo score.
 
@@ -51,7 +51,7 @@ Mas:
 - Nem todas as regras têm o mesmo peso — algumas são triviais, outras permitem RCE.
 - Os benchmarks não dizem *quanto* risco cada desvio representa, nem se há CVEs/exploits associados.
 
-O CASPAR automatiza isto: pega no benchmark, extrai as regras, e para cada uma calcula um score CCSS
+O AEGIS automatiza isto: pega no benchmark, extrai as regras, e para cada uma calcula um score CCSS
 com base em vector de ataque, autenticação, complexidade, impacto CIA, e maturidade de exploração.
 
 ---
@@ -77,9 +77,9 @@ com base em vector de ataque, autenticação, complexidade, impacto CIA, e matur
 - **Build time** usa um LLM local (Ollama) e faz lookups de rede (NVD, CISA KEV). Corre **uma vez** e
   grava tudo numa base de dados SQLite.
 - **Runtime** é **100% determinístico, zero LLM, zero rede**. Lê a DB e a config, faz o match, calcula
-  o score. Scores idênticos para inputs idênticos — sempre. É isto que torna o CASPAR auditável.
+  o score. Scores idênticos para inputs idênticos — sempre. É isto que torna o AEGIS auditável.
 
-Esta separação é o que distingue o CASPAR de "atirar a config a um ChatGPT": o julgamento de risco é
+Esta separação é o que distingue o AEGIS de "atirar a config a um ChatGPT": o julgamento de risco é
 feito uma vez, revisto, e depois aplicado de forma reprodutível.
 
 ---
@@ -111,10 +111,10 @@ misconfigs se combinam (ex.: TLS fraco + sem verificação de certificado = MITM
 ## 5. Os quatro modos de scan
 
 ```bash
-caspar scan /etc/nginx/nginx.conf          # 1. ficheiro único
-caspar scan /etc/nginx/                     # 2. directório (segue Includes)
-caspar scan --live nginx                    # 3. serviço instalado na máquina
-caspar scan docker://nginx:1.25             # 4. imagem Docker (extrai a config)
+sca scan /etc/nginx/nginx.conf          # 1. ficheiro único
+sca scan /etc/nginx/                     # 2. directório (segue Includes)
+sca scan --live nginx                    # 3. serviço instalado na máquina
+sca scan docker://nginx:1.25             # 4. imagem Docker (extrai a config)
 ```
 
 Opções úteis: `--threshold 7.0` (sai com código 1 se o score exceder — para pipelines),
@@ -129,12 +129,12 @@ Por omissão o scan imprime no terminal. Com `--report` grava um ficheiro em `re
 escolhe-se com `-f`:
 
 ```bash
-caspar scan nginx.conf                              # só terminal
-caspar scan nginx.conf --report                     # + HTML (formato por omissão)
-caspar scan nginx.conf --report -f dashboard        # + dashboard visual
-caspar scan nginx.conf --report -f json             # + JSON estruturado
-caspar scan nginx.conf --report -f sarif            # + SARIF (GitHub / CI)
-caspar scan nginx.conf --report -f dashboard --online   # dashboard com gráficos via CDN
+sca scan nginx.conf                              # só terminal
+sca scan nginx.conf --report                     # + HTML (formato por omissão)
+sca scan nginx.conf --report -f dashboard        # + dashboard visual
+sca scan nginx.conf --report -f json             # + JSON estruturado
+sca scan nginx.conf --report -f sarif            # + SARIF (GitHub / CI)
+sca scan nginx.conf --report -f dashboard --online   # dashboard com gráficos via CDN
 ```
 
 | Formato | Para quê | Conteúdo |
@@ -155,22 +155,22 @@ O relatório é gravado em `<projeto>/reports/` por omissão (ou `-o <dir>`). Em
 Antes de fazer scan de um serviço, é preciso um **plugin** para ele. Há dois caminhos, para dois
 cenários diferentes — **não são intermutáveis**:
 
-| | `caspar plugin add` | `caspar plugin fetch` |
+| | `sca plugin add` | `sca plugin fetch` |
 |---|---|---|
 | **Entrada** | um **ficheiro que já tens** (`--source benchmark.pdf` ou `.xml`) | um **nome de serviço** (`nginx`, `mongodb`, …) |
 | **O que faz** | extrai e instala a partir desse ficheiro | **descobre e descarrega** o benchmark de fonte pública, depois (com `--then-install`) instala |
 | **Precisa de rede?** | Não | Sim (vai buscar ao stigviewer.com) |
-| **Quando usar** | já descarregaste o PDF CIS / STIG à mão, ou tens um benchmark próprio | não queres procurar o ficheiro — deixas o CASPAR encontrá-lo |
+| **Quando usar** | já descarregaste o PDF CIS / STIG à mão, ou tens um benchmark próprio | não queres procurar o ficheiro — deixas o AEGIS encontrá-lo |
 
 ```bash
 # add — a partir de um ficheiro local (CIS PDF ou DISA STIG XML)
-caspar plugin add --source sources/benchmarks/CIS_PostgreSQL_13.pdf
-caspar plugin add --source sources/stigs/U_Redis_Enterprise_6-x_STIG.xml
+sca plugin add --source sources/benchmarks/CIS_PostgreSQL_13.pdf
+sca plugin add --source sources/stigs/U_Redis_Enterprise_6-x_STIG.xml
 
 # fetch — a partir do nome, descoberta automática
-caspar plugin fetch --list                  # ver os 43 alvos disponíveis
-caspar plugin fetch mongodb                  # só descarrega (para inspeção)
-caspar plugin fetch mongodb --then-install   # descarrega + instala num passo
+sca plugin fetch --list                  # ver os 43 alvos disponíveis
+sca plugin fetch mongodb                  # só descarrega (para inspeção)
+sca plugin fetch mongodb --then-install   # descarrega + instala num passo
 ```
 
 Na prática, **`fetch --then-install` é o `add` sem teres de arranjar o ficheiro primeiro** — por baixo,
@@ -194,7 +194,7 @@ teríamos de: encontrar o STIG certo, descarregá-lo, e correr `plugin add` à m
 **Passo 1 — ver o que está disponível (43 alvos catalogados):**
 
 ```bash
-caspar plugin fetch --list
+sca plugin fetch --list
 ```
 
 ```
@@ -212,7 +212,7 @@ caspar plugin fetch --list
 **Passo 2 — descobrir, descarregar e instalar automaticamente:**
 
 ```bash
-caspar plugin fetch mongodb --then-install
+sca plugin fetch mongodb --then-install
 ```
 
 Nos bastidores: descarrega o STIG do MongoDB de `stigviewer.com/stigs/mongodb_enterprise_advanced_8x/export/json`,
@@ -239,7 +239,7 @@ Plugin 'mongodb' installed successfully.
 **Passo 3 — confirmar que ficou disponível:**
 
 ```bash
-caspar targets
+sca targets
 ```
 
 ```
@@ -254,13 +254,13 @@ caspar targets
 **Passo 4 — fazer scan de uma config MongoDB (com relatório):**
 
 ```bash
-caspar scan /etc/mongod.conf                          # resultado no terminal
-caspar scan /etc/mongod.conf --report -f dashboard    # + painel visual em reports/
+sca scan /etc/mongod.conf                          # resultado no terminal
+sca scan /etc/mongod.conf --report -f dashboard    # + painel visual em reports/
 ```
 
 ### 8.2 — Um scan real, comentado (nginx)
 
-Correndo `caspar scan test_nginx.conf` sobre uma config nginx propositadamente vulnerável:
+Correndo `sca scan test_nginx.conf` sobre uma config nginx propositadamente vulnerável:
 
 ```
   5.7/10  [Medium]  [file]  test_nginx.conf
@@ -292,10 +292,10 @@ Como ler cada bloco:
 ### 8.3 — Gerar os relatórios (os quatro formatos, ver §6)
 
 ```bash
-caspar scan test_nginx.conf --report -f html         # HTML rico (colapsável) → reports/
-caspar scan test_nginx.conf --report -f dashboard    # painel visual com gauges/donuts
-caspar scan test_nginx.conf --report -f sarif        # GitHub Code Scanning / CI
-caspar scan test_nginx.conf --threshold 7.0          # falha o pipeline se score > 7
+sca scan test_nginx.conf --report -f html         # HTML rico (colapsável) → reports/
+sca scan test_nginx.conf --report -f dashboard    # painel visual com gauges/donuts
+sca scan test_nginx.conf --report -f sarif        # GitHub Code Scanning / CI
+sca scan test_nginx.conf --threshold 7.0          # falha o pipeline se score > 7
 ```
 
 Abre o HTML ou o dashboard no browser para ver as narrativas completas, os cenários de exploração e
@@ -309,19 +309,19 @@ Ideal para uma máquina de testes: um comando instala tudo (imagens + wrapper).
 
 ```bash
 # 1. instalar
-curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/AEGIS/master/install.sh | sh
 
 # 2. instalar um alvo (usa Ollama embutido na imagem :full)
-caspar plugin fetch mongodb --then-install
+sca plugin fetch mongodb --then-install
 
 # 3. prova de persistência — um container NOVO continua a ver o plugin
-caspar targets                     # mongodb aparece
+sca targets                     # mongodb aparece
 
 # 4. scan
-caspar scan /caminho/para/mongod.conf --report -f html
+sca scan /caminho/para/mongod.conf --report -f html
 ```
 
-**Persistência:** os plugins instalados e a base de dados vivem no volume Docker `caspar_data`,
+**Persistência:** os plugins instalados e a base de dados vivem no volume Docker `aegis_data`,
 por isso sobrevivem entre execuções apesar de cada container correr com `--rm`. Na primeira vez a DB
 é semeada a partir da versão canónica embutida na imagem.
 
@@ -329,7 +329,7 @@ por isso sobrevivem entre execuções apesar de cada container correr com `--rm`
 alta, mas lento em CPU — pode levar minutos a horas conforme o nº de regras). Para testes rápidos:
 
 ```bash
-CASPAR_MODEL=qwen2.5:1.5b caspar plugin fetch mongodb --then-install
+AEGIS_MODEL=qwen2.5:1.5b sca plugin fetch mongodb --then-install
 ```
 
 (Modelo leve = mais rápido, mas menos misconfigs/chains extraídas — bom para validar o fluxo, não
@@ -342,30 +342,30 @@ para produção.)
 Um roteiro para confirmar, numa máquina limpa, que **cada** funcionalidade funciona
 *end-to-end*. Cada passo indica o **critério de sucesso**. Só precisas de Docker.
 
-**0 — Instalar** (imagens + wrapper `caspar` no PATH; sem clonar o repo):
+**0 — Instalar** (imagens + wrapper `sca` no PATH; sem clonar o repo):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/AEGIS/master/install.sh | sh
 ```
-✓ *Sucesso:* `caspar --help` lista os comandos (scan, targets, plugin, diff, badge, explain, history, suppress, watch).
+✓ *Sucesso:* `sca --help` lista os comandos (scan, targets, plugin, diff, badge, explain, history, suppress, watch).
 
 **1 — Scan básico + relatórios.** O wrapper monta o directório **atual** como `/workspace`, por isso
 o ficheiro a analisar tem de estar no cwd (ou usa `--live <serviço>` para um serviço instalado):
 
 ```bash
-caspar scan --live apache2                          # serviço instalado (não precisa de ficheiro)
+sca scan --live apache2                          # serviço instalado (não precisa de ficheiro)
 # ou, para um ficheiro no directório atual:
-cp /etc/nginx/nginx.conf .  &&  caspar scan nginx.conf
-caspar scan --live apache2 --report -f dashboard    # painel visual → volume caspar_reports
+cp /etc/nginx/nginx.conf .  &&  sca scan nginx.conf
+sca scan --live apache2 --report -f dashboard    # painel visual → volume aegis_reports
 
 # obter o relatório do volume para o host (é um volume Docker, não um path direto):
-docker run --rm -v caspar_reports:/r -v "$PWD":/out --entrypoint cp \
-  alfilipe/caspar:latest -r /r/. /out/
+docker run --rm -v aegis_reports:/r -v "$PWD":/out --entrypoint cp \
+  alfilipe/aegis:latest -r /r/. /out/
 ls *.html                                           # abre no browser
 ```
 ✓ *Sucesso:* score 0–10 com issues por severidade; o dashboard aparece em `/reports/…` (no volume) e
 copia-se para o host com o comando acima. *(Se scan de um ficheiro der `Not found`, confirma que ele
-está no directório de onde corres o `caspar`.)*
+está no directório de onde corres o `sca`.)*
 
 **2 — Deteção de directivas desconhecidas** (determinístico). No mesmo scan:
 
@@ -375,30 +375,30 @@ está no directório de onde corres o `caspar`.)*
 **3 — Descoberta e catálogo (`fetch`).**
 
 ```bash
-caspar plugin fetch --list                 # 43 alvos
-caspar plugin fetch --search postgres      # fuzzy → postgresql, epas
+sca plugin fetch --list                 # 43 alvos
+sca plugin fetch --search postgres      # fuzzy → postgresql, epas
 ```
 ✓ *Sucesso:* a lista mostra 43 alvos; a busca sugere os relevantes.
 
 **4 — Instalar um plugin + persistência** (a prova decisiva):
 
 ```bash
-CASPAR_MODEL=qwen2.5:1.5b caspar plugin fetch mongodb --then-install   # modelo leve p/ testar
-caspar targets                                                         # noutro container
+AEGIS_MODEL=qwen2.5:1.5b sca plugin fetch mongodb --then-install   # modelo leve p/ testar
+sca targets                                                         # noutro container
 ```
-✓ *Sucesso:* o `mongodb` aparece em `caspar targets` — instalado num container, visível noutro,
-porque persiste no volume `caspar_data`. (Sem `--then-install`, o fetch só descarrega.)
+✓ *Sucesso:* o `mongodb` aparece em `sca targets` — instalado num container, visível noutro,
+porque persiste no volume `aegis_data`. (Sem `--then-install`, o fetch só descarrega.)
 
 **5 — Comandos de produtividade.**
 
 ```bash
-caspar explain keepalive_timeout --target nginx    # origem da regra, sem scan
-caspar scan nginx.conf --report -f json -o /tmp/a
+sca explain keepalive_timeout --target nginx    # origem da regra, sem scan
+sca scan nginx.conf --report -f json -o /tmp/a
 # … edita o nginx.conf …
-caspar scan nginx.conf --report -f json -o /tmp/b
-caspar diff /tmp/a/ccss_*.json /tmp/b/ccss_*.json  # o que mudou + delta
-caspar badge /tmp/b/ccss_*.json                    # markdown para README
-caspar history                                     # scores ao longo do tempo
+sca scan nginx.conf --report -f json -o /tmp/b
+sca diff /tmp/a/ccss_*.json /tmp/b/ccss_*.json  # o que mudou + delta
+sca badge /tmp/b/ccss_*.json                    # markdown para README
+sca history                                     # scores ao longo do tempo
 ```
 ✓ *Sucesso:* `explain` mostra CCSS/CVEs/narrativa; `diff` mostra resolvidas/novas/delta;
 `badge` imprime markdown shields.io; `history` lista os scans anteriores.
@@ -406,12 +406,12 @@ caspar history                                     # scores ao longo do tempo
 **6 — Avaliação LLM de directivas desconhecidas** (opt-in, precisa de Ollama → imagem `:full`):
 
 ```bash
-caspar scan nginx.conf --assess-unknown   # RAG recupera o conhecimento ingerido no build-time
+sca scan nginx.conf --assess-unknown   # RAG recupera o conhecimento ingerido no build-time
 ```
 ✓ *Sucesso:* as directivas `UNCOVERED` ganham um veredicto LLM de **baixa confiança** (separado,
 nunca no score).
 
-> **Notas:** o volume `caspar_data` guarda DB+plugins e `caspar_ollama_models` guarda o modelo (o
+> **Notas:** o volume `aegis_data` guarda DB+plugins e `caspar_ollama_models` guarda o modelo (o
 > `install.sh` monta-os). Usa `qwen2.5:1.5b` para testes rápidos; `mistral:7b` (por omissão) para
 > qualidade. Se algo falhar, vê a §19 (Troubleshooting).
 
@@ -419,7 +419,7 @@ nunca no score).
 
 ## 11. De onde vêm os benchmarks (`plugin fetch`)
 
-O CASPAR descobre benchmarks a partir do **stigviewer.com**, que expõe cada STIG como JSON estruturado
+O AEGIS descobre benchmarks a partir do **stigviewer.com**, que expõe cada STIG como JSON estruturado
 em `/stigs/<slug>/export/json`. O fetcher converte esse JSON num ficheiro XCCDF (o formato DISA STIG
 padrão), que o `plugin add` já sabe consumir — por isso `fetch` e `add` partilham todo o pipeline de
 extracção.
@@ -447,7 +447,7 @@ A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql
 | Attack chains | **26** (combinações que amplificam o risco) |
 | Version-exploits pré-computados | **19** (mapeamento versão → CVEs/exploits) |
 | Alvos disponíveis via `plugin fetch` | **43** (stigviewer.com) |
-| Versão da DB base (para o reseed) | **2** (`caspar_meta.base_db_version`) |
+| Versão da DB base (para o reseed) | **2** (`aegis_meta.base_db_version`) |
 | Testes automatizados | **520** (a passar) |
 
 Distribuição das 228 misconfigs pelos 7 targets: **docker 57 · tomcat 49 · apache-httpd 35 ·
@@ -473,11 +473,11 @@ O **runtime** (scan) é leve; o **build-time** (extração por LLM) é que pesa,
 
 | Operação | Tempo |
 |----------|-------|
-| `caspar scan` | **~100–500 ms** (determinístico; escala com o nº de directivas) |
+| `sca scan` | **~100–500 ms** (determinístico; escala com o nº de directivas) |
 | Seed da DB canónica (1º arranque Docker) | **< 1 s** |
 | `plugin fetch <svc>` (só download) | **~1–3 s** |
 | `plugin fetch --then-install`, 1ª vez | **+5–15 min** (pull do modelo Ollama) **+ minutos a horas** de extração (1 chamada LLM por regra; ~25–45 s/regra em CPU com `mistral:7b`) |
-| O mesmo com `CASPAR_MODEL=qwen2.5:1.5b` | **muito mais rápido** (~min), menos regras/chains extraídas — para testar o fluxo |
+| O mesmo com `AEGIS_MODEL=qwen2.5:1.5b` | **muito mais rápido** (~min), menos regras/chains extraídas — para testar o fluxo |
 
 > Regra prática: em CPU, um STIG de 50 regras com `mistral:7b` demora facilmente **>1 h**. Usa o modelo
 > leve para validar o fluxo e o `mistral:7b` só quando queres a qualidade final. O `scan` em si é
@@ -528,18 +528,18 @@ impactos sem evidência (ex.: nenhuma "privilege escalation" de um mero status+r
 O formato SARIF integra diretamente com o *Security tab* do GitHub. Exemplo de workflow:
 
 ```yaml
-name: CASPAR Config Scan
+name: AEGIS Config Scan
 on: [push, pull_request]
 jobs:
-  caspar:
+  sca:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run CASPAR (falha se score > 7.0)
+      - name: Run AEGIS (falha se score > 7.0)
         run: |
           docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
-            alfilipe/caspar:latest \
+            alfilipe/aegis:latest \
             scan nginx.conf --report -f sarif --threshold 7.0 -o /workspace/reports
 
       - name: Upload SARIF para o GitHub Security
@@ -558,7 +558,7 @@ programático em vez de SARIF, troca por `-f json`.
 
 ## 16. Comandos de produtividade
 
-Além do `scan`, o CASPAR tem comandos que operam sobre os resultados — úteis em CI, hardening
+Além do `scan`, o AEGIS tem comandos que operam sobre os resultados — úteis em CI, hardening
 iterativo e gestão de risco.
 
 **`fix` — remediação assistida (detetar → corrigir).** Gera as correções de config a partir do
@@ -566,46 +566,46 @@ iterativo e gestão de risco.
 → `10`); orientações em prosa e regras de ausência ficam como passos manuais — nunca corrompe a config.
 
 ```bash
-caspar fix nginx.conf --dry-run     # mostra o diff, não escreve
-caspar fix nginx.conf               # escreve nginx.conf.fixed (original intacto)
-caspar fix nginx.conf --in-place
+sca fix nginx.conf --dry-run     # mostra o diff, não escreve
+sca fix nginx.conf               # escreve nginx.conf.fixed (original intacto)
+sca fix nginx.conf --in-place
 ```
 
-**`promote` — ensinar directivas novas ao CASPAR.** Corre a avaliação LLM das directivas desconhecidas
+**`promote` — ensinar directivas novas ao AEGIS.** Corre a avaliação LLM das directivas desconhecidas
 (§17, Camada 3) e **promove** as candidatas a regras permanentes na DB, para scans futuros as
 detetarem deterministicamente. O impacto estimado pelo LLM alimenta as métricas; o score é depois
 calculado pelas fórmulas CCSS normais. Marca a regra como promovida (revê o `good_value` a seguir).
 
 ```bash
-caspar promote nginx.conf           # promove as candidatas confirmadas
-caspar promote nginx.conf -d flag   # só uma directiva
+sca promote nginx.conf           # promove as candidatas confirmadas
+sca promote nginx.conf -d flag   # só uma directiva
 ```
 
 **`report` — resumo executivo de vários scans.** Junta vários JSON (ex.: todos os serviços de um host)
 numa vista única: pior ofensor, scores por target, totais.
 
 ```bash
-caspar report reports/*.json
+sca report reports/*.json
 ```
 
 **`watch` — auditoria contínua (alerta de drift).** Vigia um ficheiro (ou diretório) de configuração e,
 sempre que o conteúdo muda, imprime **uma linha de alerta** com o novo score e o que mudou — **vermelho
-se o risco piorou**, verde se melhorou. Não repete o relatório completo (para isso, `caspar scan`). Corre
+se o risco piorou**, verde se melhorou. Não repete o relatório completo (para isso, `sca scan`). Corre
 em 2º plano com o terminal livre; deteção determinística por hash de conteúdo (Linux nativo, WSL2 e
-volumes Docker). Aceita `--profile` como o `scan`. Pára com `Ctrl-C` (ou `docker stop caspar-watch`).
+volumes Docker). Aceita `--profile` como o `scan`. Pára com `Ctrl-C` (ou `docker stop aegis-watch`).
 
 Aceita **ficheiro, diretório ou serviço** como alvo:
 
 ```bash
-caspar watch /etc/nginx/nginx.conf              # um ficheiro
-caspar watch /etc/apache2/ --profile production # um DIRETÓRIO inteiro (alerta se qualquer ficheiro mudar)
-caspar watch --live apache2                      # SERVIÇO: descobre a config e vigia-a (como scan --live)
-caspar watch nginx.conf --log watch.log &        # 2º plano, terminal LIVRE; lê com: cat watch.log
+sca watch /etc/nginx/nginx.conf              # um ficheiro
+sca watch /etc/apache2/ --profile production # um DIRETÓRIO inteiro (alerta se qualquer ficheiro mudar)
+sca watch --live apache2                      # SERVIÇO: descobre a config e vigia-a (como scan --live)
+sca watch nginx.conf --log watch.log &        # 2º plano, terminal LIVRE; lê com: cat watch.log
 ```
 
 - **Diretório:** não precisas de apontar a um ficheiro específico — dá a pasta (`/etc/apache2/`) e o
-  CASPAR vigia-a recursivamente; qualquer alteração em qualquer ficheiro dispara a re-auditoria.
-- **`--live <serviço>`:** nem precisas de saber o caminho — o CASPAR resolve a pasta de config do serviço
+  AEGIS vigia-a recursivamente; qualquer alteração em qualquer ficheiro dispara a re-auditoria.
+- **`--live <serviço>`:** nem precisas de saber o caminho — o AEGIS resolve a pasta de config do serviço
   (mesmo mapa do `scan --live`) e vigia-a. Serviços: apache2, nginx, sshd, mysql, …
 - **`--notify`:** além da linha no terminal do watch, transmite os agravamentos como **notificação de
   sistema**, para quem estiver a editar a config **noutro terminal** receber o aviso. Três camadas
@@ -614,7 +614,7 @@ caspar watch nginx.conf --log watch.log &        # 2º plano, terminal LIVRE; l�
   sistemas sem `utmp`). (Em Docker, o wrapper partilha `/dev/pts` + `utmp` do host.)
 
 ```bash
-caspar watch ~/demo/apache2.conf --notify &   # alerta salta em qualquer terminal teu
+sca watch ~/demo/apache2.conf --notify &   # alerta salta em qualquer terminal teu
 ```
 
 Com `--log`, os alertas são **anexados** ao ficheiro (sem cor, prontos a `grep`) e o terminal fica livre —
@@ -623,7 +623,7 @@ o modo recomendado para background. Sem `--log`, os alertas saem coloridos no pr
 > **Docker:** usa um caminho **relativo** para `--log` (ex.: `--log watch.log`, corrido de dentro da
 > pasta que estás a analisar). O wrapper monta a pasta atual no container, por isso `watch.log` aparece
 > na tua pasta no host. Um caminho absoluto como `~/watch.log` **não** funciona dentro do container
-> (o `~` do host não está montado) — o CASPAR avisa-te com uma mensagem clara se tentares.
+> (o `~` do host não está montado) — o AEGIS avisa-te com uma mensagem clara se tentares.
 
 Exemplo de saída (config limpa que passa a ter uma misconfiguration e depois é corrigida):
 
@@ -639,8 +639,8 @@ afirmam impacto forte (RCE, escalada de privilégios…) **sem** linguagem condi
 humana, nunca reescreve.
 
 ```bash
-caspar doctor            # integridade estrutural (exit 1 se houver erro)
-caspar doctor --strict   # + auditoria de narrativas exageradas
+sca doctor            # integridade estrutural (exit 1 se houver erro)
+sca doctor --strict   # + auditoria de narrativas exageradas
 ```
 
 **`--profile` — baseline por ambiente de deployment.** No `scan`, ajusta a exposição (Access Vector)
@@ -648,50 +648,50 @@ usada no scoring: `production`=Network (por omissão), `internal`=Adjacent, `dev
 interno pontua menos que um exposto à internet (ex.: nginx 5.7 production / 4.2 internal / 3.2 dev).
 
 ```bash
-caspar scan nginx.conf --profile internal
+sca scan nginx.conf --profile internal
 ```
 
 **`diff` — comparar dois scans no tempo.** Reutiliza o JSON; mostra resolvidas, novas e o delta de
 score. Sai com código 1 se o score **piorou** (bom para bloquear PRs que degradam a config):
 
 ```bash
-caspar scan nginx.conf --report -f json -o antes/
+sca scan nginx.conf --report -f json -o antes/
 # … alterações ao nginx.conf …
-caspar scan nginx.conf --report -f json -o depois/
-caspar diff antes/ccss_*.json depois/ccss_*.json
+sca scan nginx.conf --report -f json -o depois/
+sca diff antes/ccss_*.json depois/ccss_*.json
 #   Score: 5.7 → 6.9  ▲ 1.2      ← a última alteração piorou 1.2 pontos
 #   Resolved: 1   New: 3
 ```
 
 **`suppress` — aceitar um risco conhecido.** Marca uma misconfig como aceite (com justificação
-obrigatória); scans futuros escondem-na com `--suppress-file` (ou `.caspar-suppress.json` no cwd):
+obrigatória); scans futuros escondem-na com `--suppress-file` (ou `.aegis-suppress.json` no cwd):
 
 ```bash
-caspar suppress keepalive_timeout -r "Aprovado por arquitetura em 2026-06-15"
-caspar suppress --list
-caspar scan nginx.conf --suppress-file .caspar-suppress.json   # keepalive escondido
+sca suppress keepalive_timeout -r "Aprovado por arquitetura em 2026-06-15"
+sca suppress --list
+sca scan nginx.conf --suppress-file .aegis-suppress.json   # keepalive escondido
 ```
 
 **`explain` — a origem completa de uma regra, sem correr scan.** Secção do benchmark, submétricas
 CCSS, CVEs e narrativa:
 
 ```bash
-caspar explain keepalive_timeout --target nginx
+sca explain keepalive_timeout --target nginx
 ```
 
 **`history` — evolução do score.** Cada scan é gravado na DB; consulta o histórico:
 
 ```bash
-caspar history                     # todos os scans recentes
-caspar history nginx.conf --last 5
+sca history                     # todos os scans recentes
+sca history nginx.conf --last 5
 ```
 
 **`trend` — drift de configuração, quantificado.** O `history` lista scans; o `trend` mostra a
 **direção**: uma sparkline por input, primeiro→último score e o veredicto (risco subiu/desceu/estável):
 
 ```bash
-caspar trend            # todos os inputs com 2+ scans
-caspar trend nginx      # só inputs que contenham 'nginx'
+sca trend            # todos os inputs com 2+ scans
+sca trend nginx      # só inputs que contenham 'nginx'
 ```
 ```
   ▂▄▆█▆▄▂▁  9.1 → 2.3   ▼ 6.8  (risk reduced)
@@ -704,37 +704,37 @@ veio do ciclo, e quanto ainda espera revisão (sem `good_value`)? É a métrica 
 ciclo humano-no-loop:
 
 ```bash
-caspar promote --stats
+sca promote --stats
 ```
 
 **Manifesto de reprodutibilidade.** Cada scan grava no resultado (rodapé do terminal + relatório JSON)
-a versão do CASPAR, o SHA-256 da base de conhecimento e o nº de regras do target. **Manifesto igual +
+a versão do AEGIS, o SHA-256 da base de conhecimento e o nº de regras do target. **Manifesto igual +
 config igual ⇒ scores iguais, por construção** — qualquer pessoa audita a afirmação de determinismo a
 partir do próprio relatório, sem confiar em quem o gerou:
 
 ```
-  reproducible: caspar 0.1.0 · kb sha256:34ce3970acaa · 18 rules (nginx)
+  reproducible: sca 0.1.0 · kb sha256:34ce3970acaa · 18 rules (nginx)
 ```
 
 **`watch` — auditoria contínua de drift (alerta em tempo real).** Vigia um ficheiro, um diretório ou um
 serviço e, sempre que a config muda, imprime **uma linha de alerta** com o novo score e o que mudou —
 **vermelho se o risco piorou**, verde se melhorou. Deteção determinística por hash de conteúdo (Linux
 nativo, WSL2 e volumes Docker). Corre em 2º plano com o terminal livre; pára com `Ctrl-C` (ou
-`docker stop caspar-watch`). Ver a §17-B para a engenharia por trás.
+`docker stop aegis-watch`). Ver a §17-B para a engenharia por trás.
 
 Três alvos:
 
 ```bash
-caspar watch /etc/nginx/nginx.conf              # um ficheiro
-caspar watch /etc/apache2/ --profile production # um DIRETÓRIO inteiro (alerta se qualquer ficheiro mudar)
-caspar watch --live apache2                      # SERVIÇO: descobre a config e vigia-a (como scan --live)
+sca watch /etc/nginx/nginx.conf              # um ficheiro
+sca watch /etc/apache2/ --profile production # um DIRETÓRIO inteiro (alerta se qualquer ficheiro mudar)
+sca watch --live apache2                      # SERVIÇO: descobre a config e vigia-a (como scan --live)
 ```
 
 Duas formas de entrega (background):
 
 ```bash
-caspar watch nginx.conf --log watch.log &        # alertas para ficheiro (sem cor, grep-áveis); terminal limpo
-caspar watch apache2.conf --notify &             # notificação de sistema — chega a QUALQUER terminal do utilizador
+sca watch nginx.conf --log watch.log &        # alertas para ficheiro (sem cor, grep-áveis); terminal limpo
+sca watch apache2.conf --notify &             # notificação de sistema — chega a QUALQUER terminal do utilizador
 ```
 
 Exemplo (config limpa que passa a ter misconfigs e depois é corrigida):
@@ -749,21 +749,21 @@ Exemplo (config limpa que passa a ter misconfigs e depois é corrigida):
 **`badge` — badge de score para README** (estilo shields.io):
 
 ```bash
-caspar badge reports/ccss_nginx.json          # markdown para colar no README
-# ![CASPAR Score](https://img.shields.io/badge/CASPAR-5.7%2F10-yellow)
+sca badge reports/ccss_nginx.json          # markdown para colar no README
+# ![AEGIS Score](https://img.shields.io/badge/AEGIS-5.7%2F10-yellow)
 ```
 
 **`plugin fetch --search` — busca fuzzy no catálogo** (evita adivinhar o slug):
 
 ```bash
-caspar plugin fetch --search postgres         # sugere postgresql, epas
+sca plugin fetch --search postgres         # sugere postgresql, epas
 ```
 
 **Exit codes diferenciados (CI).** `--exit-code` no scan dá **2** se houver Critical, **1** se acima
 do `--threshold`, **0** caso contrário — controlo fino para pipelines:
 
 ```bash
-caspar scan nginx.conf --exit-code --threshold 7.0
+sca scan nginx.conf --exit-code --threshold 7.0
 ```
 
 **Automáticos (Docker, sem flags).** Três comportamentos que o wrapper/imagem tratam sozinhos:
@@ -773,7 +773,7 @@ caspar scan nginx.conf --exit-code --threshold 7.0
   cross-reference de CVEs/exploits funcionar (`🔎 Versão detetada no host: apache2 2.4.xx`).
 - **Relatórios no host** — com `--report`, os ficheiros vão para `./reports/` do teu directório atual
   (não para um volume Docker), por isso aparecem logo ao teu lado.
-- **Reseed versionado** — quando puxas uma imagem nova, a DB base do teu volume `caspar_data` é
+- **Reseed versionado** — quando puxas uma imagem nova, a DB base do teu volume `aegis_data` é
   atualizada automaticamente no próximo comando (justificações corrigidas, novas regras built-in),
   **preservando** os plugins que instalaste. Sem `docker volume rm`, sem perder nada.
 
@@ -781,7 +781,7 @@ caspar scan nginx.conf --exit-code --threshold 7.0
 
 ## 17. Deteção de directivas desconhecidas
 
-**O problema:** o CASPAR só deteta misconfigurations que estão na base de conhecimento (o benchmark).
+**O problema:** o AEGIS só deteta misconfigurations que estão na base de conhecimento (o benchmark).
 Uma directiva nova — introduzida numa versão mais recente do serviço, de um módulo de terceiros, ou
 simplesmente fora do benchmark — não teria regra e seria **invisível** ao scanner. O parser lê-a, mas
 nada a examina.
@@ -815,9 +815,9 @@ directiva desconhecida, o LLM (Ollama) é *grounded* na **base de conhecimento d
 do plugin, o manual do serviço ingerido no build-time, e a referência partilhada NISTIR 7502 (CCSS) — e
 estima se é uma misconfiguration, com impacto e justificação. Os resultados são **candidatos de baixa
 confiança, nunca somados ao score CCSS**: aparecem marcados à parte. É essencialmente "gerar uma regra
-candidata em tempo de scan", que podes depois validar e promover à base com `caspar promote`.
+candidata em tempo de scan", que podes depois validar e promover à base com `sca promote`.
 
-**O conhecimento constrói-se uma vez, consulta-se sempre.** Este é o ponto-chave do modelo RAG do CASPAR:
+**O conhecimento constrói-se uma vez, consulta-se sempre.** Este é o ponto-chave do modelo RAG do AEGIS:
 tu **não** carregas documentos a cada scan. O conhecimento é ingerido no **build-time** — quando adicionas
 o plugin — e fica guardado na pasta do plugin. Depois, em qualquer scan, `_find_knowledge_docs` descobre
 esses documentos **do disco** (resolvendo `apache-httpd`↔`apache_httpd`) e o LLM recupera deles. Nenhuma
@@ -825,12 +825,12 @@ flag é precisa: a RAG já tem o conhecimento que precisa.
 
 ```bash
 # BUILD-TIME — ingerir o conhecimento uma vez, ao adicionar o plugin
-caspar plugin add -s CIS_Apache.pdf --manual manual_apache.pdf
-caspar plugin add -s CIS_Apache.pdf --manual https://archive.apache.org/dist/httpd/docs/manual.pdf
+sca plugin add -s CIS_Apache.pdf --manual manual_apache.pdf
+sca plugin add -s CIS_Apache.pdf --manual https://archive.apache.org/dist/httpd/docs/manual.pdf
 
 # RUNTIME — a Camada 3 já recupera do conhecimento construído, sem passar nada
-caspar scan nginx.conf                    # Camadas 1+2 (determinístico)
-caspar scan nginx.conf --assess-unknown   # + Camada 3 (LLM+RAG, conhecimento do disco)
+sca scan nginx.conf                    # Camadas 1+2 (determinístico)
+sca scan nginx.conf --assess-unknown   # + Camada 3 (LLM+RAG, conhecimento do disco)
 ```
 
 O `--manual` aceita **um ficheiro local OU um URL** (o manual do serviço, um STIG, texto ou **PDF** — via
@@ -843,13 +843,13 @@ funde todos os índices do target (benchmark + manual + NISTIR), por isso o LLM 
 > documento extra a um scan, sem o ingerir permanentemente. É a exceção, não o mecanismo principal — o
 > caminho normal é `plugin add --manual`, que constrói a base uma vez.
 
-**E para plugins já instalados?** `caspar plugin manual <target> <path|url>` ingere o manual a
+**E para plugins já instalados?** `sca plugin manual <target> <path|url>` ingere o manual a
 qualquer momento — o caminho retroativo para plugins adicionados antes do manual existir (ou via
 `fetch` sem `--manual`):
 
 ```bash
-caspar plugin manual nginx https://nginx.org/en/docs/dirindex.pdf
-caspar plugin manual apache-httpd ./manual_apache.pdf
+sca plugin manual nginx https://nginx.org/en/docs/dirindex.pdf
+sca plugin manual apache-httpd ./manual_apache.pdf
 ```
 
 > **Fronteira de design (importante para a defesa):** o RAG vive no **build-time** (ingestão) e na
@@ -868,7 +868,7 @@ caspar plugin manual apache-httpd ./manual_apache.pdf
 
 ## 17-B. Engenharia do `watch` — problemática → solução → como se resolveu
 
-Esta secção documenta o percurso da funcionalidade de **auditoria contínua** (`caspar watch`), do
+Esta secção documenta o percurso da funcionalidade de **auditoria contínua** (`sca watch`), do
 requisito ao estado final. É deliberadamente narrativa: cada linha é uma decisão de engenharia com o seu
 *porquê*, e a maioria dos problemas só apareceu ao **validar em ambiente real** (a VM de teste), não nos
 testes unitários — que é a lição central.
@@ -884,7 +884,7 @@ testes unitários — que é a lição central.
 |---|--------------|---------|------------------|
 | 1 | Detetar mudanças sem violar o invariante *runtime determinístico* | Loop de **polling por hash de conteúdo**, não `inotify` | Núcleo só de I/O (`core/watch.py`) que emite `ChangeEvent`; o scoring continua o `runtime.scan` (zero-LLM, zero-rede). Funciona igual em Linux nativo, WSL2 e volumes Docker |
 | 2 | Um relatório completo por cada gravação é ruído | **Uma linha de alerta** compacta: score, delta e a directiva culpada | `_watch_alert_line`: vermelho se o risco *agregado* piorou, verde se melhorou, neutro se igual. Critério único (score global) → defensável |
-| 3 | Em 2º plano o `tail -f` duplicava linhas e "prendia" o prompt | Flag **`--log FILE`**: alertas para ficheiro (sem cor, grep-áveis); terminal só recebe uma linha-ponteiro | Substitui a receita `> log & tail -f`; o daemon fica parável com `docker stop caspar-watch` |
+| 3 | Em 2º plano o `tail -f` duplicava linhas e "prendia" o prompt | Flag **`--log FILE`**: alertas para ficheiro (sem cor, grep-áveis); terminal só recebe uma linha-ponteiro | Substitui a receita `> log & tail -f`; o daemon fica parável com `docker stop aegis-watch` |
 | 4 | Vigiar um **serviço** exigia saber o caminho da config | Flag **`--live <serviço>`** | Reutiliza o resolvedor do `scan --live` (mapa `apache2 → /etc/apache2/…`); rotula o alerta pelo nome do serviço |
 | 5 | Cobrir configs novas de uma atualização | **Deteção de directivas desconhecidas** (§17) já corre em cada re-scan | Camadas 1+2 determinísticas; o `watch` herda-as automaticamente |
 
@@ -938,7 +938,7 @@ cp -r config_assessment/plugins/nginx config_assessment/plugins/myservice
 #  parser.py        → ajusta ao formato da config (key-value, blocos, etc.)
 #  build_*.py       → substitui ENTRIES pelas tuas regras (directiva, bad, good, secção)
 # depois corre o build do plugin para popular a DB a partir das ENTRIES
-caspar targets                                            # confirma que aparece
+sca targets                                            # confirma que aparece
 ```
 
 O `parser.py` já tem parsers genéricos reutilizáveis (`config_assessment/parsers/`) para formatos
@@ -953,19 +953,19 @@ key-value — na maioria dos casos é só delegar. O `rules.py` define como o se
 | Sintoma | Causa provável | Solução |
 |---------|----------------|---------|
 | `Ollama not reachable at http://localhost:11434 — falling back to stub client` e **0 controls** extraídos | O comando correu sem Ollama disponível (ou na imagem `:latest` em vez da `:full`) | Usa a imagem `:full` (tem Ollama embutido) ou arranca o Ollama; o wrapper encaminha `plugin add`/`fetch --then-install` para `:full` automaticamente. |
-| `model 'X' not found` no Ollama | O modelo pedido não está descarregado | `ollama pull <modelo>`, ou passa `CASPAR_MODEL=<modelo já instalado>`. Na imagem `:full` o entrypoint faz o pull automaticamente. |
-| `plugin fetch` falha com erro de rede / HTTP | stigviewer.com inacessível | Descarrega o STIG à mão e usa `caspar plugin add --source ficheiro.xml`. Alguns alvos têm fonte de fallback automática (apache, mongodb, postgresql, rhel9, sqlserver, windows-server-2022). |
+| `model 'X' not found` no Ollama | O modelo pedido não está descarregado | `ollama pull <modelo>`, ou passa `AEGIS_MODEL=<modelo já instalado>`. Na imagem `:full` o entrypoint faz o pull automaticamente. |
+| `plugin fetch` falha com erro de rede / HTTP | stigviewer.com inacessível | Descarrega o STIG à mão e usa `sca plugin add --source ficheiro.xml`. Alguns alvos têm fonte de fallback automática (apache, mongodb, postgresql, rhel9, sqlserver, windows-server-2022). |
 | `OSError: [Errno 30] Read-only file system` no fetch | Output apontado para um caminho read-only (ex. `/workspace` no container) | Usa `-o /tmp` (já é o default na imagem) ou outro dir com escrita. |
-| `attempt to write a readonly database` / `permission denied` no `caspar_data` | Volume stale, criado por uma imagem antiga com outro dono (root) | O CASPAR já **cai automaticamente** para `/tmp` (não-persistente) e avisa. Para restaurar a persistência: `docker volume rm caspar_data` e deixa o entrypoint recriá-lo. |
-| Relatório (`--report`) não aparece na máquina host | Versão antiga escrevia dentro do container (efémero) | Corrigido: os relatórios vão para o volume `caspar_reports` (`CASPAR_REPORTS_DIR=/reports`). Faz `docker pull` da imagem mais recente. Vê o ficheiro com `docker run --rm -v caspar_reports:/r --entrypoint ls alfilipe/caspar:latest /r`. |
-| Plugin instalado mas `caspar targets` **não o mostra** | A DB de scan está fora de sync, ou o plugin foi escrito para dentro do container sem volume | Confirma que corres com `-v caspar_data:/home/caspar/data`; um `plugin add`/`fetch` sem esse volume perde-se no `--rm`. Verifica a DB: `sqlite3 ccss.db "SELECT target_name FROM misconfigurations GROUP BY target_name"`. |
+| `attempt to write a readonly database` / `permission denied` no `aegis_data` | Volume stale, criado por uma imagem antiga com outro dono (root) | O AEGIS já **cai automaticamente** para `/tmp` (não-persistente) e avisa. Para restaurar a persistência: `docker volume rm aegis_data` e deixa o entrypoint recriá-lo. |
+| Relatório (`--report`) não aparece na máquina host | Versão antiga escrevia dentro do container (efémero) | Corrigido: os relatórios vão para o volume `aegis_reports` (`AEGIS_REPORTS_DIR=/reports`). Faz `docker pull` da imagem mais recente. Vê o ficheiro com `docker run --rm -v aegis_reports:/r --entrypoint ls alfilipe/aegis:latest /r`. |
+| Plugin instalado mas `sca targets` **não o mostra** | A DB de scan está fora de sync, ou o plugin foi escrito para dentro do container sem volume | Confirma que corres com `-v aegis_data:/home/aegis/data`; um `plugin add`/`fetch` sem esse volume perde-se no `--rm`. Verifica a DB: `sqlite3 ccss.db "SELECT target_name FROM misconfigurations GROUP BY target_name"`. |
 | `pdftotext: command not found` no `plugin add` de um PDF | Falta o poppler-utils | `sudo apt-get install poppler-utils` (a imagem Docker já o traz). |
 
 ---
 
 ## 20. Posicionamento vs outras ferramentas
 
-> **Nota:** esta tabela é *posicionamento conceptual*, não um benchmark. Reflete o desenho do CASPAR;
+> **Nota:** esta tabela é *posicionamento conceptual*, não um benchmark. Reflete o desenho do AEGIS;
 > as colunas de terceiros são a nossa leitura de alto nível, não um teste comparativo. Confirma sempre
 > as capacidades atuais de cada ferramenta na fonte respetiva.
 
@@ -974,9 +974,9 @@ key-value — na maioria dos casos é só delegar. O `rules.py` define como o se
 | **CIS-CAT** | Compliance scanning (pass/fail vs CIS) | Não (pontua % de conformidade) | Sim |
 | **OpenSCAP** | Avaliação XCCDF/OVAL | Não | Sim |
 | **Trivy** | Scanning de vulnerabilidades (CVE) em imagens/IaC | Não (usa CVSS de CVEs, não de config) | Sim |
-| **CASPAR** | **Scoring quantitativo de risco de configuração (CCSS)** | **Sim** | **Sim (build/runtime)** |
+| **AEGIS** | **Scoring quantitativo de risco de configuração (CCSS)** | **Sim** | **Sim (build/runtime)** |
 
-A distinção do CASPAR não é "detetar" desvios (várias ferramentas fazem isso bem) mas **quantificar o
+A distinção do AEGIS não é "detetar" desvios (várias ferramentas fazem isso bem) mas **quantificar o
 risco** de cada um num score 0–10 comparável, com attack chains e CVEs — e fazê-lo de forma
 determinística e auditável.
 
@@ -1022,9 +1022,9 @@ mapeamentos com impacto C:N/I:N/A:N ou nomes implausíveis são rejeitados (obse
 python -m config_assessment.plugins.azure_iac.build_azure \
   -b CIS_Microsoft_Azure/CIS_..._Storage_...pdf --model qwen2.5:14b --dry-run  # rever primeiro
 # scan (determinístico, sempre):
-caspar scan main.tf          # deteta azurerm; findings com linha + recurso exatos
-caspar scan main.bicep
-caspar scan azuredeploy.json
+sca scan main.tf          # deteta azurerm; findings com linha + recurso exatos
+sca scan main.bicep
+sca scan azuredeploy.json
 ```
 
 Parsers: `parsers/hcl_flat.py` (HCL subset, stdlib), `parsers/bicep_flat.py`, `parsers/arm_json.py`
@@ -1044,8 +1044,8 @@ do CIS** e métricas CCSS revistas à mão — build 100% determinístico (`buil
 LLM em nenhum ponto deste caminho).
 
 ```bash
-caspar scan deployment.yaml     # privileged, hostNetwork, runAsUser 0, SYS_ADMIN…
-caspar scan Dockerfile          # USER ausente = root por omissão (absence rule!), :latest implícito
+sca scan deployment.yaml     # privileged, hostNetwork, runAsUser 0, SYS_ADMIN…
+sca scan Dockerfile          # USER ausente = root por omissão (absence rule!), :latest implícito
 ```
 
 Destaques para a defesa: o `FROM ubuntu` **sem tag** é detetado como `:latest` implícito; a ausência
@@ -1062,14 +1062,14 @@ kernel/rede via `sysctl` (`/etc/sysctl.conf`, `sysctl.d/`) e política de passwo
 `/etc/login.defs`. Curado, determinístico, **separado do plugin `ssh`** (que já cobre o `sshd_config`).
 
 ```bash
-caspar scan /etc/sysctl.conf                       # hardening real da máquina
-caspar scan test_target/ubuntu_demo/sysctl.conf    # fixture de demo
+sca scan /etc/sysctl.conf                       # hardening real da máquina
+sca scan test_target/ubuntu_demo/sysctl.conf    # fixture de demo
 ```
 
 **Fronteira de escopo (achado da tese):** o OpenSCAP avalia o **estado do sistema vivo** (permissões,
-módulos de kernel, serviços a correr); o CASPAR avalia **ficheiros de configuração**. A comparação
+módulos de kernel, serviços a correr); o AEGIS avalia **ficheiros de configuração**. A comparação
 justa (`scripts/baseline_compare.py --oscap`) é no subconjunto sobreponível — os controlos que ambos
-lêem de um ficheiro. Aí o diferencial do CASPAR (score CCSS reproduzível + narrativa) contrasta com o
+lêem de um ficheiro. Aí o diferencial do AEGIS (score CCSS reproduzível + narrativa) contrasta com o
 pass/fail binário do OpenSCAP. Nota: correr o OpenSCAP num WSL dá `notapplicable` (os probes OVAL
 precisam de um sistema real); para números pass/fail é preciso uma VM Ubuntu provisionada.
 
@@ -1086,21 +1086,21 @@ precisam de um sistema real); para números pass/fail é preciso uma VM Ubuntu p
 | Regras de deteção de directivas desconhecidas | `config_assessment/core/unknown_directives.py` |
 | Mexer nas fórmulas CCSS / cap de impacto das chains | `config_assessment/core/ccss.py` |
 | Perfis de ambiente (production/internal/dev) | `config_assessment/core/runtime.py` (`ENV_PROFILES`) |
-| Remediação assistida (`caspar fix`) | `config_assessment/reports/remediation.py` |
-| Auditoria contínua (`caspar watch`) — loop e alerta | `config_assessment/core/watch.py` + `cli/commands/scan_cmds.py` |
+| Remediação assistida (`sca fix`) | `config_assessment/reports/remediation.py` |
+| Auditoria contínua (`sca watch`) — loop e alerta | `config_assessment/core/watch.py` + `cli/commands/scan_cmds.py` |
 | Integridade da DB / auditoria de narrativas | `config_assessment/core/db/doctor.py` |
 | Moderar justificações de chains do apache | `config_assessment/plugins/apache_httpd/chains.json` |
 | Adicionar um comando CLI | `cli/commands/*_cmds.py` (+ registo em `cli/main.py`) |
 | Mudar um relatório (HTML/dashboard/SARIF) | `config_assessment/reports/` |
 | Reseed versionado da DB (bump ao mudar o canonical) | `config_assessment/core/db/reseed.py` |
 | Ver a interface de um plugin | `config_assessment/plugins/<serviço>/` |
-| Config do Docker / persistência / versão-no-host | `docker/caspar/` + `install.sh` |
+| Config do Docker / persistência / versão-no-host | `docker/aegis/` + `install.sh` |
 
 ---
 
 ## 23. Resumo executivo
 
-O CASPAR transforma um benchmark de segurança (CIS/STIG) num scanner de configuração com scoring de
+O AEGIS transforma um benchmark de segurança (CIS/STIG) num scanner de configuração com scoring de
 risco reproduzível. A separação **build-time (LLM, uma vez) / runtime (determinístico, sempre)** dá-lhe
 auditabilidade. O comando **`plugin fetch`** fecha o último passo manual: descobre e instala o
 benchmark certo para 43 alvos com um comando, e os plugins persistem em Docker. O resultado é um

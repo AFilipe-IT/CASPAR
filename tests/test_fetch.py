@@ -1,7 +1,7 @@
 """
 tests/test_fetch.py
 -------------------
-Tests for `caspar plugin fetch` (config_assessment.fetch.benchmark_fetcher and
+Tests for `sca plugin fetch` (config_assessment.fetch.benchmark_fetcher and
 the CLI command). The network is always mocked — no test hits stigviewer.com —
 so these exercise the catalog lookup, JSON→XCCDF conversion, file naming, error
 handling and the CLI wiring.

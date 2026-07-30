@@ -1,7 +1,7 @@
 #!/bin/bash
-# install.sh — instalação local do CASPAR numa máquina nova (sem Docker).
+# install.sh — instalação local do AEGIS numa máquina nova (sem Docker).
 set -e
-echo "=== CASPAR Install ==="
+echo "=== AEGIS Install ==="
 
 # Verificar Python 3.11+
 python3 --version || { echo "Python 3.11+ required"; exit 1; }
@@ -18,9 +18,9 @@ pip install -e . --quiet
 sqlite3 ccss.db < data/ccss_canonical.sql
 
 echo ""
-echo "✅ CASPAR instalado com sucesso"
+echo "✅ AEGIS instalado com sucesso"
 echo "   Activar: source .venv/bin/activate"
-echo "   Testar:  caspar targets"
+echo "   Testar:  sca targets"
 echo ""
 echo "Para build-time (plugin add, build):"
 echo "   Instalar Ollama: https://ollama.ai"

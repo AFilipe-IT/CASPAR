@@ -11,7 +11,7 @@ justifications) never reached an existing volume.
 
 This module closes that gap with a versioned, targeted refresh:
 
-  * a `caspar_meta` table records the base-DB version present in the working DB;
+  * a `aegis_meta` table records the base-DB version present in the working DB;
   * when the image ships a newer base version, we refresh ONLY the built-in
     targets (their misconfigurations + attack_chains) from the seed DB, and bump
     the recorded version — user-installed targets are left untouched.
@@ -36,18 +36,18 @@ BUILTIN_TARGETS = (
 
 
 def _ensure_meta(conn: sqlite3.Connection) -> int:
-    """Ensure caspar_meta exists; return the stored base version (0 if unset)."""
+    """Ensure aegis_meta exists; return the stored base version (0 if unset)."""
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS caspar_meta "
+        "CREATE TABLE IF NOT EXISTS aegis_meta "
         "(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     row = conn.execute(
-        "SELECT value FROM caspar_meta WHERE key='base_db_version'").fetchone()
+        "SELECT value FROM aegis_meta WHERE key='base_db_version'").fetchone()
     return int(row[0]) if row else 0
 
 
 def _set_version(conn: sqlite3.Connection, version: int) -> None:
     conn.execute(
-        "INSERT INTO caspar_meta(key, value) VALUES('base_db_version', ?) "
+        "INSERT INTO aegis_meta(key, value) VALUES('base_db_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(version),))
 
 

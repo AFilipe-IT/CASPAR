@@ -61,7 +61,7 @@ def test_badge_color_by_score(score, color):
 
 def test_badge_markdown_shape():
     md = badge_markdown(5.7)
-    assert md.startswith("![CASPAR Score](https://img.shields.io/badge/")
+    assert md.startswith("![AEGIS Score](https://img.shields.io/badge/")
     assert "5.7" in md
 
 
@@ -137,7 +137,7 @@ def test_search_no_match_returns_empty():
 def test_load_scan_rejects_non_scan_json(tmp_path):
     p = tmp_path / "x.json"
     p.write_text(json.dumps({"hello": "world"}))
-    with pytest.raises(ValueError, match="not a CASPAR scan"):
+    with pytest.raises(ValueError, match="not an AEGIS scan"):
         load_scan(p)
 
 
