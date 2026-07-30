@@ -8,7 +8,10 @@
 > **Metodologia:** AMiSA — *A methodology for the automated and quantitative
 > assessment of security misconfigurations in systems and services*.
 > **Prova de conceito:** CASPAR (o código deste repositório).
-> **Estado:** parte prática FECHADA e validada (2026-07-09).
+> **Estado:** parte prática FECHADA e validada (2026-07-09). Adenda pós-fecho:
+> replicação NISTIR 7502 18/18 (2026-07-14) e experiência de determinismo da
+> extração LLM (2026-07-18), motivadas pelo feedback dos revisores do INForum
+> (§6).
 
 ---
 
@@ -22,8 +25,10 @@ recomendações em prosa; as ferramentas existentes dão veredictos binários
 **scores CCSS (NISTIR 7502) reproduzíveis e auditáveis** de misconfigurations,
 com a separação **build-time / runtime** como garantia central:
 
-- **Build-time** (uma vez, por serviço): um LLM local, ancorado por RAG no
-  benchmark, extrai regras e atribui submétricas. Não-determinístico, pesado.
+- **Build-time** (uma vez, por serviço): um LLM local (**qwen2.5:14b** via
+  Ollama, temperatura 0.1 — declarar sempre na tese, os revisores exigiram-no),
+  ancorado por RAG no benchmark, extrai regras e atribui submétricas.
+  Não-determinístico em teoria; estabilidade medida empiricamente em §4.7.
 - **Runtime** (cada scan): parse → lookup exacto → aritmética CCSS. **100%
   determinístico, offline.** Mesmo input ⇒ mesmo score, sempre.
 
@@ -82,7 +87,7 @@ Formatos parseados: key-value, YAML, Dockerfile, HCL, Bicep, ARM JSON.
 ## 3. Arquitectura e implementação (como foi feito)
 
 ### 3.1 Dimensão (verificado)
-~22.100 linhas de Python · **602 testes** · 6 parsers genéricos · 11 targets.
+~22.100 linhas de Python · **623 testes** · 6 parsers genéricos · 11 targets.
 
 ### 3.2 O contrato `Target` (extensibilidade)
 O núcleo (`config_assessment/core/`) é agnóstico ao serviço. Adicionar um alvo =
@@ -163,7 +168,14 @@ Reproduzível com `python -m scripts.evaluate` e
 ### 4.1 Base de conhecimento
 **11 targets · 488 regras · 27 attack chains.**
 
-### 4.2 Correção — MAE vs ground truth CCE (Apache)
+### 4.2 Correção do motor CCSS — replicação NISTIR 7502 (18/18)
+O motor de scoring foi validado contra os **18 exemplos resolvidos do próprio
+NISTIR 7502 §4** (vetores da calculadora NVD): **18/18 exatos**
+(`tests/test_nistir7502_examples.py`, 2026-07-14). O desvio conservador do
+modelo temporal simplificado está documentado em VALIDACAO.md §1.0 e §7. É a
+evidência de que a *aritmética* está certa, independente do LLM.
+
+### 4.3 Correção das classificações — MAE vs ground truth CCE (Apache)
 Scores do CASPAR vs faixas de severidade DISA do dataset **CCE oficial**:
 
 | Métrica | Valor |
@@ -176,7 +188,7 @@ Scores do CASPAR vs faixas de severidade DISA do dataset **CCE oficial**:
 
 → **Concordância total com o ground truth**. É a evidência quantitativa central.
 
-### 4.3 Deteção — recall nas fixtures vulneráveis
+### 4.4 Deteção — recall nas fixtures vulneráveis
 | Fixture | Target | Recall | Score |
 |---|---|---|---|
 | nginx.conf | nginx | 100% | 7.5–8.9 |
@@ -185,7 +197,7 @@ Scores do CASPAR vs faixas de severidade DISA do dataset **CCE oficial**:
 | Dockerfile.vulnerable | dockerfile | 100% | 9.0 |
 | **Total** | | **100% (14/14)** | |
 
-### 4.4 Comparação com baselines
+### 4.5 Comparação com baselines
 
 **Trivy (IaC / containers)** — mesmo ficheiro de input:
 | Ficheiro | CASPAR | Trivy |
@@ -209,12 +221,44 @@ avaliado no sistema vivo (CIS L1 Server, `ssg-ubuntu2204-ds.xml`):
 → Ambos cobrem os mesmos controlos; o **diferencial do CASPAR** é o score
 reproduzível + narrativa, contra o pass/fail binário do OpenSCAP.
 
-### 4.5 Reprodutibilidade
+### 4.6 Reprodutibilidade (runtime)
 O manifesto (§3.6) garante que dois scans do mesmo input com a mesma base de
 conhecimento produzem scores idênticos — verificado nos smoke tests
 (`determinism` check: dois scans idênticos) e pelo `kb sha256` no rodapé.
 
-### 4.6 Limitações (declaradas)
+### 4.7 Estabilidade da extração LLM (build-time) — experiência de determinismo
+Resposta directa à objeção central dos revisores do INForum ("o LLM produz
+classificações distintas se o build correr várias vezes?"). Experiência
+(2026-07-18): **30 entradas do Apache × 5 execuções = 150 chamadas** com a
+configuração de produção (qwen2.5:14b, temperatura 0.1, RAG determinístico).
+Script: `scripts/determinism_experiment.py` (modos `run`/`analyze`); dados
+brutos: `reports/determinism_runs.jsonl`.
+
+| Métrica | Resultado |
+|---|---|
+| Entradas com vetor CCSS unânime (5/5) | **29/30 (96,7%)** |
+| Concordância AC, C, I, A (métricas base) e GRL | **100%** |
+| Concordância GEL | 98,7% (1 entrada: M↔H) |
+| Amplitude base score e temporal score | **0,0 nas 30 entradas** |
+| Banda DISA CAT estável | **30/30** |
+| Fallbacks conservadores acionados | **0/150** |
+
+A única divergência (GEL de `SSLProtocol +SSLv3`, 3×M/2×H) não alterou nenhum
+score. **Porquê tão estável:** temperatura 0.1 ≈ decoding quase greedy; saída
+categórica minúscula (6 métricas, 3–5 valores legais); prompt byte-idêntico
+(RAG TF-IDF determinístico); few-shot que ancora arquétipos (os 30 vetores
+colapsam em ~7 padrões). A divergência ocorreu na única métrica que depende de
+conhecimento do mundo (GEL), não do texto do benchmark.
+
+**Caveat a declarar (Threats to Validity):** 6 das 30 entradas aparecem
+literalmente nos exemplos few-shot do prompt com a resposta incluída
+(`ServerTokens=Full`, `User=root`, `AllowOverride=All`, `Options=FollowSymLinks`,
+`LimitRequestLine=0`, `TraceEnable=On`). Excluindo-as: **23/24 unânimes
+(95,8%)** — o resultado mantém-se; a tese deve reportar ambos os números.
+Estabilidade ≠ correção: este resultado complementa (não substitui) o MAE §4.3
+e o NISTIR §4.2.
+
+### 4.8 Limitações (declaradas)
 - **IaC/OS sem ground truth CCE:** azure-iac, kubernetes, dockerfile e ubuntu
   não têm dataset CCE oficial — validam-se por recall nas fixtures + baselines,
   não por MAE. O Apache é o caso quantitativo (CCE).
@@ -222,6 +266,10 @@ conhecimento produzem scores idênticos — verificado nos smoke tests
   módulos), que é o domínio do OpenSCAP — por design.
 - **Qualidade da extração LLM:** depende do modelo; o `--dry-run` + validações
   mitigam, e a L3/`promote` recuperam a cauda.
+- **Estabilidade medida num único modelo:** a experiência §4.7 usou
+  qwen2.5:14b a temperatura 0.1 (a configuração de produção); generalizar a
+  outros modelos/temperaturas fica como trabalho futuro. Inclui o caveat da
+  contaminação few-shot (6/30 entradas; ver §4.7).
 
 ---
 
@@ -229,13 +277,42 @@ conhecimento produzem scores idênticos — verificado nos smoke tests
 
 ```bash
 # setup (Ubuntu 22.04): ver GUIA_TESTE_MAQUINA.md e AVALIACAO_FUNCIONAL.md
-python -m pytest tests/ -q                    # 602 passed
+python -m pytest tests/ -q                    # 623 passed (inclui NISTIR 18/18)
 python -m scripts.functional_check            # 13/13 checks end-to-end
 python -m scripts.evaluate                    # KB · MAE 0% · recall 100%
 python -m scripts.baseline_compare --oscap    # Trivy + OpenSCAP (pass/fail reais)
+python scripts/determinism_experiment.py analyze   # §4.7 (re-correr: run --runs 5, ~2h com Ollama)
 ```
 
-## 6. Documentos relacionados
+## 6. Feedback dos revisores (INForum 2026) — obrigações de escrita
+
+Artigo "Configuration Vulnerability Meter" (submissão 58): 2× weak accept,
+1× weak reject. A tese DEVE cobrir estes pontos (quem escrever capítulos deve
+tratá-los como checklist):
+
+1. **Detalhe do processo LLM** (os 3 revisores): declarar modelo
+   (qwen2.5:14b, Ollama local), temperatura (0.1), prompts em apêndice
+   (system prompt + few-shot em
+   `config_assessment/plugins/apache_httpd/llm_pipeline.py`), regras de
+   validação de valores legais, retries (3×) e fallback conservador.
+   → Respondido também com a experiência §4.7.
+2. **Comparação experimental com alternativas** (R2: OpenSCAP, CIS-CAT, Trivy,
+   LLMSecConfig): já feita para Trivy + OpenSCAP (§4.5). Justificar exclusão do
+   CIS-CAT (licenciamento) e tratar LLMSecConfig qualitativamente (objetivo
+   diferente: reparação, não medição).
+3. **Mecânica de runtime pouco clara** (R1, R3): descrever inputs concretos e
+   um exemplo fim-a-fim (ex.: check `PermitRootLogin` do SSH — geração no
+   build → armazenamento no plugin → execução no scan). Corrigir a leitura
+   errada do R1 de que os plugins só existem em build-time.
+4. **Feeds de CTI** (R1): responder com o enriquecimento NVD + CISA KEV já
+   existente (§2.1) e enquadrar EPSS/CTI mais amplo como trabalho futuro.
+5. **Secção Threats to Validity / Limitations obrigatória** (R2): base = §4.8
+   + caveat few-shot §4.7.
+6. **Apresentação:** parágrafos curtos; afirmações da introdução com
+   referências; a introdução deve antecipar como a metodologia será avaliada;
+   evitar figura e tabela redundantes com a mesma informação.
+
+## 7. Documentos relacionados
 - [README.md](README.md) — vitrine + comandos
 - [GUIA_CASPAR.md](GUIA_CASPAR.md) — guia de utilizador/demo
 - [GUIA_TECNICO.md](GUIA_TECNICO.md) — arquitectura interna
