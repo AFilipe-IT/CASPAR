@@ -7,9 +7,17 @@
 > (utilizador/demo), [GUIA_TECNICO.md](GUIA_TECNICO.md) (arquitectura interna),
 > [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) (setup + build Docker).
 >
-> **Última actualização:** 2026-07-06. Se números abaixo divergirem do repo,
+> **Última actualização:** 2026-07-18. Se números abaixo divergirem do repo,
 > o repo manda — corre os comandos da secção "Verificação" e actualiza este
 > ficheiro.
+>
+> **Adenda pós-fecho (INForum 2026):** o artigo "Configuration Vulnerability
+> Meter" (submissão 58) foi revisto — 2× weak accept, 1× weak reject. O
+> feedback gerou duas peças novas de evidência (replicação NISTIR 7502 18/18 e
+> experiência de determinismo da extração LLM) e um checklist de obrigações de
+> escrita para a tese. Tudo em
+> [DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md) §4.2, §4.7 e §6 — ver
+> também §7 abaixo.
 
 ---
 
@@ -93,15 +101,18 @@ Docker; CASPAR vs **OpenSCAP** `--oscap` em Ubuntu OS). Ver §7.
 - **Manifesto de reprodutibilidade** em cada scan (§5) — score auditável.
 - **RAG build-time** — conhecimento ingerido uma vez, consultado sempre (§5).
 - **Persistência Docker** — plugins/DB sobrevivem `--rm` via volume `caspar_data`.
-- **602 testes** + CI; runtime **offline e determinístico** por construção.
+- **623 testes** + CI; runtime **offline e determinístico** por construção.
 
 ---
 
-## 2. Estado actual (verificado 2026-07-09)
+## 2. Estado actual (verificado 2026-07-18)
 
-- **Branch:** `master`, working tree limpo (tudo committed).
-- **Testes:** **602** recolhidos, todos verdes offline. CI em GitHub Actions
-  (`.github/workflows/ci.yml`) corre a suite completa a cada push (é offline-safe).
+- **Branch:** `master`, working tree limpo (tudo committed) — excepto `tese-pt/`
+  (pasta untracked com um template LaTeX PT; decisão pendente, ver nota abaixo).
+- **Testes:** **623** recolhidos, todos verdes offline (inclui os 18 do NISTIR
+  7502 §4, `test_nistir7502_examples.py`, adicionados 2026-07-14). CI em GitHub
+  Actions (`.github/workflows/ci.yml`) corre a suite completa a cada push (é
+  offline-safe).
 - **DB canónica** (`data/ccss_canonical.sql`, restaura para `ccss.db`): **488
   regras / 27 chains** em **11 targets**:
 
@@ -277,7 +288,19 @@ suppress, doctor, fix, **promote** (`--stats`).
 **Correr tudo:** `python -m scripts.evaluate` (relatório consolidado) e
 `python -m scripts.baseline_compare [--oscap]` (comparação com baselines).
 
-**Resultados verificados (2026-07-09):**
+**Resultados verificados (2026-07-09, + adenda 2026-07-14/18):**
+- **Correção do motor CCSS — replicação NISTIR 7502** (`tests/test_nistir7502_examples.py`,
+  2026-07-14): **18/18 exactos** contra os vectores resolvidos da própria
+  especificação (calculadora NVD). Valida a aritmética, independentemente do LLM.
+- **Estabilidade da extração LLM — experiência de determinismo**
+  (`scripts/determinism_experiment.py`, 2026-07-18): 30 entradas Apache × 5
+  execuções (qwen2.5:14b, temp 0.1, config de produção) = 150 chamadas, **0
+  fallbacks**. **29/30 vectores CCSS unânimes (96.7%)**; AC/C/I/A/GRL 100%
+  concordância; única divergência (GEL de `SSLProtocol +SSLv3`, M↔H) **não
+  mudou nenhum score** — amplitude de base/temporal score = 0.0 nas 30
+  entradas. **Caveat:** 6/30 entradas coincidem com os exemplos few-shot do
+  prompt; excluindo-as, 23/24 (95.8%) — reportar os dois números na tese
+  (DISSERTACAO_REFERENCIA.md §4.7).
 - **Correção — MAE vs ground truth CCE** (`plugins/apache_httpd/validate_mae.py`):
   Apache **20/20 matched, 0 mismatch (0.0%), gate PASS** contra as faixas de
   severidade DISA do dataset CCE oficial. É a evidência quantitativa mais forte.
@@ -296,10 +319,14 @@ suppress, doctor, fix, **promote** (`--stats`).
   sistema real). A diferença de escopo (CASPAR pontua FICHEIROS; OpenSCAP audita
   ESTADO do sistema vivo) é ela própria um achado da tese.
 
-**→ A PARTE PRÁTICA ESTÁ FECHADA E VALIDADA** num Ubuntu 22.04 real: 602 testes,
-13/13 smoke, MAE 0%, recall 100%, e 3 baselines (Trivy IaC, Trivy Docker,
-OpenSCAP OS com pass/fail reais). O material consolidado para a tese está em
-[DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md).
+**→ A PARTE PRÁTICA ESTÁ FECHADA E VALIDADA** num Ubuntu 22.04 real: 623 testes,
+13/13 smoke, NISTIR 18/18, determinismo 29/30, MAE 0%, recall 100%, e 3
+baselines (Trivy IaC, Trivy Docker, OpenSCAP OS com pass/fail reais). O
+material consolidado para a tese está em
+[DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md) — inclui agora (§6) um
+checklist com as obrigações de escrita derivadas do feedback dos revisores do
+INForum (detalhe do processo LLM, exemplo fim-a-fim do runtime, secção
+Threats to Validity, etc.).
 
 **Fixtures de demonstração** em `test_target/`: `azure_storage_vulnerable.tf`,
 `pod_vulnerable.yaml`, `Dockerfile.vulnerable`, `ubuntu_demo/sysctl.conf`.
@@ -343,7 +370,7 @@ Polimento opcional que fica (por valor):
 ```bash
 cd ~/caspar && source .venv/bin/activate
 
-python -m pytest tests/ -q                 # ~602 passed (uns skips se faltam PDFs)
+python -m pytest tests/ -q                 # ~623 passed (uns skips se faltam PDFs)
 caspar doctor                              # ✓ healthy
 caspar targets                             # 11 targets (+ dummy), incl. ubuntu/azure-iac/k8s/dockerfile
 caspar scan test_nginx.conf                # ≈5.7 [Medium]
@@ -354,6 +381,7 @@ caspar scan test_target/ubuntu_demo/sysctl.conf       # ≈5.8 [Medium] (Ubuntu 
 # avaliação + baselines (material da tese):
 python -m scripts.evaluate                 # KB · MAE 0% · recall 100%
 python -m scripts.baseline_compare --oscap # CASPAR vs Trivy / OpenSCAP
+python scripts/determinism_experiment.py analyze  # 29/30 unânime (re-correr: run --runs 5, ~2h com Ollama)
 
 # contagens da DB (devem bater com a tabela do §2):
 sqlite3 ccss.db "SELECT target_name, count(*) FROM misconfigurations GROUP BY target_name"
