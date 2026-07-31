@@ -53,6 +53,13 @@ CREATE TABLE IF NOT EXISTS misconfigurations (
     --   (av and au justifications are generated at runtime by the rule engine)
     narrative        TEXT    NOT NULL DEFAULT '{}',
 
+    -- Self-consistency agreement rate from the LLM build pipeline (Chapter 4 /
+    -- DISSERTACAO_REFERENCIA.md §4.7.2): fraction of the k sampled LLM calls
+    -- that agreed with the majority vote on the least-consensual metric.
+    -- 1.0 for curated/no-LLM rules and for a single unanimous sample; 0.0 for
+    -- the conservative fallback (all k samples failed to parse/validate).
+    confidence       REAL    NOT NULL DEFAULT 1.0,
+
     created_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (target_name, directive, bad_value, expected_value_prefix)

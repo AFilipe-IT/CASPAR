@@ -106,7 +106,132 @@ _FIXTURES = {
         "target": "dockerfile",
         "expect": {"user", "expose", "from_tag"},
     },
+    "test_target/httpd.conf": {
+        "target": "apache-httpd",
+        "expect": {"ServerTokens", "ServerSignature", "TraceEnable", "Timeout",
+                   "KeepAlive", "MaxKeepAliveRequests", "KeepAliveTimeout",
+                   "LogLevel", "FileETag", "LimitRequestLine",
+                   "LimitRequestFields", "LimitRequestFieldSize",
+                   "LimitRequestBody", "SSLCompression", "LoadModule",
+                   "Options", "AllowOverride", "SSLProtocol", "User", "Group",
+                   "Order"},
+    },
+    "test_target/ubuntu_demo/sysctl.conf": {
+        "target": "ubuntu",
+        "expect": {"net.ipv4.conf.all.accept_redirects",
+                   "net.ipv4.conf.all.accept_source_route",
+                   "net.ipv4.conf.all.rp_filter",
+                   "net.ipv4.conf.all.send_redirects",
+                   "net.ipv4.tcp_syncookies",
+                   "net.ipv4.icmp_echo_ignore_broadcasts",
+                   "net.ipv4.ip_forward",
+                   "kernel.randomize_va_space", "fs.suid_dumpable"},
+    },
+    "test_target/ssh_demo/sshd_config": {
+        "target": "ssh",
+        "expect": {"PermitRootLogin", "PermitEmptyPasswords",
+                   "GSSAPIAuthentication", "HostbasedAuthentication",
+                   "IgnoreRhosts", "PermitUserEnvironment", "UsePAM",
+                   "LogLevel", "MaxAuthTries", "MaxSessions",
+                   "LoginGraceTime", "Ciphers", "MACs"},
+    },
+    "test_target/mysql_demo/my.cnf": {
+        "target": "mysql",
+        "expect": {"ssl_cipher", "block_encryption_mode", "bind_address",
+                   "allow-suspicious-udfs", "local_infile",
+                   "skip-grant-tables", "skip-symbolic-links", "sql_mode",
+                   "log-bin", "log-warnings", "log-raw",
+                   "audit_log_connection_policy", "old_passwords",
+                   "secure_auth", "have_ssl", "master_info_repository"},
+    },
+    "test_target/redis_demo/redis.conf": {
+        "target": "redis",
+        "expect": {"tls_version", "max_connections", "disabled_commands",
+                   "chown", "permissions", "alert_threshold_storage",
+                   "directory_permissions", "user_role",
+                   "default_database_access", "cm_session_timeout_minutes",
+                   "lua_scripts_enabled"},
+    },
+    "test_target/tomcat_demo/tomcat.conf": {
+        "target": "tomcat",
+        "expect": {"com.sun.management.jmxremote.ssl",
+                   "com.sun.management.jmxremote.authenticate", "secure",
+                   "http-only", "readonly", "scheme", "port", "privileged",
+                   "shell", "action_mail_acct", "debug", "listings"},
+    },
 }
+
+
+# Hardened counterpart of each vulnerable fixture above: same directives,
+# all set to a compliant value. Any finding here is a false positive — this
+# closes the precision/F1 gap docs/VALIDACAO.md §2.2 flagged as missing.
+_HARDENED_FIXTURES = {
+    "test_target/nginx_hardened.conf": "nginx",
+    "test_target/azure_storage_hardened.tf": "azure-iac",
+    "test_target/pod_hardened.yaml": "kubernetes",
+    "test_target/Dockerfile.hardened": "dockerfile",
+    "test_target/httpd_hardened.conf": "apache-httpd",
+    "test_target/ubuntu_hardened_demo/sysctl.conf": "ubuntu",
+    "test_target/ssh_demo/sshd_config_hardened": "ssh",
+    "test_target/mysql_hardened_demo/my.cnf": "mysql",
+    "test_target/redis_hardened_demo/redis.conf": "redis",
+    "test_target/tomcat_hardened_demo/tomcat.conf": "tomcat",
+}
+
+
+def precision_f1(recall_report: dict) -> dict:
+    """
+    Precision/F1 from the hardened (clean) fixtures: TP/FP come from pairing
+    each vulnerable fixture's recall with its hardened counterpart's false
+    positives. precision = TP / (TP + FP); F1 = 2PR / (P + R).
+    """
+    import cli.main as m
+    m._discover_plugins()
+    from config_assessment.core.db.database import Database
+    from config_assessment.core import runtime
+
+    by_fixture = {f["target"]: f for f in recall_report["by_fixture"] if "skipped" not in f}
+
+    per_target, tot_tp, tot_fp, tot_exp = [], 0, 0, 0
+    with Database(DB) as db:
+        for rel, target in _HARDENED_FIXTURES.items():
+            path = ROOT / rel
+            rec = by_fixture.get(target)
+            if not path.exists() or rec is None:
+                per_target.append({"target": target, "skipped": "missing fixture or recall data"})
+                continue
+            try:
+                result = runtime.scan(str(path), db)
+            except Exception as exc:
+                per_target.append({"target": target, "skipped": str(exc)})
+                continue
+            fp = len(result.issues)
+            tp = rec["detected"]
+            expect = rec["expected"]
+            precision = tp / (tp + fp) if (tp + fp) else None
+            recall = rec["recall"]
+            f1 = (2 * precision * recall / (precision + recall)
+                  if precision and recall else None)
+            tot_tp += tp
+            tot_fp += fp
+            tot_exp += expect
+            per_target.append({
+                "target": target, "tp": tp, "fp": fp,
+                "precision": round(precision, 3) if precision is not None else None,
+                "recall": recall,
+                "f1": round(f1, 3) if f1 is not None else None,
+                "fp_directives": sorted({i.directive for i in result.issues}),
+            })
+    overall_precision = tot_tp / (tot_tp + tot_fp) if (tot_tp + tot_fp) else None
+    overall_recall = tot_tp / tot_exp if tot_exp else None
+    overall_f1 = (2 * overall_precision * overall_recall / (overall_precision + overall_recall)
+                  if overall_precision and overall_recall else None)
+    return {
+        "overall_precision": round(overall_precision, 3) if overall_precision is not None else None,
+        "overall_f1": round(overall_f1, 3) if overall_f1 is not None else None,
+        "total_tp": tot_tp, "total_fp": tot_fp,
+        "by_target": per_target,
+    }
 
 
 def detection_recall() -> dict:
@@ -167,10 +292,12 @@ def main() -> None:
               f"sqlite3 ccss.db < data/ccss_canonical.sql", file=sys.stderr)
         sys.exit(2)
 
+    det = detection_recall()
     report = {
         "kb_composition": kb_composition(),
         "correctness_mae": correctness_mae(),
-        "detection_recall": detection_recall(),
+        "detection_recall": det,
+        "precision_f1": precision_f1(det),
         "azure_mapping": azure_mapping_note(),
     }
 
@@ -214,8 +341,29 @@ def main() -> None:
             if f["missed"]:
                 print(f"       missed: {', '.join(f['missed'])}")
 
+    pf = report["precision_f1"]
+    _hr("4. PRECISION & F1 — HARDENED (CLEAN) FIXTURES")
+    if pf["overall_precision"] is not None:
+        print(f"  overall precision: {pf['overall_precision']:.1%}  "
+              f"({pf['total_tp']} TP / {pf['total_fp']} FP)  ·  "
+              f"overall F1: {pf['overall_f1']:.1%}\n")
+    else:
+        print("  (no hardened fixtures scored)\n")
+    print(f"  {'TARGET':<14}{'TP':>4}{'FP':>4}{'PREC':>7}{'REC':>6}{'F1':>7}")
+    print("  " + "-" * 42)
+    for t in pf["by_target"]:
+        if "skipped" in t:
+            print(f"  {t['target']:<14}  skip   ({t['skipped']})")
+            continue
+        prec = f"{t['precision']:.0%}" if t["precision"] is not None else "—"
+        rec_s = f"{t['recall']:.0%}" if t["recall"] is not None else "—"
+        f1_s = f"{t['f1']:.0%}" if t["f1"] is not None else "—"
+        print(f"  {t['target']:<14}{t['tp']:>4}{t['fp']:>4}{prec:>7}{rec_s:>6}{f1_s:>7}")
+        if t["fp_directives"]:
+            print(f"       false positives: {', '.join(t['fp_directives'])}")
+
     az = report["azure_mapping"]
-    _hr("4. AZURE IaC — VOCABULARY MAPPING")
+    _hr("5. AZURE IaC — VOCABULARY MAPPING")
     print(f"  {az['rules_in_db']} rules in DB. {az['note']}")
     print()
 

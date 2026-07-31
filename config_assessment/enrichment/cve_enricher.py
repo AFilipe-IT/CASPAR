@@ -39,6 +39,8 @@ import urllib.error
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from config_assessment.enrichment.ttp_enricher import compute_gel_from_ttp, lookup_ttp
+
 logger = logging.getLogger(__name__)
 
 NVD_API_BASE = "https://services.nvd.nist.gov/rest/json/cves/2.0"
@@ -482,15 +484,25 @@ def version_amplification(info: VersionExploitInfo | None) -> float:
 # GEL logic                                                            #
 # ------------------------------------------------------------------ #
 
-def _compute_gel(records: list[CVERecord], kev_ids: set[str]) -> tuple[str, str]:
+def _compute_gel(
+    records: list[CVERecord],
+    kev_ids: set[str],
+    target_name: str = "",
+    directive: str = "",
+    bad_value: str = "",
+) -> tuple[str, str]:
     """
     Determinar GEL baseado nos CVE records obtidos da NVD.
 
-    Sem CVEs: GEL=L — a misconfiguration é um risco de configuração
-    mas não tem exploit code automatizado conhecido.
+    Sem CVEs: em vez de cair directamente em GEL=L, consulta-se primeiro o
+    mapeamento MITRE ATT&CK curado (ttp_enricher.py) — a maioria das
+    misconfigurations não tem CVE associado (não é um defeito de código),
+    pelo que este é o único sinal de CTI adicional disponível para elas.
+    Sem CVE e sem TTP mapeado: GEL=L, como antes.
     """
     if not records:
-        return "L", "No CVEs associated — configuration risk without known exploit code."
+        ttp = lookup_ttp(target_name, directive, bad_value) if target_name else None
+        return compute_gel_from_ttp(ttp)
 
     kev = [r for r in records if r.cve_id in kev_ids]
     if kev:
@@ -513,6 +525,7 @@ def enrich_misconfiguration(
     existing_cves: list[str],
     nvd: NVDClient,
     kev_ids: set[str],
+    target_name: str = "",
 ) -> EnrichmentResult:
     """
     Enriquecer uma misconfiguration.
@@ -520,7 +533,8 @@ def enrich_misconfiguration(
     Estratégia:
     - Se tem CVEs conhecidos (do LLM): fazer lookup individual na NVD
       para obter CVSS score real e verificar KEV.
-    - Se não tem CVEs: GEL=L directamente (sem query NVD desnecessária).
+    - Se não tem CVEs: consultar o mapeamento ATT&CK curado
+      (ttp_enricher.py); sem TTP mapeado, GEL=L (sem query NVD desnecessária).
     """
     records: list[CVERecord] = []
 
@@ -545,9 +559,9 @@ def enrich_misconfiguration(
                 ))
                 logger.info("  %s: not found in NVD (KEV=%s)", cve_id, in_kev)
     else:
-        logger.info("  No known CVEs — GEL=L (configuration risk)")
+        logger.info("  No known CVEs — checking ATT&CK mapping before GEL=L fallback")
 
-    gel, notes = _compute_gel(records, kev_ids)
+    gel, notes = _compute_gel(records, kev_ids, target_name, directive, bad_value)
 
     # Ordenar CVE IDs: KEV first, depois por CVSS
     kev_ids_local = [r.cve_id for r in records if r.in_kev]
@@ -624,6 +638,7 @@ def enrich_all(
                 existing_cves=cves,
                 nvd=nvd,
                 kev_ids=kev_ids,
+                target_name=getattr(m, "target_name", ""),
             )
             results[(m.directive, m.bad_value)] = result
             logger.info("  → GEL=%s  CVEs=%d  %s", result.gel, len(result.cve_ids), result.notes[:80])

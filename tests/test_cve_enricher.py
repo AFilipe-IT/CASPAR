@@ -299,6 +299,90 @@ class TestEnrichMisconfiguration:
 
 
 # ════════════════════════════════════════════════════════════════════
+# CTI / MITRE ATT&CK fallback for no-CVE misconfigurations
+# (Revisor 1: "não faria sentido incluir aqui feeds de CTI?")
+# ════════════════════════════════════════════════════════════════════
+
+class TestTTPFallback:
+    def test_no_cves_no_target_name_still_returns_low(self):
+        """Backward compatibility: omitting target_name (as all pre-existing
+        call sites do) must behave exactly as before — GEL=L, no TTP lookup."""
+        nvd = MagicMock(spec=NVDClient)
+        result = enrich_misconfiguration("PermitRootLogin", "yes", [], nvd, set())
+        assert result.gel == "L"
+
+    def test_no_cves_with_curated_ttp_sets_gel_medium(self):
+        nvd = MagicMock(spec=NVDClient)
+        result = enrich_misconfiguration(
+            "PermitRootLogin", "yes", [], nvd, set(), target_name="ssh",
+        )
+        assert result.gel == "M"
+        assert "T1078" in result.notes
+
+    def test_no_cves_uncurated_directive_still_gel_low(self):
+        nvd = MagicMock(spec=NVDClient)
+        result = enrich_misconfiguration(
+            "SomeUnmappedDirective", "x", [], nvd, set(), target_name="ssh",
+        )
+        assert result.gel == "L"
+
+    def test_known_cve_takes_priority_over_ttp_mapping(self):
+        """When a real CVE exists, the CVE-based GEL logic wins — TTP is only
+        a fallback for the no-CVE case, never overrides real CVE evidence."""
+        nvd = MagicMock(spec=NVDClient)
+        nvd.get_cve.return_value = CVERecord(
+            cve_id="CVE-2021-9", description="x", cvss_score=8.8, severity="HIGH",
+        )
+        result = enrich_misconfiguration(
+            "PermitRootLogin", "yes", ["CVE-2021-9"], nvd, set(), target_name="ssh",
+        )
+        assert result.gel == "M"  # from CVSS>=7 logic, not from TTP
+        assert "T1078" not in result.notes
+
+    def test_apache_servertokens_maps_to_recon_ttp(self):
+        nvd = MagicMock(spec=NVDClient)
+        result = enrich_misconfiguration(
+            "ServerTokens", "Full", [], nvd, set(), target_name="apache-httpd",
+        )
+        assert result.gel == "M"
+        assert "T1592" in result.notes
+
+
+# ════════════════════════════════════════════════════════════════════
+# ttp_enricher module directly
+# ════════════════════════════════════════════════════════════════════
+
+class TestTTPEnricher:
+    def test_lookup_exact_match(self):
+        from config_assessment.enrichment.ttp_enricher import lookup_ttp
+        record = lookup_ttp("ssh", "PermitRootLogin", "yes")
+        assert record is not None
+        assert record.technique_id == "T1078.003"
+
+    def test_lookup_wildcard_value_match(self):
+        from config_assessment.enrichment.ttp_enricher import lookup_ttp
+        record = lookup_ttp("redis", "requirepass", "")
+        assert record is not None
+        assert record.technique_id == "T1078"
+
+    def test_lookup_no_match_returns_none(self):
+        from config_assessment.enrichment.ttp_enricher import lookup_ttp
+        assert lookup_ttp("nonexistent-target", "Foo", "bar") is None
+
+    def test_compute_gel_from_ttp_none_is_low(self):
+        from config_assessment.enrichment.ttp_enricher import compute_gel_from_ttp
+        gel, note = compute_gel_from_ttp(None)
+        assert gel == "L"
+
+    def test_compute_gel_from_ttp_record_is_medium(self):
+        from config_assessment.enrichment.ttp_enricher import lookup_ttp, compute_gel_from_ttp
+        record = lookup_ttp("ssh", "PermitRootLogin", "yes")
+        gel, note = compute_gel_from_ttp(record)
+        assert gel == "M"
+        assert "ATT&CK" in note
+
+
+# ════════════════════════════════════════════════════════════════════
 # F1 — version exploitability lookup + amplification (mocked network)
 # ════════════════════════════════════════════════════════════════════
 

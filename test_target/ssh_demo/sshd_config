@@ -1,0 +1,18 @@
+# test_target/sshd_config.vulnerable
+# Fixture deliberadamente insegura para o target 'ssh'.
+# Cada diretiva viola um controlo CIS/NISTIR-7502 coberto pelo target.
+# Correr: sca scan test_target/sshd_config.vulnerable
+
+PermitRootLogin yes
+PermitEmptyPasswords yes
+GSSAPIAuthentication yes
+HostbasedAuthentication yes
+IgnoreRhosts no
+PermitUserEnvironment yes
+UsePAM no
+LogLevel QUIET
+MaxAuthTries 6
+MaxSessions 20
+LoginGraceTime 120
+Ciphers 3des-cbc
+MACs hmac-md5

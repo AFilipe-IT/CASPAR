@@ -1,0 +1,25 @@
+# test_target/pod_hardened.yaml
+# Fixture CORRETAMENTE configurada para o target 'kubernetes' — todas as
+# diretivas cobertas pela suite de recall (pod_vulnerable.yaml) em valores
+# seguros. Qualquer finding aqui é um falso positivo (precisão/F1).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-hardened
+spec:
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  automountServiceAccountToken: false
+  containers:
+    - name: app
+      image: nginx:1.27.0
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        runAsUser: 1000
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL

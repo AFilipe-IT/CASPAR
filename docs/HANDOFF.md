@@ -3,7 +3,7 @@
 > **Propósito:** dá este ficheiro a uma IA (ou a ti, noutra sessão/máquina) no
 > início. Resume, com FACTOS VERIFICADOS, o que o projeto é, onde está, as
 > decisões e invariantes que não se podem violar, e o que falta. Para detalhe:
-> [README.md](README.md) (vitrine + comandos), [GUIA_CASPAR.md](GUIA_CASPAR.md)
+> [README.md](../README.md) (vitrine + comandos), [GUIA_CASPAR.md](GUIA_CASPAR.md)
 > (utilizador/demo), [GUIA_TECNICO.md](GUIA_TECNICO.md) (arquitectura interna),
 > [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) (setup + build Docker).
 >
@@ -16,7 +16,7 @@
 > feedback gerou duas peças novas de evidência (replicação NISTIR 7502 18/18 e
 > experiência de determinismo da extração LLM) e um checklist de obrigações de
 > escrita para a tese. Tudo em
-> [DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md) §4.2, §4.7 e §6 — ver
+> [DISSERTACAO_REFERENCIA.md](tese-docs/DISSERTACAO_REFERENCIA.md) §4.2, §4.7 e §6 — ver
 > também §7 abaixo.
 
 ---
@@ -323,7 +323,7 @@ suppress, doctor, fix, **promote** (`--stats`).
 13/13 smoke, NISTIR 18/18, determinismo 29/30, MAE 0%, recall 100%, e 3
 baselines (Trivy IaC, Trivy Docker, OpenSCAP OS com pass/fail reais). O
 material consolidado para a tese está em
-[DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md) — inclui agora (§6) um
+[DISSERTACAO_REFERENCIA.md](tese-docs/DISSERTACAO_REFERENCIA.md) — inclui agora (§6) um
 checklist com as obrigações de escrita derivadas do feedback dos revisores do
 INForum (detalhe do processo LLM, exemplo fim-a-fim do runtime, secção
 Threats to Validity, etc.).
@@ -344,7 +344,7 @@ têm ground truth CCE — validam-se por recall nas fixtures + baselines, não p
 > **CÓDIGO FECHADO (2026-07-11).** A parte prática está completa e validada
 > (ver §7). Os itens abaixo são **polimento opcional** — NENHUM bloqueia a tese.
 > O foco passou a ser a **escrita da dissertação** ([[caspar-practical-closed]];
-> material-fonte em [DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md)).
+> material-fonte em [DISSERTACAO_REFERENCIA.md](tese-docs/DISSERTACAO_REFERENCIA.md)).
 >
 > ✅ **Feito** (já não pendente): avaliação empírica (MAE 0%, recall 100%, 3
 > baselines — `scripts/evaluate.py` + `baseline_compare.py`); justificação das

@@ -2,7 +2,10 @@
 
 > **Papel deste documento:** guia passo-a-passo para pôr o CASPAR a funcionar e validá-lo numa
 > máquina limpa (Linux/WSL2), incluindo **como construir as imagens Docker a partir do código**.
-> Complementa o [README.md](README.md) (referência) e o [GUIA_CASPAR.md](GUIA_CASPAR.md) (conceitos).
+> Complementa o [README.md](../README.md) (referência), o [GUIA_CASPAR.md](GUIA_CASPAR.md) (conceitos)
+> e o [TESTAR_COMANDOS.md](TESTAR_COMANDOS.md) (checklist comando-a-comando de todo o CLI, uma vez
+> já instalado). Este guia foca-se em **pôr a ferramenta de pé pela primeira vez**; o
+> TESTAR_COMANDOS.md foca-se em **validar cada subcomando** depois disso.
 
 ---
 
@@ -32,14 +35,30 @@ cd caspar
 
 ## 2. Via A — Nativa (venv), a mais rápida para validar
 
-### 2.1 Dependências de sistema
+### 2.1 O caminho de um comando
+
+```bash
+bash install-native.sh
+source .venv/bin/activate
+```
+
+`install-native.sh` faz exatamente os passos 2.1.1–2.1.3 abaixo (deps do sistema por conta do SO,
+venv, pip, restauro da DB). Usa-o quando só queres a ferramenta a funcionar depressa. As secções
+seguintes explicam o que ele faz por baixo — útil se algo falhar a meio ou quiseres correr os
+passos manualmente.
+
+> Build-time (`plugin add`, `build`) precisa ainda de Ollama nativo (`ollama pull qwen2.5:14b`,
+> ~9GB) — a via nativa não o instala automaticamente. Se quiseres esse passo também automatizado,
+> usa a Via B (Docker), cujo `install.sh` trata de tudo, Ollama incluído.
+
+### 2.1.1 Dependências de sistema
 
 ```bash
 sudo apt-get update && sudo apt-get install -y python3-venv poppler-utils sqlite3
 # poppler-utils = pdftotext (extração de PDFs) · sqlite3 = restaurar a DB
 ```
 
-### 2.2 Ambiente Python
+### 2.1.2 Ambiente Python
 
 ```bash
 python3 -m venv .venv
@@ -52,34 +71,38 @@ pip install "pydantic>=2.0" "click>=8.1" "pyyaml>=6.0" pytest pytest-cov \
 pip install -e . --no-deps
 ```
 
-### 2.3 Restaurar a base de conhecimento
+### 2.1.3 Restaurar a base de conhecimento
 
 ```bash
 sqlite3 ccss.db < data/ccss_canonical.sql
 ```
 
-### 2.4 Validar — suite completa (offline, ~20-40s)
+### 2.2 Validar — suite completa (offline, ~20-40s)
 
 ```bash
 python -m pytest tests/ -q
 ```
 
-✓ **Esperado:** `~590 passed` (uns quantos *skips* se os PDFs licenciados não estiverem presentes —
+✓ **Esperado:** `646 passed` (uns quantos *skips* se os PDFs licenciados não estiverem presentes —
 normal). Nenhum teste precisa de rede nem de Ollama.
 
-### 2.5 Smoke tests reais
+### 2.3 Smoke tests reais
 
 ```bash
-python -m cli.main doctor                              # integridade da DB
-python -m cli.main targets                             # ~11 plugins listados
-python -m cli.main scan test_nginx.conf                # ≈5.7/10 [Medium]
-python -m cli.main scan test_target/pod_vulnerable.yaml      # ≈10.0 [Critical] + attack chain
-python -m cli.main scan test_target/Dockerfile.vulnerable    # ≈9.0  [Critical]
+python -m cli.main doctor                                    # integridade da DB
+python -m cli.main targets                                   # 12 plugins listados
+python -m cli.main scan test_target/test_nginx.conf           # ≈5.7/10 [Medium]
+python -m cli.main scan test_target/pod_vulnerable.yaml       # ≈10.0 [Critical] + attack chain
+python -m cli.main scan test_target/Dockerfile.vulnerable     # ≈9.0  [Critical]
 ```
 
 ✓ **Esperado:** cada scan termina com a linha `reproducible: caspar … · kb sha256:… · N rules (…)`.
-O hash da kb deve ser **igual** ao da máquina original se a DB veio do mesmo dump — é o manifesto
-de reprodutibilidade a fazer o seu trabalho.
+O `kb sha256` é um fingerprint só do **conteúdo** da base de conhecimento (regras, chains,
+enrichment de CVEs) — não do ficheiro `ccss.db` inteiro, que também guarda o histórico de scans e
+cresce a cada execução. Por isso o hash **mantém-se igual entre execuções sucessivas na mesma
+máquina** (podes confirmar repetindo o comando `scan` acima) e **deve ser igual ao de outra
+máquina** desde que a DB tenha vindo do mesmo dump (`data/ccss_canonical.sql`) sem alterações às
+regras — é o manifesto de reprodutibilidade a fazer o seu trabalho.
 
 ---
 
@@ -129,18 +152,22 @@ sed '/docker pull/d' install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"    # se ~/.local/bin não estiver no PATH
 ```
 
-(Para testar as imagens **publicadas** em vez das locais, usa o `install.sh` normal.)
+(Para testar as imagens **publicadas** em vez das locais — o caso normal de um utilizador novo —
+corre `install.sh` sem alterações: `curl -fsSL .../install.sh | sh`. Esse é o "um comando, tudo
+configurado": o wrapper instalado escolhe sozinho a imagem `:full` quando o comando precisa de
+Ollama, e o `entrypoint_full.sh` arranca o Ollama, descarrega `qwen2.5:14b` na primeira utilização
+e confirma que o modelo respondeu antes de correr o `caspar` — sem passos manuais.)
 
 ### 3.5 Smoke tests em Docker
 
 ```bash
 caspar doctor
 caspar targets
-caspar scan test_nginx.conf
+caspar scan test_target/test_nginx.conf
 caspar scan test_target/pod_vulnerable.yaml
 ```
 
-✓ **Esperado:** mesmos resultados da via nativa (2.5). Primeiro uso semeia a DB no volume
+✓ **Esperado:** mesmos resultados da via nativa (2.3). Primeiro uso semeia a DB no volume
 `caspar_data` a partir do dump embutido; plugins fetched/manuais e a DB **sobrevivem ao `--rm`**
 graças a esse volume.
 
@@ -190,13 +217,16 @@ rápido com mapeamentos um pouco menos fiáveis; re-executar sem `--dry-run` é 
 
 | # | Verificação | Como | Esperado |
 |---|---|---|---|
-| 1 | Suite de testes | `python -m pytest tests/ -q` | ~590 passed, offline |
+| 1 | Suite de testes | `python -m pytest tests/ -q` | 646 passed, offline |
 | 2 | DB íntegra | `caspar doctor` | ✓ healthy |
-| 3 | Plugins registados | `caspar targets` | ~11, incl. azure-iac/kubernetes/dockerfile |
-| 4 | Scan clássico | `caspar scan test_nginx.conf` | ≈5.7 [Medium] |
+| 3 | Plugins registados | `caspar targets` | 12, incl. azure-iac/kubernetes/dockerfile |
+| 4 | Scan clássico | `caspar scan test_target/test_nginx.conf` | ≈5.7 [Medium] |
 | 5 | Scan IaC | `caspar scan test_target/pod_vulnerable.yaml` | ≈10.0 [Critical] + chain |
-| 6 | Reprodutibilidade | rodapé `reproducible:` com o MESMO `kb sha256` da máquina original | manifesto igual ⇒ scores iguais |
+| 6 | Reprodutibilidade | rodapé `reproducible:` com o MESMO `kb sha256` entre execuções sucessivas e face à máquina original | manifesto igual ⇒ scores iguais |
 | 7 | Persistência Docker | scan → `docker volume ls` → `caspar_data` existe | plugins/DB sobrevivem a `--rm` |
+
+Depois deste checklist, usa o [TESTAR_COMANDOS.md](TESTAR_COMANDOS.md) para percorrer cada
+subcomando do CLI individualmente.
 
 ## Troubleshooting rápido
 
@@ -207,3 +237,7 @@ rápido com mapeamentos um pouco menos fiáveis; re-executar sem `--dry-run` é 
 - **Testes RAG do apache em skip** → normal sem o PDF licenciado do benchmark; não afeta o runtime.
 - **`caspar` usa imagens antigas** → confirma `docker images` e refaz o passo 3.3 (tagging);
   lembra: `latest` primeiro, `full` depois.
+- **`kb sha256` diferente do esperado** → confirma que a DB veio do mesmo `data/ccss_canonical.sql`
+  sem alterações manuais às tabelas de regras (`targets`/`misconfigurations`/`attack_chains`/
+  `version_exploits`); o hash ignora o histórico de scans (`scan_results`), por isso correr scans
+  não o altera, mas editar uma regra ou restaurar um dump diferente sim.

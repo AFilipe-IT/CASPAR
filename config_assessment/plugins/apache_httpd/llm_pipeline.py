@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -394,6 +395,7 @@ class LLMBuildPipeline:
         benchmark_path: str,
         llm: LLMClient,
         max_retries: int = 3,
+        consensus_samples: int = 1,
     ) -> None:
         # A PDF index is only meaningful for CIS Benchmark PDFs. XCCDF (DISA
         # STIG) sources — and any source whose file is absent — are handled
@@ -410,6 +412,12 @@ class LLMBuildPipeline:
                         benchmark_path)
         self.llm = llm
         self.max_retries = max_retries
+        # Self-consistency: number of independent LLM samples drawn per entry.
+        # 1 = legacy behaviour (first syntactically valid sample wins, no vote).
+        # >1 = majority vote per metric across `consensus_samples` samples; the
+        # agreement rate becomes the persisted `confidence` (see §4.7.2 /
+        # docs/tese-docs/DISSERTACAO_REFERENCIA.md and Chapter 2 §2.6.5 of the dissertation).
+        self.consensus_samples = max(1, consensus_samples)
 
     def _synthetic_section(self, entry: MisconfigEntry) -> Section:
         """Build a minimal Section from the entry itself, for index-less sources
@@ -454,10 +462,13 @@ class LLMBuildPipeline:
         results = self.index.query(f"{entry.directive} {entry.bad_value}", top_k=1)
         return results[0] if results else None
 
-    def _call_llm(self, section: Section, entry: MisconfigEntry) -> LLMMetrics:
-        """Call LLM with retries. Falls back to conservative defaults on failure."""
-        prompt = build_prompt(section, entry.directive, entry.bad_value)
-
+    def _call_llm_once(self, section: Section, entry: MisconfigEntry, prompt: str) -> LLMMetrics | None:
+        """
+        Draw one sample: call the LLM with retries on syntactic/validation
+        failure only. Returns None (not a fallback) if all retries fail — the
+        caller decides what a failed sample means (single-shot: conservative
+        fallback; consensus: one fewer vote).
+        """
         for attempt in range(self.max_retries):
             try:
                 raw_text = self.llm.complete(prompt, system=_SYSTEM_PROMPT)
@@ -483,10 +494,127 @@ class LLMBuildPipeline:
                     attempt + 1, self.max_retries,
                     entry.directive, entry.bad_value, e,
                 )
+        return None
 
-        # All retries exhausted — use conservative fallback
+    @staticmethod
+    def _vote(samples: list[LLMMetrics]) -> tuple[LLMMetrics, float]:
+        """
+        Aggregate k independent samples into one LLMMetrics by per-metric
+        majority vote (AC, C, I, A, GEL, GRL voted independently, since
+        divergence in the determinism experiment — docs/tese-docs/DISSERTACAO_REFERENCIA.md
+        §4.7 — occurs per metric, not on the whole vector).
+
+        Ties break toward the more severe value, never at random, so a
+        security assessment never silently rounds down under disagreement.
+        Severity is decided by the actual CCSS coefficients (core/ccss.py),
+        not a second, hand-maintained ranking that could drift from them:
+        for each tied field, whichever candidate value yields the higher
+        temporal_score for the full winning vector wins the tie.
+
+        Free-text fields (justification, recommendation, cve_ids) are taken
+        from the sample whose metric vector agrees with the most votes (the
+        "winning" sample), not concatenated or re-generated.
+
+        Returns (aggregated_metrics, confidence), where confidence is the
+        agreement rate of the least-consensual metric — the same quantity the
+        determinism experiment measures, now computed at build time instead
+        of only in a separate post-hoc script.
+        """
+        from config_assessment.core.ccss import base_score, temporal_score
+
+        n = len(samples)
+        fields = ("ac", "c", "i", "a", "gel", "grl")
+
+        winning_values: dict[str, str] = {}
+        agreement_rates: list[float] = []
+        tied_fields: dict[str, list[str]] = {}
+        for field in fields:
+            values = [getattr(s, field) for s in samples]
+            counts = Counter(values)
+            top_count = max(counts.values())
+            tied = [v for v, c in counts.items() if c == top_count]
+            agreement_rates.append(top_count / n)
+            if len(tied) == 1:
+                winning_values[field] = tied[0]
+            else:
+                # Provisional pick (first tied value); resolved below once
+                # every field has a value to compute a score against.
+                winning_values[field] = tied[0]
+                tied_fields[field] = tied
+
+        # Resolve ties by actual CCSS severity: for each tied field, keep
+        # whichever candidate value maximises the resulting temporal_score
+        # of the whole vector (all other fields held at their current pick).
+        for field, candidates in tied_fields.items():
+            def _score_with(value: str) -> float:
+                trial = dict(winning_values)
+                trial[field] = value
+                bs = base_score("N", "N", trial["ac"], trial["c"], trial["i"], trial["a"])
+                return temporal_score(bs, trial["gel"], trial["grl"])
+            winning_values[field] = max(candidates, key=_score_with)
+
+        confidence = min(agreement_rates)
+
+        # The "winning" sample is the one closest to the consensus vector
+        # (most agreeing fields) — its free-text fields represent the vote.
+        def _agreement_score(s: LLMMetrics) -> int:
+            return sum(1 for field in fields if getattr(s, field) == winning_values[field])
+
+        best_sample = max(samples, key=_agreement_score)
+
+        aggregated = LLMMetrics(
+            ac=winning_values["ac"],
+            c=winning_values["c"],
+            i=winning_values["i"],
+            a=winning_values["a"],
+            gel=winning_values["gel"],
+            grl=winning_values["grl"],
+            justification=best_sample.justification,
+            recommendation=best_sample.recommendation,
+            cve_ids=best_sample.cve_ids,
+            confidence=confidence,
+        )
+        return aggregated, confidence
+
+    def _call_llm(self, section: Section, entry: MisconfigEntry) -> LLMMetrics:
+        """
+        Assign CCSS metrics for one entry.
+
+        consensus_samples == 1 (default): legacy behaviour — the first
+        syntactically valid sample is returned as-is (confidence=1.0), falling
+        back to conservative defaults (confidence=0.0) if every retry fails.
+
+        consensus_samples > 1: draw that many independent samples and
+        aggregate by per-metric majority vote (see `_vote`). If every sample
+        fails to parse/validate, fall back to conservative defaults exactly as
+        in the single-shot case.
+        """
+        prompt = build_prompt(section, entry.directive, entry.bad_value)
+
+        if self.consensus_samples == 1:
+            metrics = self._call_llm_once(section, entry, prompt)
+            if metrics is not None:
+                return metrics
+        else:
+            samples = [
+                s for s in (
+                    self._call_llm_once(section, entry, prompt)
+                    for _ in range(self.consensus_samples)
+                )
+                if s is not None
+            ]
+            if samples:
+                aggregated, confidence = self._vote(samples)
+                logger.info(
+                    "Consensus for %s=%s: %d/%d samples valid, confidence=%.2f",
+                    entry.directive, entry.bad_value,
+                    len(samples), self.consensus_samples, confidence,
+                )
+                return aggregated
+
+        # All samples exhausted — use conservative fallback
         logger.error(
-            "All LLM attempts failed for %s=%s — using conservative fallback",
+            "All LLM samples failed for %s=%s — using conservative fallback",
             entry.directive, entry.bad_value,
         )
         metrics = _conservative_fallback(entry.cis_section)
@@ -528,6 +656,7 @@ class LLMBuildPipeline:
             cis_section=entry.cis_section,
             justification=metrics.justification,
             recommendation=metrics.recommendation,
+            confidence=metrics.confidence,
         )
 
     def run(

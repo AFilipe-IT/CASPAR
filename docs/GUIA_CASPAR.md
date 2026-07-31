@@ -2,7 +2,7 @@
 
 > Documento de leitura única para **perceber o que o CASPAR faz, porquê, e como usá-lo do zero**.
 > Complementa o [GUIA_TECNICO.md](GUIA_TECNICO.md) (orientado à arquitectura interna) e o
-> [README.md](README.md) (referência de comandos). Aqui o foco é *entender e demonstrar*.
+> [README.md](../README.md) (referência de comandos). Aqui o foco é *entender e demonstrar*.
 
 **Índice**
 
@@ -232,7 +232,7 @@ Plugin 'mongodb' installed successfully.
   Misconfigs: 16 | Chains: 2 | Narratives: 16/16
 ```
 
-> O nº de misconfigs/chains depende do modelo LLM: `mistral:7b` (por omissão) extrai mais e gera
+> O nº de misconfigs/chains depende do modelo LLM: `qwen2.5:14b` (por omissão) extrai mais e gera
 > chains; um modelo leve como `qwen2.5:1.5b` extrai menos e pode gerar 0 chains (bom para testar
 > o fluxo depressa, não para produção).
 
@@ -325,8 +325,9 @@ caspar scan /caminho/para/mongod.conf --report -f html
 por isso sobrevivem entre execuções apesar de cada container correr com `--rm`. Na primeira vez a DB
 é semeada a partir da versão canónica embutida na imagem.
 
-**Modelo LLM:** o `--then-install` corre extracção por LLM. Por omissão usa `mistral:7b` (qualidade
-alta, mas lento em CPU — pode levar minutos a horas conforme o nº de regras). Para testes rápidos:
+**Modelo LLM:** o `--then-install` corre extracção por LLM. Por omissão usa `qwen2.5:14b` (o mesmo
+modelo validado na dissertação — qualidade alta, mas lento em CPU e ~9 GB de download na primeira
+utilização; pode levar minutos a horas conforme o nº de regras). Para testes rápidos:
 
 ```bash
 CASPAR_MODEL=qwen2.5:1.5b caspar plugin fetch mongodb --then-install
@@ -412,8 +413,8 @@ caspar scan nginx.conf --assess-unknown   # RAG recupera o conhecimento ingerido
 nunca no score).
 
 > **Notas:** o volume `caspar_data` guarda DB+plugins e `caspar_ollama_models` guarda o modelo (o
-> `install.sh` monta-os). Usa `qwen2.5:1.5b` para testes rápidos; `mistral:7b` (por omissão) para
-> qualidade. Se algo falhar, vê a §19 (Troubleshooting).
+> `install.sh` monta-os). Usa `qwen2.5:1.5b` para testes rápidos; `qwen2.5:14b` (por omissão) para
+> qualidade — é o mesmo modelo validado na dissertação. Se algo falhar, vê a §19 (Troubleshooting).
 
 ---
 
@@ -465,9 +466,9 @@ O **runtime** (scan) é leve; o **build-time** (extração por LLM) é que pesa,
 | Recurso | Necessário |
 |---------|-----------|
 | Scan (runtime) | Python 3.11+, ~100 MB RAM. Determinístico, sem GPU, sem rede. |
-| Build com LLM (`plugin add`/`fetch --then-install`) | Ollama + modelo. `mistral:7b` ⇒ **~5 GB RAM** (menos = swap lento). GPU acelera muito mas não é obrigatória. |
+| Build com LLM (`plugin add`/`fetch --then-install`) | Ollama + modelo. `qwen2.5:14b` (por omissão) ⇒ **~10 GB RAM** (menos = swap lento); `mistral:7b`, mais leve, ⇒ ~5 GB. GPU acelera muito mas não é obrigatória. |
 | Imagem Docker `:latest` | **~545 MB** |
-| Imagem Docker `:full` (Ollama embutido) | **~4.5 GB** + o modelo (`mistral:7b` ≈ 4 GB, descarregado no 1º uso para o volume) |
+| Imagem Docker `:full` (Ollama embutido) | **~4.5 GB** + o modelo (`qwen2.5:14b` ≈ 9 GB, descarregado automaticamente no 1º uso para o volume) |
 
 **Tempos esperados (ordem de grandeza, em CPU):**
 
@@ -476,12 +477,12 @@ O **runtime** (scan) é leve; o **build-time** (extração por LLM) é que pesa,
 | `caspar scan` | **~100–500 ms** (determinístico; escala com o nº de directivas) |
 | Seed da DB canónica (1º arranque Docker) | **< 1 s** |
 | `plugin fetch <svc>` (só download) | **~1–3 s** |
-| `plugin fetch --then-install`, 1ª vez | **+5–15 min** (pull do modelo Ollama) **+ minutos a horas** de extração (1 chamada LLM por regra; ~25–45 s/regra em CPU com `mistral:7b`) |
+| `plugin fetch --then-install`, 1ª vez | **+10–20 min** (pull do modelo Ollama, ~9 GB) **+ minutos a horas** de extração (1 chamada LLM por regra; ~40–70 s/regra em CPU com `qwen2.5:14b`) |
 | O mesmo com `CASPAR_MODEL=qwen2.5:1.5b` | **muito mais rápido** (~min), menos regras/chains extraídas — para testar o fluxo |
 
-> Regra prática: em CPU, um STIG de 50 regras com `mistral:7b` demora facilmente **>1 h**. Usa o modelo
-> leve para validar o fluxo e o `mistral:7b` só quando queres a qualidade final. O `scan` em si é
-> sempre instantâneo — o custo é uma vez, no build.
+> Regra prática: em CPU, um STIG de 50 regras com `qwen2.5:14b` demora facilmente **>1 h**. Usa o modelo
+> leve para validar o fluxo e o `qwen2.5:14b` (por omissão) só quando queres a qualidade final e
+> validada na dissertação. O `scan` em si é sempre instantâneo — o custo é uma vez, no build.
 
 ---
 

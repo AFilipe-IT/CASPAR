@@ -8,7 +8,7 @@
 > (✅ medido / 🔲 por medir).
 >
 > Complementa [AVALIACAO_FUNCIONAL.md](AVALIACAO_FUNCIONAL.md) (roteiro passo a
-> passo no Ubuntu 22.04) e [DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md)
+> passo no Ubuntu 22.04) e [DISSERTACAO_REFERENCIA.md](tese-docs/DISSERTACAO_REFERENCIA.md)
 > (resultados consolidados para a tese).
 
 ---
@@ -20,8 +20,8 @@
 | 0 | Científica — motor de scoring | O motor CCSS replica a especificação? | 18/18 exemplos oficiais do NISTIR 7502 §4 | `tests/test_nistir7502_examples.py` | ✅ 18/18 |
 | 1 | Científica — correção | Os scores estão certos? | MAE / taxa de mismatch vs CCE | `scripts/evaluate.py` | ✅ 0% |
 | 1b | Científica — submétricas | Cada submétrica CCSS está certa? | Concordância exata + Cohen's κ por submétrica | protocolo §1.2 | 🔲 |
-| 2 | Funcional — deteção | Encontra as misconfigurations? | Recall (e precision) | `scripts/evaluate.py` | ✅ 100% recall |
-| 3 | Funcional — integração | Tudo funciona de ponta a ponta? | Checks pass/fail | `scripts/functional_check.py` + pytest | ✅ 13/13 · ~602 |
+| 2 | Funcional — deteção | Encontra as misconfigurations? | Recall + precision + F1 | `scripts/evaluate.py` | ✅ 100% recall · 100% precision/F1 |
+| 3 | Funcional — integração | Tudo funciona de ponta a ponta? | Checks pass/fail | `scripts/functional_check.py` + pytest | ✅ 13/13 · ~646 |
 | 4 | Fiabilidade | Dá sempre o mesmo resultado? | Determinismo, robustez, estabilidade do build LLM | §3 | ✅/🔲 |
 | 5 | Desempenho — scan | Quanto custa identificar misconfigurations? | Latência, CPU, RAM, energia | §4.1 | 🔲 |
 | 6 | Desempenho — extensão | Quanto custa adicionar um target novo? | Wall time, tokens/custo LLM, esforço humano | §4.2 | 🔲 |
@@ -147,10 +147,14 @@ metodológica > número inventado.
 
 ## 2. Validação funcional
 
-### 2.1 Deteção — recall nas fixtures vulneráveis — ✅ 100% (14/14)
+### 2.1 Deteção — recall nas fixtures vulneráveis — ✅ 100% (96/96)
 
 Fixtures deliberadamente inseguras em [test_target/](test_target/), cada uma
-com a lista de misconfigurations que um scan correto **tem** de encontrar:
+com a lista de misconfigurations que um scan correto **tem** de encontrar.
+Cobre agora os 10 targets com fixtures dedicadas (docker fica de fora: as
+suas regras são maioritariamente estado do host/CLI, não chaves de
+`daemon.json`, pelo que uma fixture de config não as exercitaria de forma
+honesta):
 
 ```bash
 python -m scripts.evaluate          # secção "Detection"
@@ -162,33 +166,54 @@ python -m scripts.evaluate          # secção "Detection"
 | azure_storage_vulnerable.tf | azure-iac | 100% |
 | pod_vulnerable.yaml | kubernetes | 100% |
 | Dockerfile.vulnerable | dockerfile | 100% |
+| httpd.conf | apache-httpd | 100% |
+| ubuntu_demo/sysctl.conf | ubuntu | 100% |
+| ssh_demo/sshd_config | ssh | 100% |
+| mysql_demo/my.cnf | mysql | 100% |
+| redis_demo/redis.conf | redis | 100% |
+| tomcat_demo/tomcat.conf | tomcat | 100% |
 
-### 2.2 Precision e F1 — 🔲 requer corpus limpo
+### 2.2 Precision e F1 — ✅ 100% (96 TP / 0 FP), corpus limpo fechado
 
 Recall sozinho é enganador (uma ferramenta que grita sempre tem recall 100%).
-**Protocolo:** construir para cada target uma fixture **endurecida** (todas as
-regras da KB corretamente configuradas). Qualquer finding num ficheiro limpo é
-um **falso positivo**.
+**Protocolo:** para cada target acima, uma fixture **endurecida** com as
+mesmas diretivas cobertas pela fixture vulnerável, todas em valor
+conforme/seguro (incluindo as diretivas de *absence rule*, que têm de estar
+**presentes** com um valor aceitável, não apenas ausentes). Qualquer finding
+num ficheiro endurecido é um **falso positivo**.
 
 ```
 precision = TP / (TP + FP)      F1 = 2·P·R / (P + R)
 ```
 
-| Target | Fixture limpa | FP | Precision | F1 |
-|---|---|---|---|---|
-| nginx | 🔲 criar `test_target/nginx_hardened.conf` | 🔲 | 🔲 | 🔲 |
-| kubernetes | 🔲 `pod_hardened.yaml` | 🔲 | 🔲 | 🔲 |
-| dockerfile | 🔲 `Dockerfile.hardened` | 🔲 | 🔲 | 🔲 |
-| azure-iac | 🔲 `azure_storage_hardened.tf` | 🔲 | 🔲 | 🔲 |
+```bash
+python -m scripts.evaluate          # secção "Precision & F1"
+```
+
+| Target | Fixture limpa | TP | FP | Precision | Recall | F1 |
+|---|---|---|---|---|---|---|
+| nginx | `nginx_hardened.conf` | 2 | 0 | 100% | 100% | 100% |
+| azure-iac | `azure_storage_hardened.tf` | 5 | 0 | 100% | 100% | 100% |
+| kubernetes | `pod_hardened.yaml` | 4 | 0 | 100% | 100% | 100% |
+| dockerfile | `Dockerfile.hardened` | 3 | 0 | 100% | 100% | 100% |
+| apache-httpd | `httpd_hardened.conf` | 21 | 0 | 100% | 100% | 100% |
+| ubuntu | `ubuntu_hardened_demo/sysctl.conf` | 9 | 0 | 100% | 100% | 100% |
+| ssh | `ssh_demo/sshd_config_hardened` | 13 | 0 | 100% | 100% | 100% |
+| mysql | `mysql_hardened_demo/my.cnf` | 16 | 0 | 100% | 100% | 100% |
+| redis | `redis_hardened_demo/redis.conf` | 11 | 0 | 100% | 100% | 100% |
+| tomcat | `tomcat_hardened_demo/tomcat.conf` | 12 | 0 | 100% | 100% | 100% |
 
 Reportar recall/precision com **intervalo de confiança de Wilson a 95%** —
-com amostras pequenas (14 casos) o IC é largo e deve ser dito (100% em 14/14
-→ IC95% ≈ [78%, 100%]).
+com 96 casos o IC é mais estreito do que com as 14 fixtures originais, mas
+ainda deve ser reportado explicitamente na tese (não assumir que 100%
+empírico implica 100% populacional). O corpus é sintético e propositadamente
+worst-case/best-case — não substitui um corpus de configs reais "em estado
+selvagem", uma limitação a declarar explicitamente (ver Revisor 1, ponto 6).
 
 ### 2.3 Integração ponta a ponta — ✅
 
 ```bash
-python -m pytest tests/ -q            # ~602 passed
+python -m pytest tests/ -q            # ~646 passed
 python -m scripts.functional_check    # 13/13 capacidades integradas
 ```
 
@@ -473,19 +498,18 @@ N e IC; nunca uma comparação de tempos sem a máquina e o nº de corridas.
 
 ```bash
 # já implementado (correr primeiro — são os números-âncora)
-python -m pytest tests/ -q                    # ~602 passed
+python -m pytest tests/ -q                    # ~646 passed
 python -m scripts.functional_check            # 13/13
-python -m scripts.evaluate                    # KB · MAE 0% · recall 100%
+python -m scripts.evaluate                    # KB · MAE 0% · recall 100% · precision/F1 100%
 python -m scripts.baseline_compare --oscap    # Trivy + OpenSCAP
 
 # por implementar/medir (por ordem de valor para a tese)
-# 1. §2.2  fixtures limpas → precision/F1        (fecha a maior lacuna do recall)
-# 2. §4.1  latência/CPU/RAM/energia do scan      (hyperfine + time -v + RAPL)
-# 3. §6.2  o mesmo para Trivy/OpenSCAP           (comparação de desempenho)
-# 4. §4.2  custo de adicionar um target novo     (o argumento central da AMiSA)
-# 5. §1.2  concordância por submétrica + κ       (rigor científico do scoring)
-# 6. §5    escalabilidade sintética              (limites da abordagem)
-# 7. §3.2  estabilidade do build LLM (5 builds)  (fiabilidade da via LLM)
+# 1. §4.1  latência/CPU/RAM/energia do scan      (hyperfine + time -v + RAPL)
+# 2. §6.2  o mesmo para Trivy/OpenSCAP           (comparação de desempenho)
+# 3. §4.2  custo de adicionar um target novo     (o argumento central da AMiSA)
+# 4. §1.2  concordância por submétrica + κ       (rigor científico do scoring)
+# 5. §5    escalabilidade sintética              (limites da abordagem)
+# 6. §3.2  estabilidade do build LLM (5 builds)  (fiabilidade da via LLM)
 ```
 
 ---

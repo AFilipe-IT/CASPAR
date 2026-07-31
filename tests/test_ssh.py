@@ -69,19 +69,51 @@ class TestParser:
         assert "PermitRootLogin" in names   # came from the included fragment
         assert "MaxAuthTries" in names
 
-    def test_match_block_context_recorded_not_global(self, tmp_path):
+    def test_match_user_is_worst_case_applicable(self, tmp_path):
+        # Match User is attacker-controlled (an attacker picks which username
+        # to attempt), so its directives fold into the flat list as "global",
+        # same as top-level ones — worst case, not "excluded from evaluation".
         cfg = _write(tmp_path, "sshd_config",
                      "PermitRootLogin no\n"
                      "Match User admin\n"
                      "PermitRootLogin yes\n")
         ds = parse_file(str(cfg))
-        # Two PermitRootLogin: one global, one inside Match.
+        prl = [d for d in ds if d.name == "PermitRootLogin"]
+        assert len(prl) == 2
+        assert all(d.context == "global" for d in prl)
+        assert {d.value for d in prl} == {"no", "yes"}
+
+    def test_match_address_private_range_not_worst_case_applicable(self, tmp_path):
+        # Match Address restricted to a private/loopback range cannot be
+        # satisfied by a generic remote attacker — kept for visibility, but
+        # not folded into the worst-case-evaluated set.
+        cfg = _write(tmp_path, "sshd_config",
+                     "PermitRootLogin no\n"
+                     "Match Address 192.168.1.0/24\n"
+                     "PermitRootLogin yes\n")
+        ds = parse_file(str(cfg))
         global_ones = [d for d in ds if d.name == "PermitRootLogin" and d.context == "global"]
         match_ones = [d for d in ds if d.name == "PermitRootLogin" and d.context != "global"]
         assert len(global_ones) == 1 and global_ones[0].value == "no"
         assert len(match_ones) == 1
         assert match_ones[0].context.startswith("Match(")
-        assert "admin" in match_ones[0].context
+        assert "192.168.1.0/24" in match_ones[0].context
+
+    def test_match_address_public_is_worst_case_applicable(self, tmp_path):
+        # Match Address with a wildcard or public address is attacker-reachable.
+        cfg = _write(tmp_path, "sshd_config",
+                     "Match Address *\n"
+                     "PermitRootLogin yes\n")
+        ds = parse_file(str(cfg))
+        assert ds[0].name == "PermitRootLogin" and ds[0].context == "global"
+
+    def test_match_address_mixed_public_and_private_is_applicable(self, tmp_path):
+        # Worst case: if ANY listed address is attacker-reachable, the block applies.
+        cfg = _write(tmp_path, "sshd_config",
+                     "Match Address 203.0.113.5,192.168.1.0/24\n"
+                     "PermitRootLogin yes\n")
+        ds = parse_file(str(cfg))
+        assert ds[0].context == "global"
 
     def test_include_inside_match_not_followed(self, tmp_path):
         # An Include appearing after a Match must not be globally expanded.

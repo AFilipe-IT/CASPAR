@@ -19,9 +19,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-path = Path("GUIA_TECNICO.md")
+path = Path("docs/GUIA_TECNICO.md")
 if not path.exists():
-    print("ERROR: GUIA_TECNICO.md not found. Run from ~/ccss_scan.")
+    print("ERROR: docs/GUIA_TECNICO.md not found. Run from repo root.")
     sys.exit(1)
 
 c = path.read_text(encoding="utf-8")

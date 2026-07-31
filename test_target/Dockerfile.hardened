@@ -1,0 +1,10 @@
+# test_target/Dockerfile.hardened
+# Fixture CORRETAMENTE configurada para o target 'dockerfile' — todas as
+# diretivas cobertas pela suite de recall (Dockerfile.vulnerable) em valores
+# seguros. Qualquer finding aqui é um falso positivo (precisão/F1).
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y openssh-server
+USER appuser
+EXPOSE 2222
+HEALTHCHECK CMD ["true"]
+CMD ["/usr/sbin/sshd", "-D"]

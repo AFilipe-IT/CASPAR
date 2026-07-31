@@ -573,9 +573,9 @@ tratá-los como checklist):
    evitar figura e tabela redundantes com a mesma informação.
 
 ## 7. Documentos relacionados
-- [README.md](README.md) — vitrine + comandos
+- [README.md](../../README.md) — vitrine + comandos
 - [GUIA_CASPAR.md](../GUIA_CASPAR.md) — guia de utilizador/demo
-- [GUIA_TECNICO.md](GUIA_TECNICO.md) — arquitectura interna
-- [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) — setup + build Docker
-- [AVALIACAO_FUNCIONAL.md](AVALIACAO_FUNCIONAL.md) — roteiro de avaliação
-- [HANDOFF.md](HANDOFF.md) — briefing técnico completo
+- [GUIA_TECNICO.md](../GUIA_TECNICO.md) — arquitectura interna
+- [GUIA_TESTE_MAQUINA.md](../GUIA_TESTE_MAQUINA.md) — setup + build Docker
+- [AVALIACAO_FUNCIONAL.md](../AVALIACAO_FUNCIONAL.md) — roteiro de avaliação
+- [HANDOFF.md](../HANDOFF.md) — briefing técnico completo

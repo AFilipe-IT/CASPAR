@@ -94,7 +94,7 @@ class TestTemporalExample412:
     model (BaseScore × GEL × GRL, GRL values U/W/H/ND) whose multipliers
     stay in [0.81, 1.0] — a conservative deviation from the spec, which
     scales only the exploitability term with multipliers down to 0.4.
-    The deviation is documented in VALIDACAO.md §7 (tradeoffs).
+    The deviation is documented in docs/VALIDACAO.md §7 (tradeoffs).
     """
 
     def test_official_equation_reproduces_published_values(self):

@@ -119,6 +119,7 @@ class Misconfiguration:
     version_amplification: float = 1.0  # runtime — F1 version-aware factor applied (1.0 = none)
     version_risk_note: str = ""  # runtime — human-readable reason for the amplification
     narrative: str = "{}"  # JSON string — rich narrative from Stage 3 LLM pipeline
+    confidence: float = 1.0  # build-time — self-consistency agreement rate (1.0 = no LLM/unanimous, 0.0 = fallback)
 
     def model_dump(self) -> dict:
         """Compatibility shim — matches Pydantic's .model_dump() API."""

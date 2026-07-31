@@ -465,3 +465,154 @@ class TestLLMPipelineEndToEnd:
         for entry in ENTRIES:
             assert entry.cis_section, f"Missing cis_section for {entry.directive}={entry.bad_value}"
             assert "." in entry.cis_section, f"Bad cis_section format: {entry.cis_section}"
+
+
+# ------------------------------------------------------------------ #
+# Self-consistency / majority-vote tests (docs/tese-docs/DISSERTACAO_REFERENCIA.md #
+# §4.7.2 — confidence persisted from k independently sampled LLM      #
+# calls instead of a single shot).                                    #
+# ------------------------------------------------------------------ #
+
+class TestConsensusVoting:
+
+    @staticmethod
+    def _m(ac="L", c="P", i="N", a="N", gel="M", grl="H", **kw):
+        from config_assessment.plugins.apache_httpd.llm_pipeline import LLMMetrics
+        return LLMMetrics(
+            ac=ac, c=c, i=i, a=a, gel=gel, grl=grl,
+            justification=kw.get("justification", "j"),
+            recommendation=kw.get("recommendation", "r"),
+            cve_ids=kw.get("cve_ids", []),
+        )
+
+    def test_unanimous_samples_confidence_one(self):
+        """k identical samples ⇒ confidence 1.0 and the same vector back."""
+        samples = [self._m() for _ in range(5)]
+        aggregated, confidence = LLMBuildPipeline._vote(samples)
+        assert confidence == 1.0
+        assert aggregated.ac == "L" and aggregated.c == "P"
+
+    def test_majority_wins_over_minority(self):
+        """3 say AC=L, 2 say AC=M ⇒ majority L wins, confidence=3/5 on that field."""
+        samples = [self._m(ac="L"), self._m(ac="L"), self._m(ac="L"),
+                   self._m(ac="M"), self._m(ac="M")]
+        aggregated, confidence = LLMBuildPipeline._vote(samples)
+        assert aggregated.ac == "L"
+        assert confidence == pytest.approx(3 / 5)
+
+    def test_confidence_is_least_consensual_metric(self):
+        """Overall confidence = the WORST per-metric agreement rate, not the average."""
+        samples = [
+            self._m(ac="L", c="P"),
+            self._m(ac="L", c="P"),
+            self._m(ac="L", c="C"),  # c disagrees: 2/3 agreement on c, 3/3 on ac
+        ]
+        aggregated, confidence = LLMBuildPipeline._vote(samples)
+        assert aggregated.ac == "L"
+        assert aggregated.c == "P"
+        assert confidence == pytest.approx(2 / 3)
+
+    def test_tie_breaks_toward_more_severe_ac(self):
+        """2-2 tie on AC (L vs H) must resolve to the more severe value (L:
+        low complexity = easier to exploit = higher CCSS score) via the real
+        scoring formula, never arbitrarily/randomly."""
+        samples = [self._m(ac="L"), self._m(ac="L"),
+                   self._m(ac="H"), self._m(ac="H")]
+        aggregated, _ = LLMBuildPipeline._vote(samples)
+        assert aggregated.ac == "L"
+
+    def test_tie_breaks_toward_more_severe_grl(self):
+        """2-2 tie on GRL (U vs W): resolved by computing which candidate
+        yields the higher temporal_score via the real ccss.py formula,
+        never a hand-guessed label ordering (GRL labels do not read as a
+        simple severity scale — see the tie-break design rationale)."""
+        samples = [self._m(grl="U"), self._m(grl="U"),
+                   self._m(grl="W"), self._m(grl="W")]
+        aggregated, _ = LLMBuildPipeline._vote(samples)
+        from config_assessment.core.ccss import base_score, temporal_score
+        bs = base_score("N", "N", aggregated.ac, aggregated.c, aggregated.i, aggregated.a)
+        ts_u = temporal_score(bs, aggregated.gel, "U")
+        ts_w = temporal_score(bs, aggregated.gel, "W")
+        winner_score = temporal_score(bs, aggregated.gel, aggregated.grl)
+        assert winner_score == max(ts_u, ts_w)
+
+    def test_free_text_taken_from_winning_sample(self):
+        """Justification/recommendation/cve_ids come from the sample closest
+        to the consensus vector, not concatenated across samples."""
+        winner = self._m(ac="L", c="P", justification="winner text", cve_ids=["CVE-2020-0001"])
+        loser = self._m(ac="M", c="C", justification="loser text", cve_ids=["CVE-1999-9999"])
+        samples = [winner, winner, loser]
+        aggregated, _ = LLMBuildPipeline._vote(samples)
+        assert aggregated.justification == "winner text"
+        assert aggregated.cve_ids == ["CVE-2020-0001"]
+
+
+class TestConsensusPipelineIntegration:
+
+    @pytest.fixture
+    def populated_db(self, tmp_path):
+        db_path = str(tmp_path / "test.db")
+        with Database(db_path) as db:
+            meta = ApachePlugin().metadata()
+            db.upsert_target(TargetMetadata(
+                name=meta.name,
+                display_name=meta.display_name,
+                version=meta.version,
+                benchmark_source=meta.benchmark_source,
+            ))
+        return db_path
+
+    def test_single_sample_default_matches_legacy_behaviour(self, populated_db):
+        """consensus_samples=1 (default) must behave exactly like before:
+        confidence 1.0 on success, no voting overhead."""
+        pipeline = LLMBuildPipeline(benchmark_path=BENCHMARK_PATH, llm=StubLLMClient())
+        with Database(populated_db) as db:
+            results = pipeline.run(ENTRIES[:3], db)
+        for r in results:
+            assert r.confidence == 1.0
+
+    def test_consensus_samples_persists_confidence(self, populated_db):
+        """consensus_samples>1 with a deterministic stub (always the same
+        answer) ⇒ unanimous vote ⇒ confidence 1.0, persisted end-to-end."""
+        pipeline = LLMBuildPipeline(
+            benchmark_path=BENCHMARK_PATH,
+            llm=StubLLMClient(),
+            consensus_samples=3,
+        )
+        with Database(populated_db) as db:
+            results = pipeline.run(ENTRIES[:3], db)
+            db_rows = db.get_all_misconfigurations("apache-httpd")
+        for r in results:
+            assert r.confidence == 1.0
+        for row in db_rows:
+            assert row.confidence == 1.0
+
+    def test_conservative_fallback_confidence_zero_with_consensus(self, populated_db):
+        """If every sample in the consensus batch fails to parse, fall back
+        exactly as in the single-shot case: confidence=0.0."""
+        bad_llm = StubLLMClient(fixed_response="not json")
+        pipeline = LLMBuildPipeline(
+            benchmark_path=BENCHMARK_PATH,
+            llm=bad_llm,
+            consensus_samples=3,
+        )
+        with Database(populated_db) as db:
+            results = pipeline.run([ENTRIES[0]], db)
+        assert results[0].confidence == 0.0
+
+    def test_confidence_roundtrips_through_db(self, populated_db):
+        """A non-1.0/0.0 confidence value survives upsert + read-back."""
+        from config_assessment.plugins.apache_httpd.llm_pipeline import LLMMetrics
+        from config_assessment.core.models import Misconfiguration
+        with Database(populated_db) as db:
+            m = Misconfiguration(
+                target_name="apache-httpd",
+                directive="TestDirective",
+                bad_value="bad",
+                ac="L", c="P", i="N", a="N",
+                confidence=0.67,
+            )
+            db.upsert_misconfiguration(m)
+            rows = db.get_misconfigurations("apache-httpd", "TestDirective", "bad")
+        assert len(rows) == 1
+        assert rows[0].confidence == pytest.approx(0.67)
