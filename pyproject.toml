@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "caspar"
 version = "0.1.0"
-description = "CASPAR — Configuration Assessment and Security Posture Automated Review (CCSS-based)"
+description = "CASPAR — Configuration Analysis, Security Posture Assessment and Reporting (CCSS-based)"
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",

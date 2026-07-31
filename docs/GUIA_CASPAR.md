@@ -30,7 +30,7 @@
 
 ## 1. O que é o CASPAR, em duas frases
 
-CASPAR (*Configuration Assessment and Security Posture Automated Review*) lê a configuração de um
+CASPAR (*Configuration Analysis, Security Posture Assessment and Reporting*) lê a configuração de um
 serviço — um ficheiro, um directório, um serviço instalado, ou uma imagem Docker — e atribui a cada
 problema de configuração um **score de risco de 0 a 10**, com CVEs reais, narrativa técnica e cadeias
 de ataque. O score baseia-se no **CCSS (Common Configuration Scoring System, NISTIR 7502)**, o

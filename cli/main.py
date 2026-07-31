@@ -70,7 +70,7 @@ from cli.commands.manage_cmds import suppress, doctor, fix, promote   # noqa: E4
 @click.option("--verbose", "-v", is_flag=True)
 @click.pass_context
 def cli(ctx: click.Context, db: str, verbose: bool) -> None:
-    """CASPAR — Configuration Assessment and Security Posture Automated Review.
+    """CASPAR — Configuration Analysis, Security Posture Assessment and Reporting.
 
     Security configuration scoring framework based on CCSS/NISTIR 7502.
     """

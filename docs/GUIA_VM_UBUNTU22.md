@@ -1,4 +1,4 @@
-# AEGIS — Preparar uma VM Ubuntu 22.04 limpa para testes
+# CASPAR — Preparar uma VM Ubuntu 22.04 limpa para testes
 
 > **Papel deste documento:** guia do zero absoluto — VM acabada de instalar, sem Docker, sem
 > Python configurado, sem nada do projeto. Cobre **Docker (via principal)** e **nativa venv/pip**
@@ -58,7 +58,7 @@ sessão atual) e depois confirma:
 docker version   # deve responder sem sudo e sem erro de permissão
 ```
 
-### 1.3 Instalar o AEGIS — um comando
+### 1.3 Instalar o CASPAR — um comando
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
@@ -67,29 +67,29 @@ export PATH="$HOME/.local/bin:$PATH"   # só se o script avisar que não está n
 
 Isto:
 - confirma que o Docker existe,
-- faz `docker pull` das duas imagens públicas (`alfilipe/aegis:latest` leve, `alfilipe/aegis:full`
+- faz `docker pull` das duas imagens públicas (`alfilipe/caspar:latest` leve, `alfilipe/caspar:full`
   com Ollama embutido),
-- instala o wrapper `sca` em `~/.local/bin`.
+- instala o wrapper `caspar` em `~/.local/bin`.
 
 ### 1.4 Validar
 
 ```bash
-sca doctor       # integridade da DB
-sca targets      # 12 plugins listados
-sca scan /etc/nginx/nginx.conf 2>/dev/null || echo "(sem nginx instalado na VM — normal)"
+caspar doctor       # integridade da DB
+caspar targets      # 12 plugins listados
+caspar scan /etc/nginx/nginx.conf 2>/dev/null || echo "(sem nginx instalado na VM — normal)"
 ```
 
 Para um alvo garantido sem precisares de instalar nginx/apache na VM, usa os ficheiros de teste do
 próprio repositório — mas nota que **estes só existem se clonares o repo** (ver §3); a instalação
-via `curl | sh` sozinha não traz o código-fonte, só o wrapper `sca` que fala com as imagens Docker.
-Para scans reais nesta VM, aponta o `sca scan` a configurações que já existam nela (ex.:
+via `curl | sh` sozinha não traz o código-fonte, só o wrapper `caspar` que fala com as imagens Docker.
+Para scans reais nesta VM, aponta o `caspar scan` a configurações que já existam nela (ex.:
 `/etc/ssh/sshd_config`, `/etc/nginx/nginx.conf` se tiveres esses serviços instalados) ou clona o
 repo (§3) para teres os fixtures de exemplo em `test_target/`.
 
 ### 1.5 (Opcional) Build-time — testar o download automático do Ollama/modelo
 
 ```bash
-sca plugin add --source /caminho/para/um/benchmark.pdf
+caspar plugin add --source /caminho/para/um/benchmark.pdf
 ```
 
 Na primeira utilização de um comando de build-time (`plugin add`, `build`, `fetch --then-install`),
@@ -108,8 +108,8 @@ diretamente sem camada de container.
 ### 2.1 Clonar o repositório
 
 ```bash
-git clone https://github.com/AFilipe-IT/CASPAR.git sca
-cd sca
+git clone https://github.com/AFilipe-IT/CASPAR.git caspar
+cd caspar
 ```
 
 ### 2.2 Instalar — um comando
@@ -126,10 +126,10 @@ instala os pacotes Python e restaura a base de conhecimento a partir de `data/cc
 
 ```bash
 python -m pytest tests/ -q                                   # 646 passed
-sca doctor
-sca targets                                                   # 12 plugins
-sca scan test_target/test_nginx.conf                          # ≈5.7/10 [Medium]
-sca scan test_target/pod_vulnerable.yaml                      # ≈10.0 [Critical] + chain
+caspar doctor
+caspar targets                                                   # 12 plugins
+caspar scan test_target/test_nginx.conf                          # ≈5.7/10 [Medium]
+caspar scan test_target/pod_vulnerable.yaml                      # ≈10.0 [Critical] + chain
 ```
 
 ### 2.4 (Opcional) Build-time nativo — precisa de Ollama à parte
@@ -145,14 +145,14 @@ ollama pull qwen2.5:14b     # ~9GB
 
 ## 3. Se quiseres o código-fonte também na via Docker (fixtures de teste, docs)
 
-A via Docker (§1) instala só o wrapper `sca` — não traz o repositório. Se quiseres os mesmos
+A via Docker (§1) instala só o wrapper `caspar` — não traz o repositório. Se quiseres os mesmos
 fixtures de `test_target/` para testar via Docker, clona o repo à parte (não interfere com o
 wrapper já instalado):
 
 ```bash
-git clone https://github.com/AFilipe-IT/CASPAR.git sca-src
-cd sca-src
-sca scan test_target/test_nginx.conf     # usa o wrapper Docker já instalado, com o repo só como fonte de fixtures
+git clone https://github.com/AFilipe-IT/CASPAR.git caspar-src
+cd caspar-src
+caspar scan test_target/test_nginx.conf     # usa o wrapper Docker já instalado, com o repo só como fonte de fixtures
 ```
 
 ---
@@ -162,10 +162,10 @@ sca scan test_target/test_nginx.conf     # usa o wrapper Docker já instalado, c
 | # | Verificação | Como | Esperado |
 |---|---|---|---|
 | 1 | Docker sem sudo | `docker version` | responde sem erro de permissão |
-| 2 | AEGIS instalado (Docker) | `sca doctor` | ✓ healthy |
-| 3 | Plugins (Docker) | `sca targets` | 12 |
+| 2 | CASPAR instalado (Docker) | `caspar doctor` | ✓ healthy |
+| 3 | Plugins (Docker) | `caspar targets` | 12 |
 | 4 | Nativa instalada | `python -m pytest tests/ -q` (dentro do venv) | 646 passed |
-| 5 | Persistência Docker | `docker volume ls` | `aegis_data`, `caspar_ollama_models` existem |
+| 5 | Persistência Docker | `docker volume ls` | `caspar_data`, `caspar_ollama_models` existem |
 
 ---
 

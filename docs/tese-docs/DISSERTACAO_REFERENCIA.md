@@ -1,13 +1,14 @@
-# AMiSA / AEGIS — Referência para a Dissertação
+# AEGIS / CASPAR — Referência para a Dissertação
 
 > **Propósito:** documento único e verificado com tudo o que a dissertação
 > precisa — funcionalidades, arquitectura/implementação, e validação com
 > resultados finais (verificados num Ubuntu 22.04 real). A tese escreve-se em
 > **inglês**; este documento é o material-fonte em Português Europeu.
 >
-> **Metodologia:** AMiSA — *A methodology for the automated and quantitative
+> **Metodologia:** AEGIS — *A methodology for the automated and quantitative
 > assessment of security misconfigurations in systems and services*.
-> **Prova de conceito:** AEGIS (o código deste repositório).
+> **Prova de conceito:** CASPAR — Configuration Analysis, Security Posture
+> Assessment and Reporting (o código deste repositório).
 > **Estado:** parte prática FECHADA e validada (2026-07-09). Adenda pós-fecho:
 > replicação NISTIR 7502 18/18 (2026-07-14) e experiência de determinismo da
 > extração LLM (2026-07-18), motivadas pelo feedback dos revisores do INForum
@@ -113,14 +114,14 @@ caminhos com pontos, `bad_value` inválido (JSON/prosa/None), impacto nulo;
 canonicalização de sinónimos booleanos (`off`/`Disabled`→`false`).
 
 ### 3.5 Fronteira de escopo: config vs estado do sistema
-O AEGIS avalia **ficheiros de configuração**. Ferramentas como o OpenSCAP
+O CASPAR avalia **ficheiros de configuração**. Ferramentas como o OpenSCAP
 avaliam o **estado do sistema vivo** (permissões, módulos de kernel, serviços).
 O target `ubuntu` cobre o **subconjunto config-based** do CIS Ubuntu (sysctl,
 login.defs) — o terreno sobreponível, onde a comparação é justa. Esta distinção
 é, ela própria, um resultado da tese.
 
 ### 3.6 Manifesto de reprodutibilidade
-Cada `ScanResult` grava versão do AEGIS + **SHA-256 da base de conhecimento** +
+Cada `ScanResult` grava versão do CASPAR + **SHA-256 da base de conhecimento** +
 nº de regras (rodapé do scan, campo `manifest` no JSON). *Mesmo manifesto +
 mesmo input ⇒ mesmos scores*, verificável por terceiros. É a forma auditável da
 afirmação de determinismo.
@@ -176,7 +177,7 @@ modelo temporal simplificado está documentado em VALIDACAO.md §1.0 e §7. É a
 evidência de que a *aritmética* está certa, independente do LLM.
 
 ### 4.3 Correção das classificações — MAE vs ground truth CCE (Apache)
-Scores do AEGIS vs faixas de severidade DISA do dataset **CCE oficial**:
+Scores do CASPAR vs faixas de severidade DISA do dataset **CCE oficial**:
 
 | Métrica | Valor |
 |---|---|
@@ -219,7 +220,7 @@ configurações reais recolhidas "em estado selvagem" — ver §4.8.
 ### 4.5 Comparação com baselines
 
 **Trivy (IaC / containers)** — mesmo ficheiro de input:
-| Ficheiro | AEGIS | Trivy |
+| Ficheiro | CASPAR | Trivy |
 |---|---|---|
 | azure_storage_vulnerable.tf | 9 findings · 8.5/10 CCSS | 13 findings · labels (2C/3H/7M/1L) |
 | Dockerfile.vulnerable | 4 findings · 9.0/10 CCSS | 5 findings · labels (2H/2M/1L) |
@@ -230,14 +231,14 @@ distintos.
 
 **OpenSCAP (Ubuntu OS hardening)** — subconjunto config-based sobreponível,
 avaliado no sistema vivo (CIS L1 Server, `ssg-ubuntu2204-ds.xml`):
-| Métrica | OpenSCAP | AEGIS |
+| Métrica | OpenSCAP | CASPAR |
 |---|---|---|
 | Controlos sobreponíveis | 38 | 18 regras (sysctl + login.defs) |
 | **Veredicto** | **24 fail · 1 pass** (binário) | score CCSS 0–10 + narrativa |
 | Avalia | estado do sistema vivo | ficheiro de configuração |
 | Reprodutível | depende do estado da máquina | sim (manifesto) |
 
-→ Ambos cobrem os mesmos controlos; o **diferencial do AEGIS** é o score
+→ Ambos cobrem os mesmos controlos; o **diferencial do CASPAR** é o score
 reproduzível + narrativa, contra o pass/fail binário do OpenSCAP.
 
 ### 4.6 Reprodutibilidade (runtime)
@@ -280,9 +281,9 @@ e o NISTIR §4.2.
 #### 4.7.1 Comparação com LLMSecConfig — duas estratégias para o mesmo problema
 O LLMSecConfig (Cong et al.) enfrenta a mesma questão de fundo — *como confiar
 num output de um LLM não-determinístico?* — mas resolve-a com uma arquitectura
-diferente da do AEGIS, o que é instrutivo para a discussão de Related Work:
+diferente da do CASPAR, o que é instrutivo para a discussão de Related Work:
 
-| | LLMSecConfig | AEGIS |
+| | LLMSecConfig | CASPAR |
 |---|---|---|
 | **Tarefa do LLM** | reparar código (gerar YAML corrigido) | classificar severidade (atribuir AC/C/I/A/GEL/GRL) |
 | **Oráculo de validação** | **Checkov (SAT) — determinístico e externo:** aceita/rejeita o output objectivamente (sem a vulnerabilidade → aceite) | **não existe oráculo automático de "severidade correcta"** — não há uma ferramenta que confirme que um AC=M está certo |
@@ -306,7 +307,7 @@ exactamente o mesmo motivador da nossa experiência §4.7. Concretamente:
   `attempt` em `_call_llm`, seria uma alteração pequena).
 - A diferença estrutural que não se resolve por métrica: o LLMSecConfig tem um
   **validador externo determinístico** (Checkov) que valida o *conteúdo* da
-  resposta contra a realidade (a vulnerabilidade desapareceu ou não); o AEGIS só
+  resposta contra a realidade (a vulnerabilidade desapareceu ou não); o CASPAR só
   tem validação de **forma** (`validate_metrics` — a resposta é um JSON com
   valores no domínio legal), não de **correcção semântica** da classificação
   CCSS. É por isso que a nossa mitigação de não-determinismo tem de ser, em
@@ -317,8 +318,8 @@ exactamente o mesmo motivador da nossa experiência §4.7. Concretamente:
   qualquer classificação de severidade não binária (ao contrário de "há ou não
   há vulnerabilidade", que o Checkov consegue arbitrar).
 
-#### 4.7.2 Como o AEGIS lida com o não-determinismo do LLM — síntese das cinco camadas
-Resumo, para citação directa na tese, dos mecanismos que o AEGIS combina para
+#### 4.7.2 Como o CASPAR lida com o não-determinismo do LLM — síntese das cinco camadas
+Resumo, para citação directa na tese, dos mecanismos que o CASPAR combina para
 conter (não eliminar) o não-determinismo do LLM no build-time. Nenhum destes
 é hipotético — todos estão implementados e são verificáveis no código citado.
 
@@ -360,7 +361,7 @@ conter (não eliminar) o não-determinismo do LLM no build-time. Nenhum destes
    auditável (0/150 acionados na experiência §4.7).
 5. **Separação build-time/runtime como contenção estrutural (a camada mais
    importante).** Em vez de perseguir um oráculo externo tipo Checkov para
-   tornar o LLM determinístico por validação de conteúdo, o AEGIS **isola**
+   tornar o LLM determinístico por validação de conteúdo, o CASPAR **isola**
    o não-determinismo na fase de build (corre uma vez, produz uma base de
    conhecimento estática) e garante, por construção, que o runtime — o que
    corre em cada scan — é 100% determinístico (parse → lookup exacto →
@@ -375,7 +376,7 @@ estiver mal construída?** Um runtime perfeitamente determinístico só garante
 scores *reprodutíveis*, não *correctos* — se o LLM classificar mal uma
 directiva de forma consistente, o scan vai reproduzir esse erro de forma
 igualmente consistente, 100% das vezes. Determinismo ≠ correcção (o mesmo
-aviso já feito em §4.7 a propósito do MAE). O que o AEGIS tem hoje para
+aviso já feito em §4.7 a propósito do MAE). O que o CASPAR tem hoje para
 mitigar isto, verificado no código:
 - **Validação de forma, não de conteúdo, na extração** (ponto 3 acima) —
   garante que a resposta é bem formada, não que está certa.
@@ -405,7 +406,7 @@ mitigar isto, verificado no código:
   vulnerabilidade", que é binário e verificável). Isto é uma limitação de
   desenho estrutural, não um detalhe de implementação: classificar
   *severidade* é uma tarefa sem oráculo automático na literatura geral, não
-  só no AEGIS. Não existindo esse oráculo, a mitigação implementada (§4.7.3)
+  só no CASPAR. Não existindo esse oráculo, a mitigação implementada (§4.7.3)
   ataca a pergunta adjacente e verificável — *quão bem o LLM concorda consigo
   mesmo* — como proxy parcial de confiança, combinada com (a) validação
   externa via MAE onde há CCE disponível e (b) revisão humana no `promote`.
@@ -490,7 +491,7 @@ avaliação.
 - **IaC/OS sem ground truth CCE:** azure-iac, kubernetes, dockerfile e ubuntu
   não têm dataset CCE oficial — validam-se por recall nas fixtures + baselines,
   não por MAE. O Apache é o caso quantitativo (CCE).
-- **Escopo config-based:** o AEGIS não avalia estado de sistema (permissões,
+- **Escopo config-based:** o CASPAR não avalia estado de sistema (permissões,
   módulos), que é o domínio do OpenSCAP — por design.
 - **Corpus de fixtures é sintético, não "em estado selvagem":** a suite de
   recall/precisão/F1 (§4.4, 10/11 alvos, 96 findings) usa fixtures
@@ -573,7 +574,7 @@ tratá-los como checklist):
 
 ## 7. Documentos relacionados
 - [README.md](README.md) — vitrine + comandos
-- [GUIA_AEGIS.md](GUIA_AEGIS.md) — guia de utilizador/demo
+- [GUIA_CASPAR.md](../GUIA_CASPAR.md) — guia de utilizador/demo
 - [GUIA_TECNICO.md](GUIA_TECNICO.md) — arquitectura interna
 - [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) — setup + build Docker
 - [AVALIACAO_FUNCIONAL.md](AVALIACAO_FUNCIONAL.md) — roteiro de avaliação

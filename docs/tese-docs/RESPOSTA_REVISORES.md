@@ -139,10 +139,10 @@ configuração e a versão são obtidos*, não como são pontuados depois.
 > permissões de sessão do root via SSH?"
 
 **Estado: RESOLVIDO — implementado sem probing ativo, porque o objetivo do
-AEGIS é avaliar o ficheiro de configuração efetivo, não o estado de sessões
+CASPAR é avaliar o ficheiro de configuração efetivo, não o estado de sessões
 em runtime.**
 
-O AEGIS não estabelece sessões SSH reais nem interroga o alvo pela rede para
+O CASPAR não estabelece sessões SSH reais nem interroga o alvo pela rede para
 responder "a pessoa autenticar-se-ia como root?" — essa pergunta está
 inteiramente contida na configuração declarada (`sshd_config` efetivo, com
 todos os `Include` e blocos `Match` resolvidos). Em vez de probing, foi
@@ -185,7 +185,7 @@ Isto confirma a reclassificação já feita antes da implementação: o ponto do
 revisor identificava corretamente uma lacuna real (blocos `Match` não
 avaliados), e a solução correta era completar o parser estático — não
 introduzir live-probing, que seria inconsistente com o desenho
-determinístico/offline do AEGIS.
+determinístico/offline do CASPAR.
 
 ---
 
@@ -233,7 +233,7 @@ revisor identificou:
 
 Isto não pretende ser uma cobertura exaustiva de CTI (não substitui um feed
 MISP/OTX ao vivo, que introduziria uma dependência de rede inconsistente
-com o desenho offline do AEGIS) — é, deliberadamente, um sinal adicional
+com o desenho offline do CASPAR) — é, deliberadamente, um sinal adicional
 curado, tal como o próprio mecanismo de CVE já era curado via
 `CPE_TEMPLATES`. Extensão da tabela `_TTP_TABLE` fica registada como
 trabalho futuro de cobertura, não de arquitetura.

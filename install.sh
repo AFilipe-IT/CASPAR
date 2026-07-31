@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CASPAR — Configuration Assessment and Security Posture Automated Review
+# CASPAR — Configuration Analysis, Security Posture Assessment and Reporting
 # Instalação via Docker (um único comando):
 #   curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
 #
