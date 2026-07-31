@@ -1,5 +1,6 @@
 #!/bin/bash
-# install.sh — instalação local do AEGIS numa máquina nova (sem Docker).
+# install-native.sh — instalação local do AEGIS numa máquina nova (sem Docker).
+# Para instalação automática com Docker (traz Ollama incluído), usa install.sh.
 set -e
 echo "=== AEGIS Install ==="
 

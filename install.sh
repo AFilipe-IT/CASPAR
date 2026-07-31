@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # AEGIS — Configuration Assessment and Security Posture Automated Review
 # Instalação via Docker (um único comando):
-#   curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/AEGIS/master/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
 #
 # Para uma instalação nativa (venv + pip, sem Docker), usa install-native.sh.
 

@@ -70,6 +70,11 @@ class Database:
         """Filesystem path of this database (":memory:" when in-memory)."""
         return self._path
 
+    @property
+    def conn(self) -> sqlite3.Connection:
+        """The underlying connection (e.g. for manifest.build_manifest)."""
+        return self._conn
+
     # ------------------------------------------------------------------ #
     # Context manager support                                              #
     # ------------------------------------------------------------------ #
@@ -125,6 +130,8 @@ class Database:
              "ALTER TABLE misconfigurations ADD COLUMN rule_type TEXT NOT NULL DEFAULT 'value'"),
             ("required_when",
              "ALTER TABLE misconfigurations ADD COLUMN required_when TEXT NOT NULL DEFAULT 'always'"),
+            ("confidence",
+             "ALTER TABLE misconfigurations ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0"),
         ]
         for col_name, sql in simple_migrations:
             try:
@@ -179,10 +186,13 @@ class Database:
                     rule_type        TEXT    NOT NULL DEFAULT 'value',
                     required_when    TEXT    NOT NULL DEFAULT 'always',
                     expected_value_prefix TEXT NOT NULL DEFAULT '',
+                    confidence       REAL    NOT NULL DEFAULT 1.0,
                     UNIQUE (target_name, directive, bad_value, expected_value_prefix)
                 )
             """)
-            self._conn.execute("""
+            has_confidence = "confidence" in existing_cols
+            confidence_select = "confidence" if has_confidence else "1.0"
+            self._conn.execute(f"""
                 INSERT INTO misconfigurations_new
                     SELECT id, target_id, target_name,
                            directive, bad_value, good_value,
@@ -192,7 +202,7 @@ class Database:
                            justification, recommendation,
                            created_at, updated_at,
                            narrative, rule_type, required_when,
-                           ''
+                           '', {confidence_select}
                     FROM misconfigurations
             """)
             after = self._conn.execute(
@@ -303,7 +313,7 @@ class Database:
                 base_score, temporal_score,
                 gel, grl, cves, cce_id, cis_section,
                 justification, recommendation,
-                rule_type, required_when, expected_value_prefix
+                rule_type, required_when, expected_value_prefix, confidence
             ) VALUES (
                 :id, :target_id, :target_name,
                 :directive, :bad_value, :good_value,
@@ -311,7 +321,7 @@ class Database:
                 :base_score, :temporal_score,
                 :gel, :grl, :cves, :cce_id, :cis_section,
                 :justification, :recommendation,
-                :rule_type, :required_when, :expected_value_prefix
+                :rule_type, :required_when, :expected_value_prefix, :confidence
             )
             ON CONFLICT(target_name, directive, bad_value, expected_value_prefix) DO UPDATE SET
                 good_value            = excluded.good_value,
@@ -333,6 +343,7 @@ class Database:
                 rule_type             = excluded.rule_type,
                 required_when         = excluded.required_when,
                 expected_value_prefix = excluded.expected_value_prefix,
+                confidence            = excluded.confidence,
                 updated_at            = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
             """,
             {
@@ -360,6 +371,7 @@ class Database:
                 "rule_type": m.rule_type,
                 "required_when": m.required_when,
                 "expected_value_prefix": m.expected_value_prefix,
+                "confidence": m.confidence,
             },
         )
         self._conn.commit()
@@ -492,6 +504,7 @@ class Database:
             rule_type=row["rule_type"] if "rule_type" in row.keys() else "value",
             required_when=row["required_when"] if "required_when" in row.keys() else "always",
             expected_value_prefix=row["expected_value_prefix"] if "expected_value_prefix" in row.keys() else "",
+            confidence=row["confidence"] if "confidence" in row.keys() else 1.0,
         )
 
     # ------------------------------------------------------------------ #

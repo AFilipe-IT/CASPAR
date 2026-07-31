@@ -566,7 +566,7 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
         # Reproducibility manifest: what code + knowledge base produced these
         # scores. Matching manifest + matching input_hash ⇒ identical scores.
         manifest=build_manifest(db.path, meta.name,
-                                rules_count=len(_target_rules)),
+                                rules_count=len(_target_rules), conn=db.conn),
     )
 
     logger.info(

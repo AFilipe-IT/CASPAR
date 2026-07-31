@@ -2,7 +2,7 @@
 set -e
 
 export OLLAMA_HOST=http://localhost:11434
-MODEL="${AEGIS_MODEL:-mistral:7b}"
+MODEL="${AEGIS_MODEL:-qwen2.5:14b}"
 
 # Seed the persistent data dir (DB + plugins volume) before anything else, so
 # fetched plugins survive a --rm container. Idempotent.
@@ -55,8 +55,8 @@ if echo "$*" | grep -qE "plugin add|plugin fetch|build" && \
 fi
 
 # Args extra a passar ao sca. CRÍTICO: forçar o mesmo modelo que descarregamos
-# aqui — o CLI usa por omissão qwen2.5:14b, que não existe na imagem, e o Ollama
-# devolve 404 em /api/chat para um modelo não descarregado.
+# aqui — se AEGIS_MODEL for trocado para algo diferente do default do CLI, o
+# Ollama devolve 404 em /api/chat para um modelo não descarregado/carregado.
 EXTRA_ARGS=()
 
 if [ "$NEEDS_LLM" -eq 1 ]; then

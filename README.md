@@ -2,18 +2,20 @@
 
 **Framework genérico de scoring de configurações de segurança baseado em NISTIR 7502 (CCSS)**
 
-> **Este documento é a vitrine e referência de comandos.** Os outros três têm papéis distintos:
+> **Este documento é a vitrine e referência de comandos.** A restante documentação vive em [docs/](docs/); os documentos ligados à dissertação estão em [docs/tese-docs/](docs/tese-docs/).
 >
 > | Documento | Papel | Lê-o quando… |
 > |---|---|---|
 > | **README.md** (este) | Vitrine + referência de comandos | queres saber o que é e como usar |
-> | [GUIA_AEGIS.md](GUIA_AEGIS.md) | Guia de utilizador + demonstração | queres perceber e demonstrar, do zero |
-> | [GUIA_TECNICO.md](GUIA_TECNICO.md) | Arquitectura interna | vais mexer no código |
-> | [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) | Setup + build das imagens Docker | vais testar numa máquina nova |
-> | [AVALIACAO_FUNCIONAL.md](AVALIACAO_FUNCIONAL.md) | Roteiro de avaliação funcional (Ubuntu 22.04) | vais avaliar o projeto de ponta a ponta |
-> | [VALIDACAO.md](VALIDACAO.md) | Plano de validação completo (científica, funcional, fiabilidade, desempenho, tradeoffs) | queres saber como a ferramenta se valida e mede |
-> | [DISSERTACAO_REFERENCIA.md](DISSERTACAO_REFERENCIA.md) | Material-fonte consolidado para a tese (funcionalidades, implementação, validações) | vais escrever a dissertação |
-> | [HANDOFF.md](HANDOFF.md) | Briefing de continuação (histórico) | retomas o projeto noutra sessão/máquina |
+> | [GUIA_AEGIS.md](docs/GUIA_AEGIS.md) | Guia de utilizador + demonstração | queres perceber e demonstrar, do zero |
+> | [GUIA_TECNICO.md](docs/GUIA_TECNICO.md) | Arquitectura interna | vais mexer no código |
+> | [GUIA_VM_UBUNTU22.md](docs/GUIA_VM_UBUNTU22.md) | Preparar uma VM Ubuntu 22.04 limpa do zero (Docker + nativa) | acabaste de criar a VM e ainda não tens Docker/Python configurados |
+> | [GUIA_TESTE_MAQUINA.md](docs/GUIA_TESTE_MAQUINA.md) | Setup + build das imagens Docker | vais testar numa máquina nova, já com Docker/deps instalados |
+> | [TESTAR_COMANDOS.md](docs/TESTAR_COMANDOS.md) | Checklist de todos os subcomandos do CLI, um a um | queres confirmar que a ferramenta está operacional |
+> | [AVALIACAO_FUNCIONAL.md](docs/AVALIACAO_FUNCIONAL.md) | Roteiro de avaliação funcional (Ubuntu 22.04) | vais avaliar o projeto de ponta a ponta |
+> | [VALIDACAO.md](docs/VALIDACAO.md) | Plano de validação completo (científica, funcional, fiabilidade, desempenho, tradeoffs) | queres saber como a ferramenta se valida e mede |
+> | [DISSERTACAO_REFERENCIA.md](docs/tese-docs/DISSERTACAO_REFERENCIA.md) | Material-fonte consolidado para a tese (funcionalidades, implementação, validações) | vais escrever a dissertação |
+> | [HANDOFF.md](docs/HANDOFF.md) | Briefing de continuação (histórico) | retomas o projeto noutra sessão/máquina |
 
 ---
 
@@ -129,7 +131,7 @@ sudo apt-get install poppler-utils   # Ubuntu / Debian / WSL2
 Um one-liner instala as imagens e um wrapper `sca` no PATH — sem clonar o repo, sem ambiente Python:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/AEGIS/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
 ```
 
 Existem duas imagens: **`alfilipe/aegis:latest`** (leve, para scan/runtime) e **`alfilipe/aegis:full`** (com Ollama embutido, para build-time: `plugin add` / `plugin fetch --then-install`). O wrapper escolhe a imagem certa consoante o comando.
@@ -137,7 +139,7 @@ Existem duas imagens: **`alfilipe/aegis:latest`** (leve, para scan/runtime) e **
 **Persistência.** Plugins instalados via `plugin add` / `plugin fetch --then-install` e a base de dados que eles populam são gravados num volume Docker (`aegis_data`, montado em `/home/aegis/data`), pelo que **sobrevivem entre execuções** apesar do `--rm`. Na primeira utilização a DB é semeada a partir da versão canónica embutida na imagem (idempotente, nunca sobrepõe uma DB existente).
 
 ```bash
-# instalar mongodb (usa o modelo por omissão, mistral:7b)
+# instalar mongodb (usa o modelo por omissão, qwen2.5:14b)
 sca plugin fetch mongodb --then-install
 
 # um container novo e separado continua a ver o plugin instalado
