@@ -1,9 +1,9 @@
-# AEGIS — Briefing de Continuação (handoff)
+# CASPAR — Briefing de Continuação (handoff)
 
 > **Propósito:** dá este ficheiro a uma IA (ou a ti, noutra sessão/máquina) no
 > início. Resume, com FACTOS VERIFICADOS, o que o projeto é, onde está, as
 > decisões e invariantes que não se podem violar, e o que falta. Para detalhe:
-> [README.md](README.md) (vitrine + comandos), [GUIA_AEGIS.md](GUIA_AEGIS.md)
+> [README.md](README.md) (vitrine + comandos), [GUIA_CASPAR.md](GUIA_CASPAR.md)
 > (utilizador/demo), [GUIA_TECNICO.md](GUIA_TECNICO.md) (arquitectura interna),
 > [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) (setup + build Docker).
 >
@@ -21,7 +21,7 @@
 
 ---
 
-## 1. O que é o AEGIS
+## 1. O que é o CASPAR
 
 Framework Python que lê a configuração de um serviço (ficheiro, directório,
 serviço instalado, imagem Docker, **ou ficheiro IaC**), a compara contra um
@@ -70,8 +70,8 @@ kubernetes, dockerfile, azure-iac (Terraform/Bicep/ARM). Fontes: CIS Benchmark
 Dockerfile, HCL, Bicep, ARM JSON.
 
 **Avaliação / baselines** (`scripts/`): `evaluate.py` (composição da KB, MAE vs
-CCE, recall nas fixtures); `baseline_compare.py` (AEGIS vs **Trivy** em IaC/
-Docker; AEGIS vs **OpenSCAP** `--oscap` em Ubuntu OS). Ver §7.
+CCE, recall nas fixtures); `baseline_compare.py` (CASPAR vs **Trivy** em IaC/
+Docker; CASPAR vs **OpenSCAP** `--oscap` em Ubuntu OS). Ver §7.
 
 **Gestão de plugins (build-time):**
 - `plugin add` (extrai regras de um PDF CIS ou XCCDF STIG via LLM+RAG),
@@ -100,7 +100,7 @@ Docker; AEGIS vs **OpenSCAP** `--oscap` em Ubuntu OS). Ver §7.
 **Garantias transversais:**
 - **Manifesto de reprodutibilidade** em cada scan (§5) — score auditável.
 - **RAG build-time** — conhecimento ingerido uma vez, consultado sempre (§5).
-- **Persistência Docker** — plugins/DB sobrevivem `--rm` via volume `aegis_data`.
+- **Persistência Docker** — plugins/DB sobrevivem `--rm` via volume `caspar_data`.
 - **623 testes** + CI; runtime **offline e determinístico** por construção.
 
 ---
@@ -137,8 +137,8 @@ Docker; AEGIS vs **OpenSCAP** `--oscap` em Ubuntu OS). Ver §7.
 
 ## 3. Ambiente
 
-- **Directório:** `~/aegis/` (WSL2 Ubuntu). Venv em `.venv/`.
-- **Comando:** `sca` (via `pip install -e .`) ou `python -m cli.main …`.
+- **Directório:** `~/caspar/` (WSL2 Ubuntu). Venv em `.venv/`.
+- **Comando:** `caspar` (via `pip install -e .`) ou `python -m cli.main …`.
   ⚠️ Não existe `python` global com deps — usa **sempre** o venv:
   `source .venv/bin/activate` (ou `.venv/bin/python -m …`).
 - **Deps runtime:** pydantic, click, **pyyaml** (parser K8s). Build: openpyxl,
@@ -200,7 +200,7 @@ suppress, doctor, fix, **promote** (`--stats`).
 ## 5. Features-chave recentes (para não reinventar)
 
 - **Manifesto de reprodutibilidade** (`core/manifest.py`): cada `ScanResult`
-  grava versão do AEGIS + **SHA-256 da base de conhecimento** + nº regras.
+  grava versão do CASPAR + **SHA-256 da base de conhecimento** + nº regras.
   Rodapé do scan e campo `manifest` no JSON. *Mesmo manifesto + mesmo input ⇒
   mesmos scores*, verificável por terceiros. **É a forma auditável da tese.**
 - **RAG build-time** (`cli/_knowledge.py`): conhecimento (benchmark + manual +
@@ -264,19 +264,19 @@ suppress, doctor, fix, **promote** (`--stats`).
 8. **Regenerar a DB canónica após um build.** Depois de `build_azure`/curated
    gravarem em `ccss.db`, **tens de** regenerar o dump para as regras viajarem:
    ```bash
-   # a aegis_meta é precisa (reseed) e o .dump só a inclui se existir na DB:
-   sqlite3 ccss.db "CREATE TABLE IF NOT EXISTS aegis_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL); INSERT OR REPLACE INTO aegis_meta VALUES('base_db_version','2');"
+   # a caspar_meta é precisa (reseed) e o .dump só a inclui se existir na DB:
+   sqlite3 ccss.db "CREATE TABLE IF NOT EXISTS caspar_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL); INSERT OR REPLACE INTO caspar_meta VALUES('base_db_version','2');"
    sqlite3 ccss.db .dump > data/ccss_canonical.sql
    ```
-   Sem a `aegis_meta` no dump, `tests/test_reseed.py` parte. (Já mordeu.)
+   Sem a `caspar_meta` no dump, `tests/test_reseed.py` parte. (Já mordeu.)
 
 9. **PDFs de benchmark são material licenciado** — gitignored, NÃO viajam no
    git nem na imagem (excepto o NISTIR). Por isso 13 testes RAG do apache fazem
    *skip* num clone limpo/CI — normal, não é falha. Copiar os PDFs à mão só é
    preciso para correr um build LLM.
 
-10. **Imagens Docker: `latest` primeiro, `full` depois** (`aegis:full` é
-    `FROM aegis:latest`). Ordem inversa = código velho na `full`. O build LLM
+10. **Imagens Docker: `latest` primeiro, `full` depois** (`caspar:full` é
+    `FROM caspar:latest`). Ordem inversa = código velho na `full`. O build LLM
     (`plugin add`, `build_azure`) precisa da `:full` (Ollama embutido). Os
     comandos/regras novos só entram nas imagens após **rebuild** — ver
     [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) §3.
@@ -308,7 +308,7 @@ suppress, doctor, fix, **promote** (`--stats`).
 - **Deteção — recall nas fixtures vulneráveis** (`scripts/evaluate.py`):
   **100% (14/14)** — nginx, azure-iac, kubernetes, dockerfile.
 - **Reprodutibilidade** (manifesto, §5): consistência interna verificável.
-- **Baseline Trivy** (`scripts/baseline_compare.py`): AEGIS vs Trivy no MESMO
+- **Baseline Trivy** (`scripts/baseline_compare.py`): CASPAR vs Trivy no MESMO
   ficheiro — `azure_storage_vulnerable.tf` (9 vs 13), `Dockerfile.vulnerable`
   (4 vs 5). Achado: o Trivy apanhou `https_traffic_only_enabled` que o build LLM
   perdeu (mapeou o sinónimo `secure_transfer_required`) — blind spots distintos.
@@ -316,7 +316,7 @@ suppress, doctor, fix, **promote** (`--stats`).
   filtra o subconjunto config-based que o target `ubuntu` cobre. **Validado num
   Ubuntu 22.04 real (2026-07-09): 38 regras sobreponíveis, 24 fail / 1 pass
   REAIS** (no WSL de dev dava `notapplicable` — os probes OVAL precisam de um
-  sistema real). A diferença de escopo (AEGIS pontua FICHEIROS; OpenSCAP audita
+  sistema real). A diferença de escopo (CASPAR pontua FICHEIROS; OpenSCAP audita
   ESTADO do sistema vivo) é ela própria um achado da tese.
 
 **→ A PARTE PRÁTICA ESTÁ FECHADA E VALIDADA** num Ubuntu 22.04 real: 623 testes,
@@ -368,19 +368,19 @@ Polimento opcional que fica (por valor):
 ## 9. Verificação (corre isto para confirmar o estado)
 
 ```bash
-cd ~/sca && source .venv/bin/activate
+cd ~/caspar && source .venv/bin/activate
 
 python -m pytest tests/ -q                 # ~623 passed (uns skips se faltam PDFs)
-sca doctor                              # ✓ healthy
-sca targets                             # 11 targets (+ dummy), incl. ubuntu/azure-iac/k8s/dockerfile
-sca scan test_nginx.conf                # ≈5.7 [Medium]
-sca scan test_target/azure_storage_vulnerable.tf   # ≈8.5 [High] (Terraform)
-sca scan test_target/pod_vulnerable.yaml           # ≈10.0 [Critical] + chain
-sca scan test_target/ubuntu_demo/sysctl.conf       # ≈5.8 [Medium] (Ubuntu OS)
+caspar doctor                              # ✓ healthy
+caspar targets                             # 11 targets (+ dummy), incl. ubuntu/azure-iac/k8s/dockerfile
+caspar scan test_nginx.conf                # ≈5.7 [Medium]
+caspar scan test_target/azure_storage_vulnerable.tf   # ≈8.5 [High] (Terraform)
+caspar scan test_target/pod_vulnerable.yaml           # ≈10.0 [Critical] + chain
+caspar scan test_target/ubuntu_demo/sysctl.conf       # ≈5.8 [Medium] (Ubuntu OS)
 
 # avaliação + baselines (material da tese):
 python -m scripts.evaluate                 # KB · MAE 0% · recall 100%
-python -m scripts.baseline_compare --oscap # AEGIS vs Trivy / OpenSCAP
+python -m scripts.baseline_compare --oscap # CASPAR vs Trivy / OpenSCAP
 python scripts/determinism_experiment.py analyze  # 29/30 unânime (re-correr: run --runs 5, ~2h com Ollama)
 
 # contagens da DB (devem bater com a tabela do §2):

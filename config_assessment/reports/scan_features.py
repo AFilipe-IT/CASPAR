@@ -27,10 +27,10 @@ def issue_key(issue: dict) -> str:
 
 
 def load_scan(path: str | Path) -> dict:
-    """Load a scan JSON produced by `sca scan --report -f json`."""
+    """Load a scan JSON produced by `caspar scan --report -f json`."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if "global_temporal_score" not in data:
-        raise ValueError(f"{path}: not an AEGIS scan JSON "
+        raise ValueError(f"{path}: not a CASPAR scan JSON "
                          "(missing 'global_temporal_score')")
     return data
 
@@ -80,7 +80,7 @@ def _severity_color(score: float) -> str:
     return "brightgreen"
 
 
-def badge_url(score: float, label: str = "AEGIS") -> str:
+def badge_url(score: float, label: str = "CASPAR") -> str:
     """A shields.io badge URL for a scan score."""
     color = _severity_color(score)
     value = f"{score:.1f}/10"
@@ -88,7 +88,7 @@ def badge_url(score: float, label: str = "AEGIS") -> str:
             f"{label}-{value.replace('/', '%2F').replace(' ', '%20')}-{color}")
 
 
-def badge_markdown(score: float, label: str = "AEGIS") -> str:
+def badge_markdown(score: float, label: str = "CASPAR") -> str:
     return f"![{label} Score]({badge_url(score, label)})"
 
 
@@ -134,9 +134,9 @@ class Suppression:
 
 
 class SuppressionStore:
-    """A small JSON file of accepted-risk suppressions (default .aegis-suppress.json)."""
+    """A small JSON file of accepted-risk suppressions (default .caspar-suppress.json)."""
 
-    DEFAULT_PATH = ".aegis-suppress.json"
+    DEFAULT_PATH = ".caspar-suppress.json"
 
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path or self.DEFAULT_PATH)

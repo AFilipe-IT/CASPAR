@@ -1,7 +1,7 @@
 """
 tests/test_remediation.py
 -------------------------
-Assisted remediation (sca fix): value rules with a literal good_value become
+Assisted remediation (caspar fix): value rules with a literal good_value become
 in-place line rewrites; prose/absence findings are manual. Nothing is written
 unless asked, and prose good_values never corrupt a config.
 """

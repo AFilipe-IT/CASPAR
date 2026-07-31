@@ -1,11 +1,11 @@
 """
-cli/main.py — AEGIS CLI entry point.
+cli/main.py — CASPAR CLI entry point.
 
-  sca scan /tmp/httpd.conf
-  sca scan /etc/apache2/
-  sca scan --live apache2
-  sca scan docker://httpd:2.4
-  sca scan docker://ccss-test-apache:vulnerable --report --format html
+  caspar scan /tmp/httpd.conf
+  caspar scan /etc/apache2/
+  caspar scan --live apache2
+  caspar scan docker://httpd:2.4
+  caspar scan docker://ccss-test-apache:vulnerable --report --format html
 
 This module only assembles the CLI: the `cli` click group, command
 registration, and logging setup. The implementation lives in:
@@ -65,12 +65,12 @@ from cli.commands.manage_cmds import suppress, doctor, fix, promote   # noqa: E4
 # ── CLI ────────────────────────────────────────────────────────────
 
 @click.group()
-@click.option("--db", default=lambda: os.environ.get("AEGIS_DB", "ccss.db"),
-              show_default="ccss.db (or $AEGIS_DB)")
+@click.option("--db", default=lambda: os.environ.get("CASPAR_DB", "ccss.db"),
+              show_default="ccss.db (or $CASPAR_DB)")
 @click.option("--verbose", "-v", is_flag=True)
 @click.pass_context
 def cli(ctx: click.Context, db: str, verbose: bool) -> None:
-    """AEGIS — Configuration Assessment and Security Posture Automated Review.
+    """CASPAR — Configuration Assessment and Security Posture Automated Review.
 
     Security configuration scoring framework based on CCSS/NISTIR 7502.
     """

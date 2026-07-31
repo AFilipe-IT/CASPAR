@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-scripts/baseline_compare.py — AEGIS vs external baselines.
+scripts/baseline_compare.py — CASPAR vs external baselines.
 
-Compares AEGIS's findings against established scanners on the SAME input, to
+Compares CASPAR's findings against established scanners on the SAME input, to
 position the AMiSA methodology in the dissertation:
 
   - Trivy (`trivy config`) on IaC (Terraform) and Dockerfiles.
   - OpenSCAP (`oscap`) on OS config — only if installed (optional).
 
 The point is NOT "who finds more". It is a qualitative + quantitative contrast:
-both detect misconfigurations, but AEGIS attaches a REPRODUCIBLE CCSS SCORE and
+both detect misconfigurations, but CASPAR attaches a REPRODUCIBLE CCSS SCORE and
 a narrative to each, where Trivy/OpenSCAP give a fixed severity label / pass-fail.
 Overlap and gaps (each tool's blind spots) are the interesting findings.
 
@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def _caspar_findings(rel_path: str) -> dict:
-    """AEGIS's findings on a file: count, score, per-issue directive+score."""
+    """CASPAR's findings on a file: count, score, per-issue directive+score."""
     import cli.main as m
     m._discover_plugins()
     from config_assessment.core.db.database import Database
@@ -84,8 +84,8 @@ def _oscap_datastream() -> Path | None:
     return dss[-1] if dss else None
 
 
-# AEGIS's ubuntu target covers these config-based control families; we compare
-# OpenSCAP against AEGIS only on this overlapping subset (fair basis — both
+# CASPAR's ubuntu target covers these config-based control families; we compare
+# OpenSCAP against CASPAR only on this overlapping subset (fair basis — both
 # read the same kind of config value). OpenSCAP rule ids carry these tokens.
 _OVERLAP_TOKENS = ("sysctl", "accept_redirects", "source_route", "rp_filter",
                    "send_redirects", "syncookies", "icmp_echo", "ip_forward",
@@ -96,7 +96,7 @@ _OVERLAP_TOKENS = ("sysctl", "accept_redirects", "source_route", "rp_filter",
 
 def _oscap_findings(profile: str = "cis_level1_server") -> dict:
     """Run `oscap xccdf eval` on the LIVE system with the CIS profile and
-    return the results for the config-based subset AEGIS also covers.
+    return the results for the config-based subset CASPAR also covers.
 
     OpenSCAP scores whole-system state; we filter to the overlapping controls
     so the comparison is like-for-like (a config-file value, not a stat/module
@@ -168,7 +168,7 @@ def run(with_oscap: bool = False) -> dict:
             report["trivy"][rel] = {"skipped": "fixture missing"}
             continue
         report["trivy"][rel] = {
-            "sca": _caspar_findings(rel),
+            "caspar": _caspar_findings(rel),
             "trivy": _trivy_findings(rel),
         }
     # OpenSCAP evaluates the LIVE system, so it's opt-in (slower, and only
@@ -180,16 +180,16 @@ def run(with_oscap: bool = False) -> dict:
 
 def _print(report: dict) -> None:
     print("\n" + "=" * 68)
-    print("  AEGIS vs TRIVY — IaC / container misconfiguration detection")
+    print("  CASPAR vs TRIVY — IaC / container misconfiguration detection")
     print("=" * 68)
     for rel, cmp in report["trivy"].items():
         name = Path(rel).name
         if "skipped" in cmp:
             print(f"\n  {name}: skipped ({cmp['skipped']})")
             continue
-        c, t = cmp["sca"], cmp["trivy"]
+        c, t = cmp["caspar"], cmp["trivy"]
         print(f"\n  ── {name}")
-        print(f"     AEGIS : {c['count']:>2} findings · "
+        print(f"     CASPAR : {c['count']:>2} findings · "
               f"score {c['score']}/10 [{c['severity']}]  "
               f"(reproducible CCSS per finding)")
         if "skipped" in t:
@@ -201,7 +201,7 @@ def _print(report: dict) -> None:
             # Overlap by directive name vs Trivy title/id is fuzzy — report the
             # counts and let the thesis discuss specific overlaps qualitatively.
     print("\n" + "=" * 68)
-    print("  AEGIS vs OpenSCAP — Ubuntu OS hardening (config-based subset)")
+    print("  CASPAR vs OpenSCAP — Ubuntu OS hardening (config-based subset)")
     print("=" * 68)
     osc = report["oscap"]
     if not osc["available"]:
@@ -229,10 +229,10 @@ def _print(report: dict) -> None:
             print(f"     pass:{r['overlap_pass']}  fail:{r['overlap_fail']}  "
                   f"(binary verdict, no score)")
         if cu:
-            print(f"\n  AEGIS (same control family, on a config file):")
+            print(f"\n  CASPAR (same control family, on a config file):")
             print(f"     {cu['count']} findings · score {cu['score']}/10 "
                   f"[{cu['severity']}]   (reproducible CCSS + narrative per finding)")
-        print("\n  → Both cover the same control family; AEGIS scores a config")
+        print("\n  → Both cover the same control family; CASPAR scores a config")
         print("    FILE deterministically, OpenSCAP audits live-system STATE.")
         print("    That scope difference is itself a thesis finding.")
     print("=" * 68 + "\n")

@@ -1,5 +1,5 @@
 """
-cli/commands/scan_cmds.py — `sca scan` and `sca watch`.
+cli/commands/scan_cmds.py — `caspar scan` and `caspar watch`.
 
 The two runtime entry points: the one-shot deterministic scan, and the
 continuous watcher built on top of it. Registered on the group in cli/main.py.
@@ -42,7 +42,7 @@ logger = logging.getLogger("ccss")
               help="Exit 2 if any Critical issue is present, 1 if over "
                    "--threshold, 0 otherwise (finer CI control).")
 @click.option("--suppress-file", "suppress_file", default=None,
-              help="Suppression file (default .aegis-suppress.json if present) "
+              help="Suppression file (default .caspar-suppress.json if present) "
                    "— accepted-risk issues are hidden and excluded from scoring "
                    "of the exit code.")
 @click.option("--service-version", "service_version", default=None,
@@ -70,10 +70,10 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
     """Analyse service configurations — 4 modes.
 
     \b
-    Mode 1 — file:        sca scan /tmp/httpd.conf
-    Mode 2 — directory:   sca scan /etc/apache2/
-    Mode 3 — live service: sca scan --live apache2
-    Mode 4 — Docker:      sca scan docker://httpd:2.4
+    Mode 1 — file:        caspar scan /tmp/httpd.conf
+    Mode 2 — directory:   caspar scan /etc/apache2/
+    Mode 3 — live service: caspar scan --live apache2
+    Mode 4 — Docker:      caspar scan docker://httpd:2.4
     """
     from config_assessment.core.db.database import Database
     from config_assessment.core.input_resolver import resolve
@@ -85,7 +85,7 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
     if not Path(db_path).exists():
         click.echo(
             click.style(f"DB '{db_path}' not found.\n", fg="yellow") +
-            "Run: " + click.style("sca build --benchmark <pdf>", bold=True),
+            "Run: " + click.style("caspar build --benchmark <pdf>", bold=True),
             err=True,
         )
         sys.exit(2)
@@ -171,13 +171,13 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
     if report:
         # Where reports go, in order of precedence:
         #   1. explicit -o/--output
-        #   2. $AEGIS_REPORTS_DIR (the Docker image sets this to the mounted
+        #   2. $CASPAR_REPORTS_DIR (the Docker image sets this to the mounted
         #      /reports volume, so reports survive a --rm container)
         #   3. a reports/ dir next to the package (native use / dev)
         if output:
             od = Path(output)
-        elif os.environ.get("AEGIS_REPORTS_DIR"):
-            od = Path(os.environ["AEGIS_REPORTS_DIR"])
+        elif os.environ.get("CASPAR_REPORTS_DIR"):
+            od = Path(os.environ["CASPAR_REPORTS_DIR"])
         else:
             od = Path(__file__).resolve().parent.parent.parent / "reports"
         od.mkdir(parents=True, exist_ok=True)
@@ -261,7 +261,7 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
               help="Environment baseline for scoring (as in scan).")
 @click.option("--log", "log_path", default=None, metavar="FILE",
               help="Append alerts to FILE instead of the terminal (for "
-                   "background use: `sca watch cfg --log watch.log &`).")
+                   "background use: `caspar watch cfg --log watch.log &`).")
 @click.option("--notify", is_flag=True, default=False,
               help="Also broadcast worsening alerts as a system notification "
                    "(wall / notify-send), so they reach any terminal.")
@@ -276,16 +276,16 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
     green when it improved. Runs in the background with the terminal free.
 
     With --log, alerts are appended to a file and the terminal stays clean —
-    ideal for `sca watch cfg --log watch.log &`; read it with `cat watch.log`.
+    ideal for `caspar watch cfg --log watch.log &`; read it with `cat watch.log`.
 
-    Full detail is intentionally omitted — run `sca scan <config>` for the
+    Full detail is intentionally omitted — run `caspar scan <config>` for the
     complete report. Data comes from the DB (zero-LLM, zero-network).
 
     \b
-    sca watch /etc/nginx/nginx.conf
-    sca watch /etc/apache2/ --profile production
-    sca watch --live apache2                    # find + watch its config dir
-    sca watch nginx.conf --log watch.log &      # background, terminal free
+    caspar watch /etc/nginx/nginx.conf
+    caspar watch /etc/apache2/ --profile production
+    caspar watch --live apache2                    # find + watch its config dir
+    caspar watch nginx.conf --log watch.log &      # background, terminal free
     """
     from config_assessment.core.db.database import Database
     from config_assessment.core.input_resolver import resolve
@@ -338,7 +338,7 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
         click.echo(
             f"  {click.style('○', fg='cyan')} watching {name} in background — "
             f"alerts → {click.style(log_path, bold=True)}"
-            + click.style("  (stop: docker stop aegis-watch, or Ctrl-C)", dim=True))
+            + click.style("  (stop: docker stop caspar-watch, or Ctrl-C)", dim=True))
 
     def _emit(styled_line: str) -> None:
         if _log_fh is not None:
@@ -381,7 +381,7 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
                 if notify and result.global_temporal_score > \
                         (prev.global_temporal_score if prev else 0.0) + 0.05:
                     _notify_system(
-                        f"AEGIS: {name} risk {prev.global_temporal_score:.1f}"
+                        f"CASPAR: {name} risk {prev.global_temporal_score:.1f}"
                         f"→{result.global_temporal_score:.1f} [{result.severity}]")
             prev = result
     except KeyboardInterrupt:
@@ -408,7 +408,7 @@ def _notify_system(message: str) -> None:
 
     if shutil.which("notify-send"):
         try:
-            subprocess.run(["notify-send", "AEGIS", message],
+            subprocess.run(["notify-send", "CASPAR", message],
                            timeout=5, check=False)
         except (OSError, subprocess.SubprocessError):
             pass

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-scripts/gerar_relatorio.py — Gera o relatório técnico do framework AEGIS em .docx.
+scripts/gerar_relatorio.py — Gera o relatório técnico do framework CASPAR em .docx.
 
 Relatório académico/técnico completo (Português Europeu): trabalho, solução,
 implementação, funcionamento, como testar, resultados, avaliação e conclusões.
@@ -241,7 +241,7 @@ class Report:
             d.add_paragraph()
         t = d.add_paragraph()
         t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r = t.add_run("AEGIS")
+        r = t.add_run("CASPAR")
         r.bold = True
         r.font.size = Pt(46)
         r.font.color.rgb = NAVY
@@ -312,7 +312,7 @@ def build(report: Report):
     # ===================================================================== #
     R.h1("1. Sumário Executivo")
     R.p(
-        "O AEGIS (Configuration Assessment and Security Posture Automated "
+        "O CASPAR (Configuration Assessment and Security Posture Automated "
         "Review) é um framework em Python que avalia automaticamente a postura "
         "de segurança de configurações de serviços e lhes atribui um score "
         "quantitativo de 0 a 10, fundamentado no standard NISTIR 7502 — Common "
@@ -373,7 +373,7 @@ def build(report: Report):
         "Complexity), de impacto (Confidentiality, Integrity, Availability) e "
         "temporais (General Exploit Level, General Remediation Level), e fórmulas "
         "que as combinam num score base e num score temporal. O CCSS é o "
-        "fundamento metodológico do AEGIS.")
+        "fundamento metodológico do CASPAR.")
     R.h2("2.3 Objectivo do trabalho")
     R.p(
         "O objectivo é demonstrar uma metodologia replicável — não um scanner "
@@ -389,7 +389,7 @@ def build(report: Report):
     R.h1("3. A Solução")
     R.h2("3.1 Visão geral")
     R.p(
-        "O AEGIS organiza-se em torno de uma única abstracção — o plugin de "
+        "O CASPAR organiza-se em torno de uma única abstracção — o plugin de "
         "target — e de uma separação rígida entre dois tempos de execução. Um "
         "plugin descreve como detectar, ler e perfilar a configuração de um "
         "serviço; o núcleo genérico trata de tudo o resto (fórmulas, motor de "
@@ -471,7 +471,7 @@ def build(report: Report):
         "separa fisicamente o runtime determinístico do código de build, "
         "tornando explícita a fronteira arquitectural:")
     R.code(
-        "sca/\n"
+        "caspar/\n"
         "├── config_assessment/\n"
         "│   ├── core/            # runtime determinístico (zero LLM)\n"
         "│   │   ├── runtime.py   models.py  target.py  ccss.py\n"
@@ -487,7 +487,7 @@ def build(report: Report):
         "│   ├── reports/         # HTML, dashboard, dashboard online\n"
         "│   ├── parsers/         # parsers genéricos (key_value)\n"
         "│   └── plugins/         # apache_httpd, nginx, ssh, mysql, dummy\n"
-        "├── cli/main.py          # interface CLI (comando «sca»)\n"
+        "├── cli/main.py          # interface CLI (comando «caspar»)\n"
         "├── tests/               # 347 testes\n"
         "├── sources/             # benchmarks/ (PDFs CIS) + stigs/ (XML DISA)\n"
         "├── data/                # base canónica (ccss_canonical.sql)\n"
@@ -578,10 +578,10 @@ def build(report: Report):
     R.h1("5. Funcionamento — Como Está a Funcionar")
     R.h2("5.1 Os quatro modos de scan")
     R.code(
-        "sca scan /tmp/httpd.conf            # 1. ficheiro único\n"
-        "sca scan /etc/apache2/              # 2. directório (segue Includes)\n"
-        "sca scan --live apache2             # 3. serviço instalado\n"
-        "sca scan docker://httpd:2.4         # 4. imagem Docker")
+        "caspar scan /tmp/httpd.conf            # 1. ficheiro único\n"
+        "caspar scan /etc/apache2/              # 2. directório (segue Includes)\n"
+        "caspar scan --live apache2             # 3. serviço instalado\n"
+        "caspar scan docker://httpd:2.4         # 4. imagem Docker")
     R.p(
         "O modo directório segue recursivamente Include/IncludeOptional. O modo "
         "--live usa apache2ctl -V / httpd -V para localizar a configuração real. "
@@ -612,7 +612,7 @@ def build(report: Report):
 
     R.h2("5.3 Enriquecimento por CVE e exploits reais")
     R.p(
-        "Para além do scoring de configuração, o AEGIS cruza a versão concreta "
+        "Para além do scoring de configuração, o CASPAR cruza a versão concreta "
         "do produto com CVEs reais (NVD) e exploits públicos (ExploitDB), "
         "marcando os que constam da CISA KEV. A tabela version_exploits "
         "contém, no estado actual:")
@@ -631,7 +631,7 @@ def build(report: Report):
     R.h3("Detecção da versão do serviço")
     R.p(
         "O cruzamento com CVEs/exploits só é possível quando a versão concreta "
-        "do serviço é conhecida. O AEGIS obtém-na, por ordem de prioridade e "
+        "do serviço é conhecida. O CASPAR obtém-na, por ordem de prioridade e "
         "sem qualquer acesso à rede (o lookup subsequente é feito na base local):")
     R.number("indicada explicitamente pelo utilizador via a flag "
              "--service-version (caminho fiável e determinístico);",
@@ -690,26 +690,26 @@ def build(report: Report):
     R.h1("6. Como Testar")
     R.h2("6.1 Instalação")
     R.code(
-        "git clone <repo> && cd sca\n"
+        "git clone <repo> && cd caspar\n"
         "python3 -m venv .venv && source .venv/bin/activate\n"
         "pip install -r requirement.txt\n"
         "pip install -e .\n"
         "sudo apt-get install poppler-utils   # pdftotext, para ler os PDFs CIS\n"
-        "sca --help")
+        "caspar --help")
     R.p("Requisitos: Python 3.11+, pdftotext (poppler-utils) e, opcionalmente, "
         "Docker (apenas para o modo docker://) e Ollama (apenas para o build).")
 
     R.h2("6.2 Verificação rápida (checkpoints)")
     R.p("Três comandos confirmam que o sistema está operacional:")
     R.code(
-        "sca targets                                  # lista 4 plugins\n"
-        "sca scan test_target/httpd.conf              # score 10.0/10 [Critical]\n"
+        "caspar targets                                  # lista 4 plugins\n"
+        "caspar scan test_target/httpd.conf              # score 10.0/10 [Critical]\n"
         "pytest tests/ -q                                # 347 passed")
     R.p("Resultado esperado e observado:")
     R.table(
         ["Checkpoint", "Esperado", "Observado"],
         [
-            ["sca targets", "4 plugins", "✔ apache-httpd, nginx, ssh, mysql"],
+            ["caspar targets", "4 plugins", "✔ apache-httpd, nginx, ssh, mysql"],
             ["scan httpd.conf", "10.0/10 [Critical]", "✔ 10.0/10 [Critical]"],
             ["pytest tests/", "347 passed", "✔ 347 passed"],
         ],
@@ -853,7 +853,7 @@ def build(report: Report):
     R.h1("9. Conclusões e Trabalho Futuro")
     R.h2("9.1 Conclusões")
     R.p(
-        "O AEGIS demonstra que é possível atribuir scores de risco "
+        "O CASPAR demonstra que é possível atribuir scores de risco "
         "quantitativos, reprodutíveis e auditáveis a más configurações de "
         "segurança, aplicando o standard CCSS (NISTIR 7502) com apoio de um LLM "
         "confinado ao build time. A separação estrita build/runtime resolve a "

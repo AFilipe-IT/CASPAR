@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AEGIS — Configuration Assessment and Security Posture Automated Review
+# CASPAR — Configuration Assessment and Security Posture Automated Review
 # Instalação via Docker (um único comando):
 #   curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
 #
@@ -8,36 +8,36 @@
 set -e
 
 INSTALL_DIR="$HOME/.local/bin"
-WRAPPER="$INSTALL_DIR/sca"
+WRAPPER="$INSTALL_DIR/caspar"
 
 echo "🔍 A verificar dependências..."
 command -v docker >/dev/null 2>&1 || { echo "❌ Docker não encontrado. Instala em https://docs.docker.com/get-docker/"; exit 1; }
 
-echo "📦 A descarregar imagens AEGIS..."
-docker pull alfilipe/aegis:latest
-docker pull alfilipe/aegis:full
+echo "📦 A descarregar imagens CASPAR..."
+docker pull alfilipe/caspar:latest
+docker pull alfilipe/caspar:full
 
 echo "📝 A instalar wrapper..."
 mkdir -p "$INSTALL_DIR"
 
 cat > "$WRAPPER" << 'WRAPPER_EOF'
 #!/usr/bin/env bash
-# AEGIS wrapper — abstrai Docker transparentemente
+# CASPAR wrapper — abstrai Docker transparentemente
 
 # Detectar se o comando precisa de build-time (Ollama).
 # 'plugin fetch --then-install' corre 'plugin add' internamente, por isso
 # precisa igualmente da imagem :full (com Ollama) — mas só com --then-install;
 # um fetch simples (só download) fica na imagem leve.
 BUILDTIME_CMDS="plugin add|build"
-IMAGE="alfilipe/aegis:latest"
+IMAGE="alfilipe/caspar:latest"
 if echo "$*" | grep -qE "$BUILDTIME_CMDS" \
    || { echo "$*" | grep -q "plugin fetch" && echo "$*" | grep -q "\-\-then-install"; }; then
-    IMAGE="alfilipe/aegis:full"
+    IMAGE="alfilipe/caspar:full"
 fi
 
 # Escolher a pasta de trabalho a montar em /workspace. Por omissão é a cwd, mas
 # se o utilizador passar um CAMINHO existente (ficheiro/pasta) fora da cwd — ex.:
-# 'sca watch ~/demo/apache2.conf' corrido de outro sítio — montamos a pasta
+# 'caspar watch ~/demo/apache2.conf' corrido de outro sítio — montamos a pasta
 # DESSE caminho e reescrevemos o argumento para o caminho equivalente dentro do
 # container. Assim o comando funciona de qualquer diretório.
 # Excepções (ficam na cwd): modo --live (o alvo é um nome de serviço, não um
@@ -82,7 +82,7 @@ for _a in "$@"; do
             /*)  # absoluto: se estiver sob a pasta montada, torna-o relativo a /workspace
                 case "$_a" in
                     "$WORKDIR_HOST"/*) _new+=("/workspace/${_a#$WORKDIR_HOST/}") ;;
-                    *)                 _new+=("$_a") ;;   # fora: deixa (o AEGIS avisa)
+                    *)                 _new+=("$_a") ;;   # fora: deixa (o CASPAR avisa)
                 esac ;;
             */*) _new+=("/workspace/$_a") ;;             # relativo com subpasta
             *)   _new+=("$_a") ;;                          # nome simples: já vai p/ /workspace
@@ -105,8 +105,8 @@ fi
 # Em modo --live (e watch), montar /etc do host (leitura) para inspecionar a
 # configuração do serviço em execução. O bind-mount é uma vista live do host,
 # por isso o 'watch' deteta edições feitas no host em tempo real.
-# NOTA: NÃO montar /usr do host — mascararia o binário sca da imagem
-# (/usr/local/bin/sca) e o container deixaria de arrancar.
+# NOTA: NÃO montar /usr do host — mascararia o binário caspar da imagem
+# (/usr/local/bin/caspar) e o container deixaria de arrancar.
 # A deteção de versão recorre, neste modo, ao texto da configuração.
 if echo "$*" | grep -qE "(\-\-live|(^| )watch( |$))"; then
     MOUNT_ARGS="$MOUNT_ARGS -v /etc:/etc:ro"
@@ -163,22 +163,22 @@ fi
 
 # Montar volume persistente para dados (DB + plugins instalados via
 # 'plugin add'/'plugin fetch --then-install'), para que sobrevivam ao --rm.
-DATA_VOL="-v aegis_data:/home/aegis/data"
+DATA_VOL="-v caspar_data:/home/caspar/data"
 
 # Passar a variável de modelo, se definida
 MODEL_ENV=""
-if [ -n "$AEGIS_MODEL" ]; then
-    MODEL_ENV="-e AEGIS_MODEL=$AEGIS_MODEL"
+if [ -n "$CASPAR_MODEL" ]; then
+    MODEL_ENV="-e CASPAR_MODEL=$CASPAR_MODEL"
 fi
 
 # 'watch' é um daemon (loop até Ctrl-C). Dá-lhe um nome previsível para o poderes
-# parar com 'docker stop aegis-watch', e permite só uma instância de cada vez.
+# parar com 'docker stop caspar-watch', e permite só uma instância de cada vez.
 # --init garante que Ctrl-C/kill/docker-stop chegam ao processo dentro do
 # container e o param de imediato (sem --init o loop fica órfão).
 NAME_ARG=""
 if echo "$*" | grep -qE "(^| )watch( |$)"; then
-    NAME_ARG="--name aegis-watch"
-    docker rm -f aegis-watch >/dev/null 2>&1 || true
+    NAME_ARG="--name caspar-watch"
+    docker rm -f caspar-watch >/dev/null 2>&1 || true
 fi
 
 exec docker run --rm --init $NAME_ARG \
@@ -203,13 +203,13 @@ if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
 fi
 
 echo ""
-echo "✅ AEGIS instalado com sucesso!"
+echo "✅ CASPAR instalado com sucesso!"
 echo ""
 echo "Exemplos de utilização:"
-echo "  sca targets"
-echo "  sca scan /etc/apache2/apache2.conf"
-echo "  sca scan --live apache2"
-echo "  sca plugin add --source CIS_PostgreSQL.pdf"
+echo "  caspar targets"
+echo "  caspar scan /etc/apache2/apache2.conf"
+echo "  caspar scan --live apache2"
+echo "  caspar plugin add --source CIS_PostgreSQL.pdf"
 echo ""
 echo "Para usar um modelo diferente:"
-echo "  AEGIS_MODEL=qwen2.5:14b sca plugin add --source benchmark.pdf"
+echo "  CASPAR_MODEL=qwen2.5:14b caspar plugin add --source benchmark.pdf"

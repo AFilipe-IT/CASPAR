@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/evaluate.py — consolidated evaluation of the AMiSA methodology (AEGIS).
+scripts/evaluate.py — consolidated evaluation of the AMiSA methodology (CASPAR).
 
 Produces the numbers the dissertation's evaluation section needs, in one
 reproducible run. Each block is independent and degrades gracefully so a

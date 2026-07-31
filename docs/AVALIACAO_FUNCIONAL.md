@@ -1,6 +1,6 @@
-# AEGIS — Avaliação Funcional (Ubuntu 22.04)
+# CASPAR — Avaliação Funcional (Ubuntu 22.04)
 
-> **Propósito:** roteiro reproduzível para avaliar o AEGIS de ponta a ponta
+> **Propósito:** roteiro reproduzível para avaliar o CASPAR de ponta a ponta
 > numa máquina Ubuntu 22.04 real (nativo, git clone + venv), e recolher os
 > resultados para a secção de avaliação da dissertação. Cada passo diz o que
 > correr, o que esperar, e o que **capturar** para a tese.
@@ -29,7 +29,7 @@ sudo apt-get update && sudo apt-get install -y \
 # (trivy: se não estiver no apt, ver https://trivy.dev/latest/getting-started/installation/)
 
 # clonar + ambiente
-git clone https://github.com/AFilipe-IT/AEGIS.git sca && cd sca
+git clone https://github.com/AFilipe-IT/CASPAR.git caspar && cd caspar
 python3 -m venv .venv && source .venv/bin/activate
 
 # IMPORTANTE: atualizar o pip primeiro. O pip antigo do python3.10-venv (Ubuntu
@@ -38,7 +38,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install --upgrade pip
 pip install "pydantic>=2.0" "click>=8.1" "pyyaml>=6.0" pytest pytest-cov \
             openpyxl requests pypdf
-pip install -e . --no-deps          # instala o pacote AEGIS sem re-resolver
+pip install -e . --no-deps          # instala o pacote CASPAR sem re-resolver
 
 # sanidade dos imports
 python -c "import click, pydantic, yaml, cli.main; print('imports OK')"
@@ -85,18 +85,18 @@ python -m scripts.evaluate
 python -m scripts.baseline_compare
 ```
 
-✓ **Capturar:** a tabela AEGIS vs Trivy (`.tf` 9-vs-13, Dockerfile 4-vs-5) e a
+✓ **Capturar:** a tabela CASPAR vs Trivy (`.tf` 9-vs-13, Dockerfile 4-vs-5) e a
 observação dos *blind spots* (o Trivy apanha `https_traffic_only_enabled` que o
 build LLM mapeou como sinónimo `secure_transfer_required`).
 
 ### 4.2 OpenSCAP (Ubuntu OS) — **aqui é que o 22.04 real conta**
 
-Primeiro, o AEGIS sobre o `sysctl.conf` **real** da máquina. O `/etc/sysctl.conf`
+Primeiro, o CASPAR sobre o `sysctl.conf` **real** da máquina. O `/etc/sysctl.conf`
 é legível sem privilégios, por isso **não precisas de sudo** aqui:
 
 ```bash
 python -m cli.main scan /etc/sysctl.conf
-# (o comando curto 'sca' só existe após 'pip install -e .'; e com sudo o
+# (o comando curto 'caspar' só existe após 'pip install -e .'; e com sudo o
 #  venv não é visto — usa 'sudo .venv/bin/python -m cli.main …' se precisares)
 ```
 
@@ -109,7 +109,7 @@ python -m scripts.baseline_compare --oscap
 ✓ **Capturar:** agora o OpenSCAP deve dar **pass/fail reais** (não
 `notapplicable`) no subconjunto config-based sobreponível. Compara:
 - nº de controlos que ambos avaliam (subconjunto sobreponível);
-- OpenSCAP: pass/fail binário · AEGIS: score CCSS + narrativa por finding.
+- OpenSCAP: pass/fail binário · CASPAR: score CCSS + narrativa por finding.
 
 Para um relatório OpenSCAP navegável (opcional, boa figura para a tese):
 
@@ -133,20 +133,20 @@ Mostra o ciclo detect → remediar → re-scan (bom para narrativa na tese). O
 mkdir -p /tmp/case && cp test_target/ubuntu_demo/sysctl.conf /tmp/case/sysctl.conf
 
 # 1. scan da config insegura → score alto
-sca scan /tmp/case/sysctl.conf --report -f json -o /tmp/r/
+caspar scan /tmp/case/sysctl.conf --report -f json -o /tmp/r/
 
 # 2. remediação assistida (gera .fixed, não toca no original)
-sca fix /tmp/case/sysctl.conf --dry-run    # ver o diff proposto
-sca fix /tmp/case/sysctl.conf              # escreve /tmp/case/sysctl.conf.fixed
+caspar fix /tmp/case/sysctl.conf --dry-run    # ver o diff proposto
+caspar fix /tmp/case/sysctl.conf              # escreve /tmp/case/sysctl.conf.fixed
 
 # 3. re-scan da versão corrigida → score baixo/zero
 #    (renomear p/ o nome canónico para o scan detetar de novo)
 cp /tmp/case/sysctl.conf.fixed /tmp/fixed/sysctl.conf 2>/dev/null || \
   (mkdir -p /tmp/fixed && cp /tmp/case/sysctl.conf.fixed /tmp/fixed/sysctl.conf)
-sca scan /tmp/fixed/sysctl.conf --report -f json -o /tmp/r2/
+caspar scan /tmp/fixed/sysctl.conf --report -f json -o /tmp/r2/
 
 # 4. diff entre os dois scans (delta quantificado)
-sca diff /tmp/r/ccss_*.json /tmp/r2/ccss_*.json
+caspar diff /tmp/r/ccss_*.json /tmp/r2/ccss_*.json
 ```
 
 ✓ **Capturar:** o antes/depois (score alto → baixo) e o `diff` — evidência de
@@ -158,10 +158,10 @@ que a metodologia não só deteta, mas quantifica a melhoria da postura.
 
 ```bash
 # o mesmo scan em duas máquinas / dois momentos → manifesto e score idênticos
-sca scan test_target/nginx.conf | grep reproducible
+caspar scan test_target/nginx.conf | grep reproducible
 ```
 
-✓ **Capturar:** a linha `reproducible: sca 0.1.0 · kb sha256:… · N rules`.
+✓ **Capturar:** a linha `reproducible: caspar 0.1.0 · kb sha256:… · N rules`.
 Se o `kb sha256` for igual ao desta documentação (mesma DB canónica), os scores
 são idênticos por construção — a afirmação de determinismo, verificável.
 
@@ -174,7 +174,7 @@ são idênticos por construção — a afirmação de determinismo, verificável
 | 1 | Unit tests verdes | `pytest tests/ -q` | ☐ |
 | 2 | Smoke test 13/13 | `scripts.functional_check` | ☐ |
 | 3 | MAE 0% + recall 100% | `scripts.evaluate` | ☐ |
-| 4 | Trivy vs AEGIS | `scripts.baseline_compare` | ☐ |
+| 4 | Trivy vs CASPAR | `scripts.baseline_compare` | ☐ |
 | 5 | **OpenSCAP pass/fail reais** | `scripts.baseline_compare --oscap` | ☐ |
 | 6 | Relatório OpenSCAP HTML | `oscap xccdf eval --report` | ☐ |
 | 7 | Estudo de caso detect→fix→re-scan | §5 | ☐ |
@@ -182,7 +182,7 @@ são idênticos por construção — a afirmação de determinismo, verificável
 
 ## Troubleshooting
 
-- **`sca: command not found`** → usa `python -m cli.main …`, ou garante que
+- **`caspar: command not found`** → usa `python -m cli.main …`, ou garante que
   `~/.local/bin` está no PATH (instalação nativa).
 - **OpenSCAP ainda dá `notapplicable`** → confirma que corres com `sudo` (os
   probes precisam de ler estado do sistema) e num Ubuntu real (não WSL).

@@ -1,7 +1,7 @@
 """
 config_assessment/core/db/doctor.py
 -----------------------------------
-Integrity checks for an AEGIS database. Catches the kinds of inconsistency that
+Integrity checks for a CASPAR database. Catches the kinds of inconsistency that
 build/promotion/merge bugs can leave behind, so a broken DB is diagnosed rather
 than silently producing wrong scans.
 
@@ -145,11 +145,11 @@ def _check_scores(conn) -> list[Finding]:
 
 def _check_base_version(conn) -> list[Finding]:
     """The versioned-reseed metadata should be present in a shipped DB."""
-    if "aegis_meta" not in _tables(conn):
+    if "caspar_meta" not in _tables(conn):
         return [Finding("warning", "meta",
-            "no aegis_meta table — versioned reseed cannot track this DB")]
+            "no caspar_meta table — versioned reseed cannot track this DB")]
     row = conn.execute(
-        "SELECT value FROM aegis_meta WHERE key='base_db_version'").fetchone()
+        "SELECT value FROM caspar_meta WHERE key='base_db_version'").fetchone()
     if not row:
-        return [Finding("warning", "meta", "base_db_version not set in aegis_meta")]
+        return [Finding("warning", "meta", "base_db_version not set in caspar_meta")]
     return []

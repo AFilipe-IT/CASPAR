@@ -643,8 +643,8 @@ def resolve(
     if not p.exists():
         raise FileNotFoundError(
             f"Not found: {input_path}\n"
-            f"Hint: use --live for installed services: sca scan --live apache2\n"
-            f"      use docker:// for images:        sca scan docker://httpd:2.4"
+            f"Hint: use --live for installed services: caspar scan --live apache2\n"
+            f"      use docker:// for images:        caspar scan docker://httpd:2.4"
         )
 
     if p.is_dir():

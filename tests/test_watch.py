@@ -266,7 +266,7 @@ def test_notify_broadcasts_on_worsening(monkeypatch):
     prev, now = _Res(0.0, "None", []), _Res(6.1, "Medium", [])
     worse = now.global_temporal_score > prev.global_temporal_score + 0.05
     if worse:
-        m._notify_system(f"AEGIS: cfg {prev.global_temporal_score:.1f}"
+        m._notify_system(f"CASPAR: cfg {prev.global_temporal_score:.1f}"
                          f"→{now.global_temporal_score:.1f}")
     assert calls and "0.0→6.1" in calls[0]
 
@@ -292,8 +292,8 @@ def test_pts_fallback_writes_to_writable_ptys(tmp_path, monkeypatch):
     # Our own tty is something else, so the fake pts is not skipped.
     monkeypatch.setattr("os.ttyname", lambda fd: "/dev/pts/999")
 
-    m._write_to_ptys("\n⚠  AEGIS: cfg 0.0→6.1\n")
-    assert "AEGIS: cfg 0.0→6.1" in fake_pts.read_text()
+    m._write_to_ptys("\n⚠  CASPAR: cfg 0.0→6.1\n")
+    assert "CASPAR: cfg 0.0→6.1" in fake_pts.read_text()
 
 
 def test_log_path_in_missing_dir_errors_cleanly(tmp_path, monkeypatch):

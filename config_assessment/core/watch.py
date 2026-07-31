@@ -5,7 +5,7 @@ Continuous configuration-audit loop. Watches a config file (or directory) and,
 whenever its content changes, re-runs the deterministic scan and reports the
 misconfigurations found and their impact — data already in the DB.
 
-Design notes (keeps the AEGIS runtime invariants):
+Design notes (keeps the CASPAR runtime invariants):
   * Deterministic detection — the loop only *triggers* re-scans; scoring stays
     the zero-LLM/zero-network `runtime.scan`.
   * No baseline, no history, no alerting side-channel. A change → a re-scan →

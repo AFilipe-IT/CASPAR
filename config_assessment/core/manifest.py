@@ -34,7 +34,7 @@ import platform
 import sqlite3
 from pathlib import Path
 
-AEGIS_VERSION = "0.1.0"
+CASPAR_VERSION = "0.1.0"
 
 # (table, primary-key columns to order by, columns to include in the hash —
 # excludes created_at/updated_at/fetched_at bookkeeping timestamps, which
@@ -94,7 +94,7 @@ def build_manifest(db_path: str | Path, target_name: str,
         if own_conn:
             conn.close()
     return {
-        "caspar_version": AEGIS_VERSION,
+        "caspar_version": CASPAR_VERSION,
         "python": platform.python_version(),
         "db_file": Path(str(db_path)).name,
         "db_sha256": db_hash,

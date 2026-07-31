@@ -693,8 +693,8 @@ INSERT INTO version_exploits VALUES('ssh','9.0',16,0,9.80000000000000071,'["CVE-
 INSERT INTO version_exploits VALUES('ssh','9.6',11,0,9.30000000000000071,'["CVE-2007-2768", "CVE-2008-3844", "CVE-2023-51767", "CVE-2024-6387", "CVE-2025-26465", "CVE-2025-32728", "CVE-2026-35385", "CVE-2026-35386", "CVE-2026-35387", "CVE-2026-35388", "CVE-2026-35414"]','[{"edb_id": "52269", "title": "OpenSSH server (sshd) 9.8p1 - Race Condition", "type": "remote", "verified": false, "cve": "CVE-2024-6387", "path": "/home/albertojf/exploitdb/exploits/linux/remote/52269.c"}]','2026-06-24T21:00:11.615Z');
 INSERT INTO version_exploits VALUES('nginx','1.24.0',3,1,7.5,'["CVE-2023-44487", "CVE-2025-23419", "CVE-2026-49975"]','[{"edb_id": "52426", "title": "HTTP/2 2.0 - Denial Of Service (DOS)", "type": "remote", "verified": false, "cve": "CVE-2023-44487", "path": "/home/albertojf/exploitdb/exploits/multiple/remote/52426.py"}]','2026-06-24T20:59:32.887Z');
 INSERT INTO version_exploits VALUES('nginx','1.26.0',2,0,7.5,'["CVE-2025-23419", "CVE-2026-49975"]','[]','2026-06-24T21:02:02.980Z');
-CREATE TABLE aegis_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-INSERT INTO aegis_meta VALUES('base_db_version','2');
+CREATE TABLE caspar_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+INSERT INTO caspar_meta VALUES('base_db_version','2');
 DELETE FROM sqlite_sequence;
 INSERT INTO sqlite_sequence VALUES('targets',15);
 INSERT INTO sqlite_sequence VALUES('attack_chains',52);

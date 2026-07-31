@@ -7,7 +7,7 @@ this framework's parser can read directly.
 
 DELIBERATE SCOPE (documented limitation, important for the thesis): OpenSCAP
 evaluates whole-system STATE (file permissions via stat, loaded kernel modules,
-running services, package presence). AEGIS evaluates config FILES. This target
+running services, package presence). CASPAR evaluates config FILES. This target
 covers only the overlapping, file-based controls — kernel/network hardening
 (`/etc/sysctl.conf`, sysctl.d) and password policy (`/etc/login.defs`). That is
 the fair basis for the OpenSCAP comparison: same controls, different output

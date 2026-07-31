@@ -1,7 +1,7 @@
 """
 tests/test_promote_stats.py
 ---------------------------
-`sca promote --stats` — the learning-loop scoreboard. Promoted rules are
+`caspar promote --stats` — the learning-loop scoreboard. Promoted rules are
 attributable (marker in their justification), so the DB can answer: how much
 of the knowledge base came from the candidate→promote loop, and how much of
 that still awaits operator review (empty good_value)?

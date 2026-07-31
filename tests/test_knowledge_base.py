@@ -195,7 +195,7 @@ def test_plugin_manual_ingests_into_installed_plugin(tmp_path, monkeypatch):
 
 def test_plugin_manual_prefers_external_volume(tmp_path, monkeypatch):
     """In Docker, built-in plugin dirs live INSIDE the image — a manual written
-    there dies with --rm. With $AEGIS_PLUGINS_DIR set, the manual must land in
+    there dies with --rm. With $CASPAR_PLUGINS_DIR set, the manual must land in
     the external (persistent) dir, even for a built-in plugin."""
     import cli.commands.plugin_cmds as pc
     builtin = tmp_path / "builtin"
@@ -205,7 +205,7 @@ def test_plugin_manual_prefers_external_volume(tmp_path, monkeypatch):
     src.write_text("manual")
     monkeypatch.setattr(pc, "_plugin_dirs",
                         lambda: [builtin, external])
-    monkeypatch.setenv("AEGIS_PLUGINS_DIR", str(external))
+    monkeypatch.setenv("CASPAR_PLUGINS_DIR", str(external))
 
     res = CliRunner().invoke(pc.plugin_manual, ["nginx", str(src)])
     assert res.exit_code == 0, res.output

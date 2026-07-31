@@ -1,7 +1,7 @@
 """
 tests/test_trend.py
 -------------------
-`sca trend` — configuration drift, quantified: one sparkline per input,
+`caspar trend` — configuration drift, quantified: one sparkline per input,
 first→last score and net direction, built on the automatically-recorded
 scan history.
 """

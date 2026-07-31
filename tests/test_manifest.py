@@ -2,7 +2,7 @@
 tests/test_manifest.py
 ----------------------
 Reproducibility manifest: every ScanResult records what produced its scores
-(AEGIS version, SHA-256 of the knowledge base content, target + rule count,
+(CASPAR version, SHA-256 of the knowledge base content, target + rule count,
 Python). Matching manifests + matching input_hash ⇒ identical scores — the
 auditable form of the build-time/runtime determinism claim.
 

@@ -17,10 +17,10 @@ logger = logging.getLogger("ccss")
 
 def _plugin_dirs() -> list[Path]:
     """Directories to scan for plugins: the built-in package dir, plus the
-    external $AEGIS_PLUGINS_DIR (a mounted volume) when set, so fetched
+    external $CASPAR_PLUGINS_DIR (a mounted volume) when set, so fetched
     plugins persist outside the image."""
     dirs = [Path(__file__).parent.parent / "config_assessment" / "plugins"]
-    external = os.environ.get("AEGIS_PLUGINS_DIR")
+    external = os.environ.get("CASPAR_PLUGINS_DIR")
     if external:
         dirs.append(Path(external))
     return dirs

@@ -1,5 +1,5 @@
 {
-  "_comment": "Maps an AEGIS service/OS name to public benchmark sources. Type 'stigviewer' downloads structured STIG JSON from stigviewer.com (/stigs/<slug>/export/json) and converts it to XCCDF XML that 'sca plugin add' consumes. Multiple sources = fallback (tried in order). Grouped by category; slugs and rule counts verified 2026-07-02. To add a service, append an entry with the stigviewer URL slug.",
+  "_comment": "Maps a CASPAR service/OS name to public benchmark sources. Type 'stigviewer' downloads structured STIG JSON from stigviewer.com (/stigs/<slug>/export/json) and converts it to XCCDF XML that 'caspar plugin add' consumes. Multiple sources = fallback (tried in order). Grouped by category; slugs and rule counts verified 2026-07-02. To add a service, append an entry with the stigviewer URL slug.",
   "nginx": {
     "service_name": "NGINX",
     "sources": [

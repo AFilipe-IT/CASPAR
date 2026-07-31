@@ -2,7 +2,7 @@
 # Terraform (provider azurerm) DELIBERADAMENTE inseguro — fixture de demonstração.
 # Cada atributo abaixo corresponde a um controlo do CIS Microsoft Azure Benchmark
 # que o build LLM mapeou para o vocabulário Terraform. Correr:
-#   sca scan test_target/azure_storage_vulnerable.tf
+#   caspar scan test_target/azure_storage_vulnerable.tf
 
 provider "azurerm" {
   features {}

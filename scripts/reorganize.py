@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/reorganize.py — Reorganiza AEGIS para o layout config_assessment/.
+scripts/reorganize.py — Reorganiza CASPAR para o layout config_assessment/.
 
 Idempotente: se já estiver reorganizado, os passos de movimentação são no-ops.
 
@@ -85,7 +85,7 @@ def step1_structure() -> None:
     # __init__.py do pacote raiz
     root_init = PKG / "__init__.py"
     if not root_init.exists():
-        root_init.write_text('"""AEGIS — Configuration Assessment package."""\n',
+        root_init.write_text('"""CASPAR — Configuration Assessment package."""\n',
                              encoding="utf-8")
         print(f"  + {root_init.relative_to(ROOT)}")
     for d in ("scripts", "benchmarks", "data"):
@@ -325,7 +325,7 @@ def step4_pyproject() -> None:
 
 def main() -> int:
     if not (ROOT / "pyproject.toml").exists():
-        print("ERRO: corre a partir da raiz do repo AEGIS.", file=sys.stderr)
+        print("ERRO: corre a partir da raiz do repo CASPAR.", file=sys.stderr)
         return 1
     step1_structure()
     step2_move()

@@ -68,9 +68,9 @@ def test_detects_out_of_range_score(db):
 
 
 def test_flags_missing_meta(db):
-    # Canonical has aegis_meta; drop it to simulate an old DB.
+    # Canonical has caspar_meta; drop it to simulate an old DB.
     conn = sqlite3.connect(str(db))
-    conn.execute("DROP TABLE IF EXISTS aegis_meta")
+    conn.execute("DROP TABLE IF EXISTS caspar_meta")
     conn.commit(); conn.close()
     warns = [f for f in check(db) if f.category == "meta"]
     assert warns and warns[0].severity == "warning"

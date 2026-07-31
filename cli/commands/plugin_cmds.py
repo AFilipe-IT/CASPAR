@@ -1,5 +1,5 @@
 """
-cli/commands/plugin_cmds.py — the `sca plugin` group: add / fetch.
+cli/commands/plugin_cmds.py — the `caspar plugin` group: add / fetch.
 
 Build-time entry points: installing a plugin from a benchmark (PDF CIS or
 XCCDF STIG) and fetching benchmarks from public sources. The service manual
@@ -24,7 +24,7 @@ logger = logging.getLogger("ccss")
 
 @click.group("plugin")
 def plugin_group():
-    """Manage AEGIS plugins."""
+    """Manage CASPAR plugins."""
 
 
 @plugin_group.command("add")
@@ -229,11 +229,11 @@ def _plugin_add_finish(ctx, info, src_name, usable, value_rules, absence_rules,
         return
 
     # ── confirm ────────────────────────────────────────────────────────
-    # Write to the external plugins dir ($AEGIS_PLUGINS_DIR, a mounted volume)
+    # Write to the external plugins dir ($CASPAR_PLUGINS_DIR, a mounted volume)
     # when set, so a fetched plugin survives a --rm container; otherwise use the
     # in-package dir. Either way it imports as config_assessment.plugins.<id>,
     # because the package __path__ spans both (see plugins/__init__.py).
-    _external_plugins = os.environ.get("AEGIS_PLUGINS_DIR")
+    _external_plugins = os.environ.get("CASPAR_PLUGINS_DIR")
     plugins_dir = (_Path(_external_plugins) if _external_plugins
                    else _plugin_dirs()[0])
     target_dir = plugins_dir / info["target_id"]
@@ -271,7 +271,7 @@ def _plugin_add_finish(ctx, info, src_name, usable, value_rules, absence_rules,
     click.echo(f"  Misconfigs: {stats['misconfigs']} | Chains: {stats['chains']} "
                f"| Narratives: {stats['narratives']}/{stats['misconfigs']}")
     cf = info["config_paths"][0] if info["config_paths"] else info["config_filenames"][0]
-    click.echo(f"\nRun: sca scan {cf}")
+    click.echo(f"\nRun: caspar scan {cf}")
 
 
 @plugin_group.command("manual")
@@ -286,8 +286,8 @@ def plugin_manual(target, manual) -> None:
     The document lands in the plugin dir and is retrieved on every future
     scan --assess-unknown — no runtime flag needed.
 
-      sca plugin manual nginx https://nginx.org/en/docs/dirindex.pdf
-      sca plugin manual apache-httpd ./manual_apache.pdf
+      caspar plugin manual nginx https://nginx.org/en/docs/dirindex.pdf
+      caspar plugin manual apache-httpd ./manual_apache.pdf
     """
     variants = {target, target.replace("-", "_"), target.replace("_", "-")}
     match = None
@@ -311,7 +311,7 @@ def plugin_manual(target, manual) -> None:
     # Docker) — a built-in plugin's dir lives inside the image, so a manual
     # written there would vanish with the --rm container. _find_knowledge_docs
     # scans both dirs and merges, so retrieval works either way.
-    external = os.environ.get("AEGIS_PLUGINS_DIR")
+    external = os.environ.get("CASPAR_PLUGINS_DIR")
     pdir = (Path(external) / match) if external else None
     if pdir is None:
         for base in _plugin_dirs():
@@ -355,9 +355,9 @@ def plugin_fetch(ctx, service, list_only, search_term, output, then_install,
     DISA-style XCCDF file that 'plugin add' consumes directly.
 
     \b
-    See what's available:   sca plugin fetch --list
-    Download + install:     sca plugin fetch nginx --then-install
-    Download only:          sca plugin fetch nginx -o ~/benchmarks/
+    See what's available:   caspar plugin fetch --list
+    Download + install:     caspar plugin fetch nginx --then-install
+    Download only:          caspar plugin fetch nginx -o ~/benchmarks/
     """
     from config_assessment.fetch.benchmark_fetcher import BenchmarkFetcher, FetchError
     from config_assessment.reports.scan_features import search_catalog
@@ -381,16 +381,16 @@ def plugin_fetch(ctx, service, list_only, search_term, output, then_install,
         if not rows:
             click.echo(click.style(
                 f"No catalog match for '{search_term}'. "
-                "Try 'sca plugin fetch --list'.", fg="yellow"), err=True)
+                "Try 'caspar plugin fetch --list'.", fg="yellow"), err=True)
             sys.exit(1)
         _print_rows(rows, f"{len(rows)} match(es) for '{search_term}'. "
-                          "Fetch with: sca plugin fetch <service> --then-install")
+                          "Fetch with: caspar plugin fetch <service> --then-install")
         return
 
     if list_only:
         rows = fetcher.list_available()
         _print_rows(rows, f"{len(rows)} services. "
-                          "Fetch with: sca plugin fetch <service> --then-install")
+                          "Fetch with: caspar plugin fetch <service> --then-install")
         return
 
     if not service:
@@ -409,7 +409,7 @@ def plugin_fetch(ctx, service, list_only, search_term, output, then_install,
     click.echo(click.style(f"  ✓ Downloaded: {path}", fg="green"))
 
     if not then_install:
-        hint = f"sca plugin add --source {path}"
+        hint = f"caspar plugin add --source {path}"
         if manual:
             # --manual only takes effect during install; without --then-install
             # there's no plugin to ingest it into. Fold it into the printed hint.

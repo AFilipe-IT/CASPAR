@@ -1,12 +1,12 @@
-# docker/aegis/Dockerfile.slim — AEGIS ultra-light scan-only image
+# docker/caspar/Dockerfile.slim — CASPAR ultra-light scan-only image
 #
 # Build context MUST be the repository root:
-#   docker build -t aegis:slim -f docker/aegis/Dockerfile.slim .
+#   docker build -t caspar:slim -f docker/caspar/Dockerfile.slim .
 #
 # Scope: deterministic offline scan of local files / directories only.
 # NOT included: docker:// scanning (no docker CLI), build-time commands
 # (plugin add / build need Ollama + build tooling). For CI/CD and constrained
-# environments where only `sca scan <path>` is needed.
+# environments where only `caspar scan <path>` is needed.
 FROM python:3.12-alpine
 
 # Absolute minimum system deps: sqlite to restore the canonical DB.
@@ -32,8 +32,8 @@ COPY data/ccss_canonical.sql ./data/
 RUN sqlite3 ccss.db < data/ccss_canonical.sql
 
 # Non-root user.
-RUN adduser -D aegis && chown -R aegis:aegis /app
-USER aegis
+RUN adduser -D caspar && chown -R caspar:caspar /app
+USER caspar
 
 # Invoked as a module (entry point not installed in the slim image).
 ENTRYPOINT ["python", "-m", "cli.main"]

@@ -1,20 +1,20 @@
-# docker/aegis/docker-compose.yml — AEGIS + Ollama orchestration
+# docker/caspar/docker-compose.yml — CASPAR + Ollama orchestration
 #
-#   Runtime only (no Ollama):   docker compose run --rm sca targets
+#   Runtime only (no Ollama):   docker compose run --rm caspar targets
 #   Build-time (with Ollama):   docker compose --profile full up -d ollama
-#                               docker compose --profile full run --rm sca plugin add ...
+#                               docker compose --profile full run --rm caspar plugin add ...
 #
 # Build context is the repository root (two levels up).
 services:
-  sca:
+  caspar:
     build:
       context: ../..
-      dockerfile: docker/aegis/Dockerfile
-    image: aegis:latest
+      dockerfile: docker/caspar/Dockerfile
+    image: caspar:latest
     volumes:
-      - ./reports:/home/aegis/reports               # persistent reports
+      - ./reports:/home/caspar/reports               # persistent reports
       - /var/run/docker.sock:/var/run/docker.sock     # scan docker:// images
-      - aegis_db:/home/aegis/app                     # persistent DB between runs
+      - caspar_db:/home/caspar/app                     # persistent DB between runs
     environment:
       - OLLAMA_HOST=http://ollama:11434
     # No hard depends_on: Ollama is only needed for build-time commands
@@ -30,5 +30,5 @@ services:
       - full      # only started on demand (build-time commands)
 
 volumes:
-  aegis_db:
+  caspar_db:
   ollama_models:

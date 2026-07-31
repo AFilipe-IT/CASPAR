@@ -7,7 +7,7 @@
 > | Documento | Papel | Lê-o quando… |
 > |---|---|---|
 > | **README.md** (este) | Vitrine + referência de comandos | queres saber o que é e como usar |
-> | [GUIA_AEGIS.md](docs/GUIA_AEGIS.md) | Guia de utilizador + demonstração | queres perceber e demonstrar, do zero |
+> | [GUIA_CASPAR.md](docs/GUIA_CASPAR.md) | Guia de utilizador + demonstração | queres perceber e demonstrar, do zero |
 > | [GUIA_TECNICO.md](docs/GUIA_TECNICO.md) | Arquitectura interna | vais mexer no código |
 > | [GUIA_VM_UBUNTU22.md](docs/GUIA_VM_UBUNTU22.md) | Preparar uma VM Ubuntu 22.04 limpa do zero (Docker + nativa) | acabaste de criar a VM e ainda não tens Docker/Python configurados |
 > | [GUIA_TESTE_MAQUINA.md](docs/GUIA_TESTE_MAQUINA.md) | Setup + build das imagens Docker | vais testar numa máquina nova, já com Docker/deps instalados |
@@ -23,21 +23,21 @@
 
 O CCSS-Scan lê uma configuração de serviço (ficheiro, directório, serviço instalado, ou imagem Docker), analisa cada directiva contra o CIS Benchmark usando um LLM local, e atribui um score de segurança CCSS (0–10) a cada problema — com narrativa técnica completa, cenário de exploração, justificação de cada submétrica, recomendação de remediação, enriquecimento por CVE real (NVD + CISA KEV), e detecção de attack chains.
 
-Não é um scanner Apache específico. É uma metodologia replicável para qualquer serviço com **CIS Benchmark (PDF)** ou **DISA STIG (XCCDF XML)** disponível — `sca plugin add` auto-detecta o formato da fonte. O Apache HTTP Server 2.4 é o target de referência porque é o único com ground truth CCE disponível para calibração.
+Não é um scanner Apache específico. É uma metodologia replicável para qualquer serviço com **CIS Benchmark (PDF)** ou **DISA STIG (XCCDF XML)** disponível — `caspar plugin add` auto-detecta o formato da fonte. O Apache HTTP Server 2.4 é o target de referência porque é o único com ground truth CCE disponível para calibração.
 
 As fontes vivem em `sources/`: `sources/benchmarks/` (PDFs CIS) e `sources/stigs/` (XML DISA STIG). Os STIGs alargam a cobertura a 50+ produtos sem CIS Benchmark (Redis, Tomcat, MongoDB, Kubernetes, VMware, Splunk, …).
 
 ```bash
-sca plugin add --source sources/benchmarks/CIS_PostgreSQL_13.pdf       # PDF  (CIS)
-sca plugin add --source sources/stigs/U_Redis_Enterprise_6-x_STIG.xml  # XCCDF (DISA STIG)
+caspar plugin add --source sources/benchmarks/CIS_PostgreSQL_13.pdf       # PDF  (CIS)
+caspar plugin add --source sources/stigs/U_Redis_Enterprise_6-x_STIG.xml  # XCCDF (DISA STIG)
 ```
 
-Para descobrir e descarregar o benchmark automaticamente (sem procurar o ficheiro à mão), usa `sca plugin fetch`. Descarrega o STIG do serviço a partir de fonte pública (stigviewer.com, via `/stigs/<slug>/export/json`), converte-o para XCCDF e — com `--then-install` — instala o plugin de imediato. `sca plugin fetch --list` mostra os serviços catalogados (`config_assessment/fetch/catalog.json`).
+Para descobrir e descarregar o benchmark automaticamente (sem procurar o ficheiro à mão), usa `caspar plugin fetch`. Descarrega o STIG do serviço a partir de fonte pública (stigviewer.com, via `/stigs/<slug>/export/json`), converte-o para XCCDF e — com `--then-install` — instala o plugin de imediato. `caspar plugin fetch --list` mostra os serviços catalogados (`config_assessment/fetch/catalog.json`).
 
 ```bash
-sca plugin fetch --list                     # serviços disponíveis
-sca plugin fetch nginx --then-install       # descarrega + instala
-sca plugin fetch mysql -o ~/benchmarks/     # só descarrega
+caspar plugin fetch --list                     # serviços disponíveis
+caspar plugin fetch nginx --then-install       # descarrega + instala
+caspar plugin fetch mysql -o ~/benchmarks/     # só descarrega
 ```
 
 #### Base de conhecimento do serviço (RAG build-time)
@@ -45,9 +45,9 @@ sca plugin fetch mysql -o ~/benchmarks/     # só descarrega
 Além do benchmark, cada alvo pode ter uma **base de conhecimento** própria — o manual do serviço, um STIG extra, o NISTIR 7502 (CCSS) — usada pela avaliação por LLM de directivas desconhecidas (Camada 3, `scan --assess-unknown`). Esse conhecimento é **ingerido uma vez, no build-time, e recuperado do disco em cada scan** — nunca se passa um documento por scan. Adiciona um manual (ficheiro local **ou** URL) com `--manual`, em qualquer dos caminhos de instalação:
 
 ```bash
-sca plugin add -s CIS_Apache.pdf --manual manual_apache.pdf
-sca plugin add -s CIS_Apache.pdf --manual https://archive.apache.org/dist/httpd/docs/manual.pdf
-sca plugin fetch nginx --then-install --manual https://.../nginx-docs.pdf
+caspar plugin add -s CIS_Apache.pdf --manual manual_apache.pdf
+caspar plugin add -s CIS_Apache.pdf --manual https://archive.apache.org/dist/httpd/docs/manual.pdf
+caspar plugin fetch nginx --then-install --manual https://.../nginx-docs.pdf
 ```
 
 O manual é copiado para a pasta do plugin (no volume persistente, em Docker), *chunked* por estrutura e indexado por TF-IDF. Em cada scan, `_find_knowledge_docs` descobre-o do disco — sem flag de runtime. O RAG vive **apenas** no build-time e na Camada 3 (opt-in); **nunca** toca no scoring CCSS determinístico.
@@ -65,9 +65,9 @@ O catálogo cobre **43 alvos**, agrupados por categoria:
 - **Sistemas operativos:** rhel8/9, oracle-linux-8/9, ubuntu2004/2204/2404, sles12/15, solaris11, aix, macos-sonoma, windows-server-2019/2022/2025, windows-10/11
 - **Equipamento de rede:** cisco-asa-ndm, cisco-asa-fw, cisco-ios, palo-alto-ndm, juniper-srx-alg, f5-bigip-ndm, arista-ndm
 
-Alguns têm **fonte de fallback**: se a primária falhar (ex. HTTP 500), o fetcher passa automaticamente à seguinte. Adicionar um alvo é só acrescentar uma entrada `{ "slug": "..." }` ao catálogo — o slug é o segmento que aparece no URL de stigviewer.com. Corre `sca plugin fetch --list` para a lista completa e atualizada.
+Alguns têm **fonte de fallback**: se a primária falhar (ex. HTTP 500), o fetcher passa automaticamente à seguinte. Adicionar um alvo é só acrescentar uma entrada `{ "slug": "..." }` ao catálogo — o slug é o segmento que aparece no URL de stigviewer.com. Corre `caspar plugin fetch --list` para a lista completa e atualizada.
 
-> Nota: `plugin fetch --then-install` corre a extracção por LLM (Ollama), tal como `plugin add`. Na imagem Docker isto é encaminhado automaticamente para `aegis:full` (com Ollama embutido). Fetch só-download (sem `--then-install`) não precisa de LLM.
+> Nota: `plugin fetch --then-install` corre a extracção por LLM (Ollama), tal como `plugin add`. Na imagem Docker isto é encaminhado automaticamente para `caspar:full` (com Ollama embutido). Fetch só-download (sem `--then-install`) não precisa de LLM.
 
 A decisão de design central é a separação entre **build time** (LLM + CVE lookup + RAG, corre uma vez) e **runtime** (determinístico, zero LLM, corre em cada scan). Scores idênticos para inputs idênticos — sempre.
 
@@ -117,10 +117,10 @@ source .venv/bin/activate       # Linux / macOS / WSL2
 pip install pydantic>=2.0 click pytest openpyxl
 pip install -e .
 
-sca --help
+caspar --help
 ```
 
-Requisitos: Python 3.11+, `pdftotext` (poppler-utils) para ler o PDF do benchmark, Docker (opcional, só para `sca scan docker://...`).
+Requisitos: Python 3.11+, `pdftotext` (poppler-utils) para ler o PDF do benchmark, Docker (opcional, só para `caspar scan docker://...`).
 
 ```bash
 sudo apt-get install poppler-utils   # Ubuntu / Debian / WSL2
@@ -128,28 +128,28 @@ sudo apt-get install poppler-utils   # Ubuntu / Debian / WSL2
 
 ### Instalação via Docker (recomendado para máquinas de teste)
 
-Um one-liner instala as imagens e um wrapper `sca` no PATH — sem clonar o repo, sem ambiente Python:
+Um one-liner instala as imagens e um wrapper `caspar` no PATH — sem clonar o repo, sem ambiente Python:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
 ```
 
-Existem duas imagens: **`alfilipe/aegis:latest`** (leve, para scan/runtime) e **`alfilipe/aegis:full`** (com Ollama embutido, para build-time: `plugin add` / `plugin fetch --then-install`). O wrapper escolhe a imagem certa consoante o comando.
+Existem duas imagens: **`alfilipe/caspar:latest`** (leve, para scan/runtime) e **`alfilipe/caspar:full`** (com Ollama embutido, para build-time: `plugin add` / `plugin fetch --then-install`). O wrapper escolhe a imagem certa consoante o comando.
 
-**Persistência.** Plugins instalados via `plugin add` / `plugin fetch --then-install` e a base de dados que eles populam são gravados num volume Docker (`aegis_data`, montado em `/home/aegis/data`), pelo que **sobrevivem entre execuções** apesar do `--rm`. Na primeira utilização a DB é semeada a partir da versão canónica embutida na imagem (idempotente, nunca sobrepõe uma DB existente).
+**Persistência.** Plugins instalados via `plugin add` / `plugin fetch --then-install` e a base de dados que eles populam são gravados num volume Docker (`caspar_data`, montado em `/home/caspar/data`), pelo que **sobrevivem entre execuções** apesar do `--rm`. Na primeira utilização a DB é semeada a partir da versão canónica embutida na imagem (idempotente, nunca sobrepõe uma DB existente).
 
 ```bash
 # instalar mongodb (usa o modelo por omissão, qwen2.5:14b)
-sca plugin fetch mongodb --then-install
+caspar plugin fetch mongodb --then-install
 
 # um container novo e separado continua a ver o plugin instalado
-sca targets            # mongodb aparece na lista
+caspar targets            # mongodb aparece na lista
 ```
 
 Para acelerar testes (à custa de qualidade de extracção), passa um modelo mais leve:
 
 ```bash
-AEGIS_MODEL=qwen2.5:1.5b sca plugin fetch mongodb --then-install
+CASPAR_MODEL=qwen2.5:1.5b caspar plugin fetch mongodb --then-install
 ```
 
 ### Configurar a NVD API key (opcional mas recomendado)
@@ -164,14 +164,14 @@ Pede uma key gratuita em https://nvd.nist.gov/developers/request-an-api-key — 
 
 ---
 
-### Primeiro passo após instalar: `sca doctor`
+### Primeiro passo após instalar: `caspar doctor`
 
 Verifica a integridade da base de conhecimento antes do primeiro scan — regras órfãs, chains
 a apontar para directivas inexistentes, scores fora de gama. Read-only, sai com 1 se houver erro:
 
 ```bash
-sca doctor            # verificação básica
-sca doctor --strict   # + auditoria de narrativas (afirmações de impacto sem cautela)
+caspar doctor            # verificação básica
+caspar doctor --strict   # + auditoria de narrativas (afirmações de impacto sem cautela)
 ```
 
 ---
@@ -181,13 +181,13 @@ sca doctor --strict   # + auditoria de narrativas (afirmações de impacto sem c
 ### Modo 1 — ficheiro único
 
 ```bash
-sca scan /tmp/httpd.conf
+caspar scan /tmp/httpd.conf
 ```
 
 ### Modo 2 — directório completo (segue todos os Includes)
 
 ```bash
-sca scan /etc/apache2/
+caspar scan /etc/apache2/
 ```
 
 Detecta automaticamente o ponto de entrada (`apache2.conf`, `httpd.conf`) e o parser segue `Include`/`IncludeOptional` recursivamente — `conf-enabled/`, `sites-enabled/`, `mods-enabled/` são todos incluídos.
@@ -195,8 +195,8 @@ Detecta automaticamente o ponto de entrada (`apache2.conf`, `httpd.conf`) e o pa
 ### Modo 3 — serviço instalado na máquina
 
 ```bash
-sca scan --live apache2
-sca scan --live httpd
+caspar scan --live apache2
+caspar scan --live httpd
 ```
 
 Usa `apache2ctl -V` / `httpd -V` para encontrar o `ServerRoot` e o ficheiro de config real, com fallback para caminhos hard-coded por distro (Debian, RHEL, macOS Homebrew).
@@ -204,8 +204,8 @@ Usa `apache2ctl -V` / `httpd -V` para encontrar o `ServerRoot` e o ficheiro de c
 ### Modo 4 — imagem Docker
 
 ```bash
-sca scan docker://httpd:2.4
-sca scan docker://my-custom-apache:latest
+caspar scan docker://httpd:2.4
+caspar scan docker://my-custom-apache:latest
 ```
 
 Faz `docker pull` se necessário, cria um container temporário (sem o correr), extrai os ficheiros de configuração via `docker cp`, e remove o container. Não precisa de Docker Desktop a correr no WSL2 só para inspeccionar — mas precisa para `docker create`/`docker cp`.
@@ -214,19 +214,19 @@ Faz `docker pull` se necessário, cria um container temporário (sem o correr), 
 
 ```bash
 # Relatório HTML completo (default)
-sca scan /etc/apache2/ --report --output ./relatorios/
+caspar scan /etc/apache2/ --report --output ./relatorios/
 
 # Relatório JSON
-sca scan /etc/apache2/ --report --format json
+caspar scan /etc/apache2/ --report --format json
 
 # Relatório SARIF (GitHub Security tab)
-sca scan /etc/apache2/ --report --format sarif
+caspar scan /etc/apache2/ --report --format sarif
 
 # Gate CI/CD — exit 1 se score > 7.0
-sca scan /etc/apache2/ --threshold 7.0
+caspar scan /etc/apache2/ --threshold 7.0
 
 # Base de dados alternativa
-sca --db outra.db scan /etc/apache2/
+caspar --db outra.db scan /etc/apache2/
 ```
 
 ---
@@ -237,12 +237,12 @@ O mesmo pipeline determinístico avalia **Infrastructure-as-Code antes do deploy
 o router de plugins escolhe o target sozinho:
 
 ```bash
-sca scan main.tf                # Azure/Terraform (deteta pelo provider azurerm)
-sca scan main.bicep             # Bicep (vocabulário ARM)
-sca scan azuredeploy.json       # ARM template (deteta pelo $schema)
-sca scan deployment.yaml        # K8s: privileged, hostNetwork, runAsUser 0, SYS_ADMIN, …
-sca scan Dockerfile             # USER ausente (root por omissão), :latest implícito, EXPOSE 22
-sca scan infra/ --report -f sarif  # diretório → SARIF p/ o PR (gate de CI)
+caspar scan main.tf                # Azure/Terraform (deteta pelo provider azurerm)
+caspar scan main.bicep             # Bicep (vocabulário ARM)
+caspar scan azuredeploy.json       # ARM template (deteta pelo $schema)
+caspar scan deployment.yaml        # K8s: privileged, hostNetwork, runAsUser 0, SYS_ADMIN, …
+caspar scan Dockerfile             # USER ausente (root por omissão), :latest implícito, EXPOSE 22
+caspar scan infra/ --report -f sarif  # diretório → SARIF p/ o PR (gate de CI)
 ```
 
 Os findings apontam a **linha e o contexto exatos** (`main.tf:3 [azurerm_recovery_services_vault.backup]`,
@@ -260,7 +260,7 @@ controlo para o atributo concreto em **ambos** os vocabulários — cada control
 rejeitados na validação.
 
 ```bash
-aegis-full python -m config_assessment.plugins.azure_iac.build_azure \
+caspar-full python -m config_assessment.plugins.azure_iac.build_azure \
   -b CIS_Microsoft_Azure/CIS_..._Foundations_...pdf -b CIS_..._Storage_...pdf \
   --model qwen2.5:14b            # uma vez; runtime continua determinístico
 ```
@@ -273,8 +273,8 @@ K8s (CIS §5), Dockerfile (CIS Docker) e **Ubuntu** (CIS Ubuntu 22.04 L1 — sub
 absence rule do `USER` (root por omissão).
 
 ```bash
-sca scan /etc/sysctl.conf         # Ubuntu OS: hardening de kernel/rede
-sca scan test_target/ubuntu_demo/sysctl.conf   # fixture de demo
+caspar scan /etc/sysctl.conf         # Ubuntu OS: hardening de kernel/rede
+caspar scan test_target/ubuntu_demo/sysctl.conf   # fixture de demo
 ```
 
 > **Para a defesa:** a base de conhecimento tem **três proveniências** — LLM-extraída
@@ -290,14 +290,14 @@ Dois scripts reproduzíveis produzem o material de avaliação (`scripts/`):
 
 ```bash
 python -m scripts.evaluate                  # composição da KB · MAE vs CCE · recall nas fixtures
-python -m scripts.baseline_compare --oscap  # AEGIS vs Trivy (IaC/Docker) e OpenSCAP (Ubuntu OS)
+python -m scripts.baseline_compare --oscap  # CASPAR vs Trivy (IaC/Docker) e OpenSCAP (Ubuntu OS)
 ```
 
 - **Correção:** MAE vs *ground truth* CCE oficial (Apache) — **0% mismatch (20/20)**.
 - **Deteção:** recall nas fixtures vulneráveis — **100% (14/14)**.
 - **Baselines:** o `baseline_compare` corre o **Trivy** (`.tf`, Dockerfile) e o **OpenSCAP**
   (Ubuntu OS, subconjunto config-based) no mesmo alvo. O contraste não é "quem encontra mais": ambos
-  detetam misconfigs, mas o AEGIS anexa um **score CCSS reproduzível + narrativa** onde os outros dão
+  detetam misconfigs, mas o CASPAR anexa um **score CCSS reproduzível + narrativa** onde os outros dão
   um rótulo fixo / pass-fail. (Nota: em WSL o OpenSCAP dá `notapplicable` — precisa de VM Ubuntu para
   pass/fail reais.)
 
@@ -349,23 +349,23 @@ Filtros por severidade no topo. Exemplo de justificação real gerada para `Allo
 (não "Medium complexity" genérico — a justificação explica o *porquê* específico a esta directiva).
 
 ```bash
-sca scan docker://ccss-test-apache:vulnerable --report --output ~/relatorios/
+caspar scan docker://ccss-test-apache:vulnerable --report --output ~/relatorios/
 explorer.exe ~/relatorios/ccss_*.html   # WSL2
 ```
 
 ### JSON / SARIF
 
 Disponíveis via `--format json` / `--format sarif`. O JSON inclui o **manifesto de
-reprodutibilidade** (versão do AEGIS, SHA-256 da base de conhecimento, target e nº de regras):
+reprodutibilidade** (versão do CASPAR, SHA-256 da base de conhecimento, target e nº de regras):
 dois scans com manifesto igual e `input_hash` igual têm, por construção, scores iguais — a
 afirmação de determinismo torna-se auditável a partir do próprio relatório.
 
-O SARIF integra directamente com o **GitHub Code Scanning** — os findings do AEGIS aparecem
+O SARIF integra directamente com o **GitHub Code Scanning** — os findings do CASPAR aparecem
 na Security tab e como anotações nos PRs (*shift-left* para configs versionadas):
 
 ```yaml
 # .github/workflows/config-audit.yml
-- run: sca scan configs/nginx.conf --report -f sarif -o out/
+- run: caspar scan configs/nginx.conf --report -f sarif -o out/
 - uses: github/codeql-action/upload-sarif@v3
   with:
     sarif_file: out/            # apanha o ccss_*.sarif gerado
@@ -378,15 +378,15 @@ na Security tab e como anotações nos PRs (*shift-left* para configs versionada
 O scan pontual é metade da história; a outra metade é **direção e crescimento da base**:
 
 ```bash
-sca watch /etc/nginx/ --notify        # vigiar: re-scan a cada alteração, alerta se piorar
-sca history nginx.conf                # listar scans passados (gravados automaticamente)
-sca trend                             # drift quantificado: sparkline por input, 1º→último score
-sca trend nginx                       #   só inputs que contenham 'nginx'
+caspar watch /etc/nginx/ --notify        # vigiar: re-scan a cada alteração, alerta se piorar
+caspar history nginx.conf                # listar scans passados (gravados automaticamente)
+caspar trend                             # drift quantificado: sparkline por input, 1º→último score
+caspar trend nginx                       #   só inputs que contenham 'nginx'
 
-sca scan cfg --assess-unknown         # Camada 3: candidatas (LLM+RAG, nunca no score)
-sca promote cfg                       # candidata → regra permanente (com revisão)
-sca promote --stats                   # quanto da base veio do ciclo? o que falta rever?
-sca plugin manual nginx <pdf|url>     # juntar manual à base de conhecimento RAG (retroativo)
+caspar scan cfg --assess-unknown         # Camada 3: candidatas (LLM+RAG, nunca no score)
+caspar promote cfg                       # candidata → regra permanente (com revisão)
+caspar promote --stats                   # quanto da base veio do ciclo? o que falta rever?
+caspar plugin manual nginx <pdf|url>     # juntar manual à base de conhecimento RAG (retroativo)
 ```
 
 `trend` responde "para onde vai o risco desta config?"; `promote --stats` responde "quanto é
@@ -561,8 +561,8 @@ Fallback (`chains.json`) usado apenas se o LLM falhar repetidamente.
 Estratégia: lookup directo por CVE ID (não keyword search — a NVD não indexa por directiva Apache). Para os ~5 misconfigurations com CVEs já identificados pelo LLM (TraceEnable, SSLProtocol, SSLCompression), faz-se lookup real na NVD para obter CVSS score actualizado e verificar presença na CISA KEV. As restantes ~25 recebem GEL=Low directamente (risco de configuração sem CVE associado — correcto metodologicamente).
 
 ```bash
-sca refresh                    # actualiza GEL/GRL com dados NVD + KEV
-sca refresh --dry-run          # preview sem escrever
+caspar refresh                    # actualiza GEL/GRL com dados NVD + KEV
+caspar refresh --dry-run          # preview sem escrever
 ```
 
 ---
@@ -614,13 +614,13 @@ pequena remove as entradas órfãs em vez de as deixar no banco.
 
 ```bash
 # Stage 1 (métricas) — usa o branch nginx do comando build
-sca build --target nginx --benchmark plugins/nginx/CIS_NGINX_Benchmark_v3.0.0.pdf
+caspar build --target nginx --benchmark plugins/nginx/CIS_NGINX_Benchmark_v3.0.0.pdf
 
 # Stage 3 (narrativas) — pipeline genérico, target nginx
 python3 -m plugins.apache_httpd.build_narratives --db ccss.db --target nginx
 
 # Scan
-sca scan /caminho/para/nginx.conf --report --format dashboard
+caspar scan /caminho/para/nginx.conf --report --format dashboard
 ```
 
 ---
@@ -644,7 +644,7 @@ ollama pull qwen2.5:14b
 ### Stage 1 + Stage 2 — métricas e chains
 
 ```bash
-sca build --benchmark plugins/apache_httpd/Benchmark.pdf --model qwen2.5:14b
+caspar build --benchmark plugins/apache_httpd/Benchmark.pdf --model qwen2.5:14b
 ```
 
 ~2 minutos para 30 misconfigs + geração de chains (timeout de chains: 300s, prompt mais longo que métricas individuais).
@@ -667,7 +667,7 @@ python3 fix_ac_consistency.py --db ccss.db              # corrigir
 ### Modo stub (sem GPU)
 
 ```bash
-sca build --benchmark Benchmark.pdf --stub
+caspar build --benchmark Benchmark.pdf --stub
 python3 -m plugins.apache_httpd.build_narratives --db ccss.db --stub
 ```
 

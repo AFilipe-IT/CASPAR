@@ -1,8 +1,8 @@
-# AEGIS — Testar o framework numa máquina nova
+# CASPAR — Testar o framework numa máquina nova
 
-> **Papel deste documento:** guia passo-a-passo para pôr o AEGIS a funcionar e validá-lo numa
+> **Papel deste documento:** guia passo-a-passo para pôr o CASPAR a funcionar e validá-lo numa
 > máquina limpa (Linux/WSL2), incluindo **como construir as imagens Docker a partir do código**.
-> Complementa o [README.md](README.md) (referência) e o [GUIA_AEGIS.md](GUIA_AEGIS.md) (conceitos).
+> Complementa o [README.md](README.md) (referência) e o [GUIA_CASPAR.md](GUIA_CASPAR.md) (conceitos).
 
 ---
 
@@ -24,8 +24,8 @@ O **scan e a suite de testes funcionam sem nada disto** — o runtime é offline
 ## 1. Clonar
 
 ```bash
-git clone https://github.com/AFilipe-IT/AEGIS.git sca
-cd sca
+git clone https://github.com/AFilipe-IT/CASPAR.git caspar
+cd caspar
 ```
 
 ---
@@ -77,7 +77,7 @@ python -m cli.main scan test_target/pod_vulnerable.yaml      # ≈10.0 [Critical
 python -m cli.main scan test_target/Dockerfile.vulnerable    # ≈9.0  [Critical]
 ```
 
-✓ **Esperado:** cada scan termina com a linha `reproducible: sca … · kb sha256:… · N rules (…)`.
+✓ **Esperado:** cada scan termina com a linha `reproducible: caspar … · kb sha256:… · N rules (…)`.
 O hash da kb deve ser **igual** ao da máquina original se a DB veio do mesmo dump — é o manifesto
 de reprodutibilidade a fazer o seu trabalho.
 
@@ -92,30 +92,30 @@ WSL ligada para a tua distro (Settings → Resources → WSL integration).
 
 ### 3.2 Ordem de build — IMPORTANTE
 
-A `aegis:full` é `FROM aegis:latest` → **constrói sempre a `latest` primeiro**, senão a `full`
+A `caspar:full` é `FROM caspar:latest` → **constrói sempre a `latest` primeiro**, senão a `full`
 fica com código antigo. O contexto de build é a **raiz do repo** (o `.dockerignore` trata das
 exclusões; o NISTIR 7502 é incluído por exceção — é a base de conhecimento CCSS partilhada).
 
 ```bash
-cd sca
+cd caspar
 
 # 1º — imagem runtime (leve: scan/report/watch/trend; sem Ollama)
-docker build -t aegis:latest -f docker/aegis/Dockerfile .
+docker build -t caspar:latest -f docker/caspar/Dockerfile .
 
 # 2º — imagem build-time (com Ollama embutido: plugin add/fetch --then-install, build azure)
-docker build -t aegis:full -f docker/aegis/Dockerfile.full .
+docker build -t caspar:full -f docker/caspar/Dockerfile.full .
 
 # (opcional) slim — runtime mínimo
-docker build -t aegis:slim -f docker/aegis/Dockerfile.slim .
+docker build -t caspar:slim -f docker/caspar/Dockerfile.slim .
 ```
 
 ### 3.3 Tagging para o wrapper
 
-O wrapper `sca` usa os nomes `alfilipe/aegis:latest|full` — dá esses nomes às tuas imagens locais:
+O wrapper `caspar` usa os nomes `alfilipe/caspar:latest|full` — dá esses nomes às tuas imagens locais:
 
 ```bash
-docker tag aegis:latest alfilipe/aegis:latest
-docker tag aegis:full   alfilipe/aegis:full
+docker tag caspar:latest alfilipe/caspar:latest
+docker tag caspar:full   alfilipe/caspar:full
 ```
 
 ### 3.4 Instalar o wrapper SEM sobrepor as imagens locais
@@ -134,32 +134,32 @@ export PATH="$HOME/.local/bin:$PATH"    # se ~/.local/bin não estiver no PATH
 ### 3.5 Smoke tests em Docker
 
 ```bash
-sca doctor
-sca targets
-sca scan test_nginx.conf
-sca scan test_target/pod_vulnerable.yaml
+caspar doctor
+caspar targets
+caspar scan test_nginx.conf
+caspar scan test_target/pod_vulnerable.yaml
 ```
 
 ✓ **Esperado:** mesmos resultados da via nativa (2.5). Primeiro uso semeia a DB no volume
-`aegis_data` a partir do dump embutido; plugins fetched/manuais e a DB **sobrevivem ao `--rm`**
+`caspar_data` a partir do dump embutido; plugins fetched/manuais e a DB **sobrevivem ao `--rm`**
 graças a esse volume.
 
 ### 3.6 Verificações específicas de Docker
 
 ```bash
 # O NISTIR viajou dentro da imagem? (base de conhecimento RAG partilhada)
-docker run --rm --entrypoint ls alfilipe/aegis:latest /home/aegis/app/nistir7502.pdf
+docker run --rm --entrypoint ls alfilipe/caspar:latest /home/caspar/app/nistir7502.pdf
 
 # O pyyaml está lá? (parsers IaC)
-docker run --rm --entrypoint python alfilipe/aegis:latest -c "import yaml; print('ok')"
+docker run --rm --entrypoint python alfilipe/caspar:latest -c "import yaml; print('ok')"
 ```
 
 ### 3.7 Publicar no Docker Hub (quando quiseres atualizar as imagens públicas)
 
 ```bash
 docker login
-docker push alfilipe/aegis:latest
-docker push alfilipe/aegis:full
+docker push alfilipe/caspar:latest
+docker push alfilipe/caspar:full
 ```
 
 ---
@@ -191,12 +191,12 @@ rápido com mapeamentos um pouco menos fiáveis; re-executar sem `--dry-run` é 
 | # | Verificação | Como | Esperado |
 |---|---|---|---|
 | 1 | Suite de testes | `python -m pytest tests/ -q` | ~590 passed, offline |
-| 2 | DB íntegra | `sca doctor` | ✓ healthy |
-| 3 | Plugins registados | `sca targets` | ~11, incl. azure-iac/kubernetes/dockerfile |
-| 4 | Scan clássico | `sca scan test_nginx.conf` | ≈5.7 [Medium] |
-| 5 | Scan IaC | `sca scan test_target/pod_vulnerable.yaml` | ≈10.0 [Critical] + chain |
+| 2 | DB íntegra | `caspar doctor` | ✓ healthy |
+| 3 | Plugins registados | `caspar targets` | ~11, incl. azure-iac/kubernetes/dockerfile |
+| 4 | Scan clássico | `caspar scan test_nginx.conf` | ≈5.7 [Medium] |
+| 5 | Scan IaC | `caspar scan test_target/pod_vulnerable.yaml` | ≈10.0 [Critical] + chain |
 | 6 | Reprodutibilidade | rodapé `reproducible:` com o MESMO `kb sha256` da máquina original | manifesto igual ⇒ scores iguais |
-| 7 | Persistência Docker | scan → `docker volume ls` → `aegis_data` existe | plugins/DB sobrevivem a `--rm` |
+| 7 | Persistência Docker | scan → `docker volume ls` → `caspar_data` existe | plugins/DB sobrevivem a `--rm` |
 
 ## Troubleshooting rápido
 
@@ -205,5 +205,5 @@ rápido com mapeamentos um pouco menos fiáveis; re-executar sem `--dry-run` é 
 - **`pdftotext: not found`** → `sudo apt-get install poppler-utils`.
 - **Docker "command not found" no WSL** → liga a integração WSL no Docker Desktop.
 - **Testes RAG do apache em skip** → normal sem o PDF licenciado do benchmark; não afeta o runtime.
-- **`sca` usa imagens antigas** → confirma `docker images` e refaz o passo 3.3 (tagging);
+- **`caspar` usa imagens antigas** → confirma `docker images` e refaz o passo 3.3 (tagging);
   lembra: `latest` primeiro, `full` depois.

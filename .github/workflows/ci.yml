@@ -1,4 +1,4 @@
-# AEGIS CI — corre a suite completa (527 testes) a cada push/PR.
+# CASPAR CI — corre a suite completa (527 testes) a cada push/PR.
 #
 # A suite inteira é offline-safe: LLM usa stub, fetch/HTTP são mockados, e os
 # testes que precisam de fixtures ausentes fazem skip gracioso. Medido em

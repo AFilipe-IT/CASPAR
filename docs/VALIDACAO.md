@@ -1,6 +1,6 @@
-# AEGIS — Plano de Validação Completo
+# CASPAR — Plano de Validação Completo
 
-> **Propósito:** catálogo sistemático de **todas as formas de validar o AEGIS**
+> **Propósito:** catálogo sistemático de **todas as formas de validar o CASPAR**
 > (metodologia AMiSA): validação científica, funcional, fiabilidade, desempenho
 > (tempo, CPU, memória, energia), escalabilidade, comparação com baselines,
 > **tradeoffs explícitos** e métricas estatísticas. Cada dimensão indica: a
@@ -54,21 +54,21 @@ python -m pytest tests/test_nistir7502_examples.py -v   # 21 passed
 | Defaults ND neutros (não alteram o score) em ambos os modelos | ✅ |
 
 **Desvio documentado (achado desta replicação):** o `temporal_score()` do
-AEGIS usa um modelo temporal **simplificado** — `BaseScore × GEL × GRL` com
+CASPAR usa um modelo temporal **simplificado** — `BaseScore × GEL × GRL` com
 valores GRL `U/W/H/ND` (linhagem CVSS v2) e multiplicadores combinados em
 [0.81, 1.0] — enquanto a equação oficial usa GRL `N/L/M/H`, re-escala apenas o
 termo de exploitability e permite multiplicadores até 0.6×0.4=0.24. O modelo
-do AEGIS desconta portanto **no máximo ~19%** do score, contra reduções muito
+do CASPAR desconta portanto **no máximo ~19%** do score, contra reduções muito
 maiores permitidas pela norma quando há remediação forte — um desvio
 **conservador** (nunca subestima risco face à norma) mas que impede a
-replicação direta do exemplo temporal com a API do AEGIS. Isto separa duas
+replicação direta do exemplo temporal com a API do CASPAR. Isto separa duas
 coisas na dissertação: o **base score segue a norma exatamente** (18/18); o
 ajuste temporal é uma **variação declarada e justificada**. Ver tradeoff em §7.
 
 ### 1.1 MAE vs ground truth CCE (Apache) — ✅ medido
 
 O único target com dataset oficial anotado (CCE + faixas de severidade DISA).
-Compara o score CCSS do AEGIS com a faixa DISA de cada controlo.
+Compara o score CCSS do CASPAR com a faixa DISA de cada controlo.
 
 ```bash
 python -m scripts.evaluate          # secção "Correctness"
@@ -104,10 +104,10 @@ Validar **cada submétrica individualmente** contra anotação de referência:
 **Protocolo:**
 1. Construir o *ground truth*: para uma amostra de N≥30 regras (estratificada
    por target), um anotador com o benchmark CIS/STIG à frente atribui as 8
-   submétricas manualmente (sem ver os valores do AEGIS). Idealmente 2
+   submétricas manualmente (sem ver os valores do CASPAR). Idealmente 2
    anotadores → mede-se também concordância inter-anotador (κ de Cohen) para
    estabelecer o teto humano.
-2. Extrair os valores do AEGIS da BD:
+2. Extrair os valores do CASPAR da BD:
    ```bash
    sqlite3 ccss.db "SELECT directive, av, au, ac, c, i, a, gel, grl
                     FROM misconfigurations WHERE target='apache-httpd';"
@@ -133,7 +133,7 @@ de confiança (bootstrap, 1000 reamostragens).
 
 Mesmo sem valores absolutos comparáveis, a **ordem** de severidade deve
 concordar com a referência: correlação de **Spearman (ρ)** e **Kendall (τ)**
-entre o ranking AEGIS e o ranking DISA/CIS das mesmas regras. ρ>0.8 indica
+entre o ranking CASPAR e o ranking DISA/CIS das mesmas regras. ρ>0.8 indica
 que a ferramenta prioriza como um perito.
 
 ### 1.4 Fator de amplificação das chains — declarado como trabalho futuro
@@ -309,7 +309,7 @@ O argumento central da AMiSA é que estender a ferramenta é barato. Medir as
 - **tempo-até-primeiro-scan**: do benchmark em mão ao primeiro scan a funcionar;
 - contraste com o baseline: quanto custa adicionar um benchmark novo ao
   OpenSCAP (escrever OVAL à mão — ordem de dias/semanas, citar literatura) vs
-  AEGIS (ordem de minutos + revisão).
+  CASPAR (ordem de minutos + revisão).
 
 | Target | Via | Wall time | Tokens (in/out) | Custo | Regras | Custo/regra |
 |---|---|---|---|---|---|---|
@@ -399,7 +399,7 @@ python -m scripts.baseline_compare --oscap
 
 ### 6.1 Capacidades e resultados — ✅ (qualitativo + contagens)
 
-| Métrica | AEGIS | Trivy | OpenSCAP |
+| Métrica | CASPAR | Trivy | OpenSCAP |
 |---|---|---|---|
 | Findings em `azure_storage_vulnerable.tf` | 9 · score 8.5/10 | 13 · labels | n/a |
 | Findings em `Dockerfile.vulnerable` | 4 · score 9.0/10 | 5 · labels | n/a |
@@ -409,21 +409,21 @@ python -m scripts.baseline_compare --oscap
 | Extensível a benchmark novo | minutos (LLM) | requer código Go/rego | escrever OVAL à mão |
 
 *Blind spots são bidirecionais:* o Trivy apanhou `https_traffic_only_enabled`
-que o build LLM mapeou pelo sinónimo `secure_transfer_required`; o AEGIS dá
+que o build LLM mapeou pelo sinónimo `secure_transfer_required`; o CASPAR dá
 score e narrativa onde os outros dão um label fixo.
 
 ### 6.2 Desempenho lado a lado — 🔲
 
 Mesma máquina, mesmo input, mesmo protocolo do §4.1:
 
-| Métrica | AEGIS | Trivy | OpenSCAP |
+| Métrica | CASPAR | Trivy | OpenSCAP |
 |---|---|---|---|
 | Latência mediana (mesmo .tf) | 🔲 | 🔲 | — |
 | RAM pico | 🔲 | 🔲 | 🔲 |
 | CPU total | 🔲 | 🔲 | 🔲 |
 | Energia (J) | 🔲 | 🔲 | 🔲 |
 
-> Nota de equidade: o Trivy é um binário Go, o AEGIS é Python — declarar que
+> Nota de equidade: o Trivy é um binário Go, o CASPAR é Python — declarar que
 > a comparação de recursos mede as *implementações*, não as *metodologias*.
 
 ---
@@ -462,7 +462,7 @@ sustenta — um tradeoff sem medição é uma opinião.
 | Mediana · p95 · média±σ | sobre N≥10 corridas, warm-up descartado | §4 |
 | Bootstrap (1000×) | IC de κ e de médias | §1.2, §4 |
 | Fit da curva de escala | regressão latência vs tamanho (reportar R²) | §5.1 |
-| Teste de Mann-Whitney U | comparar distribuições de latência AEGIS vs Trivy | §6.2 |
+| Teste de Mann-Whitney U | comparar distribuições de latência CASPAR vs Trivy | §6.2 |
 
 **Regras de reporte:** nunca uma média sem dispersão; nunca uma proporção sem
 N e IC; nunca uma comparação de tempos sem a máquina e o nº de corridas.
@@ -491,4 +491,4 @@ python -m scripts.baseline_compare --oscap    # Trivy + OpenSCAP
 ---
 
 *Documento de apoio à secção de avaliação da dissertação (metodologia AMiSA /
-ferramenta AEGIS). Resultados ✅ obtidos em Ubuntu 22.04 real, 2026-07-09.*
+ferramenta CASPAR). Resultados ✅ obtidos em Ubuntu 22.04 real, 2026-07-09.*
