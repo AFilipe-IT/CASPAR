@@ -54,7 +54,7 @@ Visão de capacidades — o *quê*, antes do *onde* (§4) e do *como-não-partir
 - **4 modos de input:** ficheiro · directório (segue `include`s) · serviço
   instalado (`--live`) · imagem Docker (`docker://`).
 - **Detecção de attack chains** — combinações de misconfigs que se amplificam
-  (score amplificado, não somado); 27 chains na DB.
+  (score amplificado, não somado); 32 chains na DB.
 - **Enriquecimento por CVE real** — NVD + CISA KEV, cross-reference por versão
   detectada; exploits (Exploit-DB) quando há versão.
 - **Detecção de directivas desconhecidas (3 camadas):** L1-2 determinísticas
@@ -101,7 +101,7 @@ Docker; CASPAR vs **OpenSCAP** `--oscap` em Ubuntu OS). Ver §7.
 - **Manifesto de reprodutibilidade** em cada scan (§5) — score auditável.
 - **RAG build-time** — conhecimento ingerido uma vez, consultado sempre (§5).
 - **Persistência Docker** — plugins/DB sobrevivem `--rm` via volume `caspar_data`.
-- **623 testes** + CI; runtime **offline e determinístico** por construção.
+- **647 testes** + CI; runtime **offline e determinístico** por construção.
 
 ---
 
@@ -114,7 +114,11 @@ Docker; CASPAR vs **OpenSCAP** `--oscap` em Ubuntu OS). Ver §7.
   Actions (`.github/workflows/ci.yml`) corre a suite completa a cada push (é
   offline-safe).
 - **DB canónica** (`data/ccss_canonical.sql`, restaura para `ccss.db`): **488
-  regras / 27 chains** em **11 targets**:
+  regras / 27 chains** em **11 targets** (snapshot de 2026-07-31; a `ccss.db`
+  viva tem desde então um 12º target, `postgresql`, 26 regras/5 chains,
+  adicionado para medir §4.2 do VALIDACAO.md — **ainda não propagado ao
+  snapshot canónico**, que continua a refletir os 11 targets originais até
+  ser regenerado deliberadamente):
 
 | Target | Regras | Proveniência das regras |
 |---|---|---|
@@ -319,7 +323,7 @@ suppress, doctor, fix, **promote** (`--stats`).
   sistema real). A diferença de escopo (CASPAR pontua FICHEIROS; OpenSCAP audita
   ESTADO do sistema vivo) é ela própria um achado da tese.
 
-**→ A PARTE PRÁTICA ESTÁ FECHADA E VALIDADA** num Ubuntu 22.04 real: 623 testes,
+**→ A PARTE PRÁTICA ESTÁ FECHADA E VALIDADA** num Ubuntu 22.04 real: 647 testes,
 13/13 smoke, NISTIR 18/18, determinismo 29/30, MAE 0%, recall 100%, e 3
 baselines (Trivy IaC, Trivy Docker, OpenSCAP OS com pass/fail reais). O
 material consolidado para a tese está em
@@ -370,9 +374,9 @@ Polimento opcional que fica (por valor):
 ```bash
 cd ~/caspar && source .venv/bin/activate
 
-python -m pytest tests/ -q                 # ~623 passed (uns skips se faltam PDFs)
+python -m pytest tests/ -q                 # ~647 passed (uns skips se faltam PDFs)
 caspar doctor                              # ✓ healthy
-caspar targets                             # 11 targets (+ dummy), incl. ubuntu/azure-iac/k8s/dockerfile
+caspar targets                             # 12 targets (+ dummy), incl. ubuntu/azure-iac/k8s/dockerfile/postgresql
 caspar scan test_nginx.conf                # ≈5.7 [Medium]
 caspar scan test_target/azure_storage_vulnerable.tf   # ≈8.5 [High] (Terraform)
 caspar scan test_target/pod_vulnerable.yaml           # ≈10.0 [Critical] + chain

@@ -443,16 +443,17 @@ A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql
 
 | Métrica | Valor |
 |---------|-------|
-| Targets built-in | **7** (apache-httpd, nginx, mysql, redis, ssh, tomcat, docker) |
-| Misconfigurations catalogadas | **228** (com score CCSS, narrativa e recomendação) |
-| Attack chains | **26** (combinações que amplificam o risco) |
+| Plugins registados (`caspar targets`) | **12** (11 com regras próprias + `dummy` de teste) |
+| Misconfigurations catalogadas | **488** (com score CCSS, narrativa e recomendação) |
+| Attack chains | **27** (combinações que amplificam o risco) |
 | Version-exploits pré-computados | **19** (mapeamento versão → CVEs/exploits) |
 | Alvos disponíveis via `plugin fetch` | **43** (stigviewer.com) |
-| Versão da DB base (para o reseed) | **2** (`caspar_meta.base_db_version`) |
-| Testes automatizados | **520** (a passar) |
+| Versão da DB base (para o reseed) | **2** (`base_db_version` na tabela de metadados) |
+| Testes automatizados | **647** (a passar) |
 
-Distribuição das 228 misconfigs pelos 7 targets: **docker 57 · tomcat 49 · apache-httpd 35 ·
-redis 29 · mysql 23 · nginx 18 · ssh 17**. Estes números são **verificáveis** — inspeciona a DB com
+Distribuição das 514 misconfigs pelos 12 targets com regras: **azure-iac 220 · docker 57 ·
+tomcat 49 · redis 36 · apache-httpd 35 · postgresql 26 · mysql 23 · nginx 18 · ubuntu 18 ·
+ssh 17 · kubernetes 10 · dockerfile 5**. Estes números são **verificáveis** — inspeciona a DB com
 `sqlite3 ccss.db "SELECT target_name, COUNT(*) FROM misconfigurations GROUP BY target_name"`.
 
 ---
@@ -518,7 +519,7 @@ a resposta é o critério de impacto (ver `ccss.impact_capped_score`).
 *chain*, não de uma issue individual. O relatório mostra **Highest Issue / Highest Chain / Overall
 (from issue|chain)** — no terminal e no dashboard — para o número de topo ser sempre explicado.
 
-As 26 chains da DB são geradas no build-time por LLM, revistas e curadas num `chains.json` por plugin
+As 32 chains da DB são geradas no build-time por LLM, revistas e curadas num `chains.json` por plugin
 (o *ground truth* humano). As justificações das chains do apache foram moderadas para não afirmarem
 impactos sem evidência (ex.: nenhuma "privilege escalation" de um mero status+root).
 

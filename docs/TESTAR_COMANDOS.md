@@ -28,9 +28,9 @@ instalado, troca por `caspar`.
 caspar --help
 caspar targets
 ```
-Confirma: lista os 12 plugins (`apache-httpd`, `azure-iac`, `docker`,
-`dockerfile`, `dummy`, `kubernetes`, `mysql`, `nginx`, `redis`, `ssh`,
-`tomcat`, `ubuntu`) com a versão e o benchmark de origem de cada um.
+Confirma: lista os 13 plugins (`apache-httpd`, `azure-iac`, `docker`,
+`dockerfile`, `dummy`, `kubernetes`, `mysql`, `nginx`, `postgresql`, `redis`,
+`ssh`, `tomcat`, `ubuntu`) com a versão e o benchmark de origem de cada um.
 
 ```bash
 caspar doctor

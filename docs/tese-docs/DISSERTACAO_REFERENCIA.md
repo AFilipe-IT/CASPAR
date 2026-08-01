@@ -88,7 +88,7 @@ Formatos parseados: key-value, YAML, Dockerfile, HCL, Bicep, ARM JSON.
 ## 3. Arquitectura e implementação (como foi feito)
 
 ### 3.1 Dimensão (verificado)
-~22.100 linhas de Python · **623 testes** · 6 parsers genéricos · 11 targets.
+~22.100 linhas de Python · **647 testes** · 6 parsers genéricos · 11 targets.
 
 ### 3.2 O contrato `Target` (extensibilidade)
 O núcleo (`config_assessment/core/`) é agnóstico ao serviço. Adicionar um alvo =
@@ -98,7 +98,7 @@ alvos (incl. os 4 de IaC/OS) foram adicionados.
 
 ### 3.3 As três proveniências de conhecimento
 Todas alimentam o MESMO scoring determinístico:
-1. **LLM-extraída** — apache, nginx, ssh, mysql, docker, azure-iac.
+1. **LLM-extraída** — apache, nginx, ssh, mysql, redis, tomcat, docker, azure-iac.
 2. **Curada** — kubernetes, dockerfile, ubuntu (métricas revistas à mão,
    `build/curated_build.py`, sem LLM).
 3. **Promovida** — ciclo `promote` (candidata da L3 → regra permanente).
@@ -338,7 +338,7 @@ conter (não eliminar) o não-determinismo do LLM no build-time. Nenhum destes
    `_SYSTEM_PROMPT` e nos 6 exemplos de `_FEW_SHOT`
    (`llm_pipeline.py:65-223`). O `nistir7502.pdf` **é** indexado via RAG,
    mas apenas no pipeline separado do Layer‑3 (`cli/_knowledge.py:78-135`,
-   usado por `sca promote`/`--assess-unknown`), não no build principal do
+   usado por `caspar promote`/`--assess-unknown`), não no build principal do
    Apache. Ou seja: há uma assimetria de desenho — o pipeline principal
    ancora no benchmark mas não na norma que define a própria classificação
    que está a produzir. **Porque isto é uma limitação real, não uma escolha
@@ -395,7 +395,7 @@ mitigar isto, verificado no código:
   na base sem qualquer verificação automática adicional — a única barreira
   é o cuidado humano de quem a escreveu.
 - **`promote` exige confirmação humana, não é um gate automático.** O
-  comando `sca promote` (`cli/commands/manage_cmds.py`) corre a LLM sobre
+  comando `caspar promote` (`cli/commands/manage_cmds.py`) corre a LLM sobre
   directivas desconhecidas mas **pede confirmação interativa** antes de
   escrever na base (`click.confirm`, salvo `--yes`), e avisa explicitamente
   o utilizador para rever `good_value` manualmente depois. É um travão
@@ -532,7 +532,7 @@ avaliação.
 
 ```bash
 # setup (Ubuntu 22.04): ver GUIA_TESTE_MAQUINA.md e AVALIACAO_FUNCIONAL.md
-python -m pytest tests/ -q                    # 646 passed (inclui NISTIR 18/18)
+python -m pytest tests/ -q                    # 647 passed (inclui NISTIR 18/18)
 python -m scripts.functional_check            # 13/13 checks end-to-end
 python -m scripts.evaluate                    # KB · MAE 0% · recall 100% · precisão/F1 100%
 python -m scripts.baseline_compare --oscap    # Trivy + OpenSCAP (pass/fail reais)

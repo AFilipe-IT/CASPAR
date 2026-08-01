@@ -1,4 +1,4 @@
-# CCSS-Scan
+# CASPAR
 
 **Framework genérico de scoring de configurações de segurança baseado em NISTIR 7502 (CCSS)**
 
@@ -21,7 +21,7 @@
 
 ## O que é
 
-O CCSS-Scan lê uma configuração de serviço (ficheiro, directório, serviço instalado, ou imagem Docker), analisa cada directiva contra o CIS Benchmark usando um LLM local, e atribui um score de segurança CCSS (0–10) a cada problema — com narrativa técnica completa, cenário de exploração, justificação de cada submétrica, recomendação de remediação, enriquecimento por CVE real (NVD + CISA KEV), e detecção de attack chains.
+O CASPAR lê uma configuração de serviço (ficheiro, directório, serviço instalado, ou imagem Docker), analisa cada directiva contra o CIS Benchmark usando um LLM local, e atribui um score de segurança CCSS (0–10) a cada problema — com narrativa técnica completa, cenário de exploração, justificação de cada submétrica, recomendação de remediação, enriquecimento por CVE real (NVD + CISA KEV), e detecção de attack chains.
 
 Não é um scanner Apache específico. É uma metodologia replicável para qualquer serviço com **CIS Benchmark (PDF)** ou **DISA STIG (XCCDF XML)** disponível — `caspar plugin add` auto-detecta o formato da fonte. O Apache HTTP Server 2.4 é o target de referência porque é o único com ground truth CCE disponível para calibração.
 
@@ -100,7 +100,7 @@ A decisão de design central é a separação entre **build time** (LLM + CVE lo
 | Relatório terminal compacto | ✅ |
 | Relatório HTML com narrativas completas | ✅ |
 | Relatório SARIF / JSON | ✅ |
-| 150 testes automatizados | ✅ |
+| 647 testes automatizados | ✅ |
 
 ---
 
@@ -512,13 +512,13 @@ ccss_scan/
 ├── cli/
 │   └── main.py                   # scan, build, targets, refresh, plugin add/fetch
 │
-├── tests/
-│   ├── test_ccss.py               # 27 testes — fórmulas
-│   ├── test_runtime.py            # 18 testes — engine, DB
-│   ├── test_apache.py             # 31 testes — parser, rules
-│   ├── test_llm_pipeline.py       # 41 testes — Stage 1
-│   ├── test_chain_pipeline.py     # 33 testes — Stage 2
-│   └── test_cve_enricher.py       # testes — CVE enrichment
+├── tests/                         # 40 ficheiros, 647 testes — fórmulas CCSS,
+│   ├── test_ccss.py               #   parsers/regras por plugin, pipeline LLM
+│   ├── test_runtime.py            #   (Stage 1/2/3), chains, enrichment CVE/TTP,
+│   ├── test_apache.py             #   IaC (azure/k8s/dockerfile), CLI, RAG,
+│   ├── test_llm_pipeline.py       #   NISTIR §4 replication, …
+│   ├── test_chain_pipeline.py
+│   └── test_cve_enricher.py
 │
 ├── .env                          # NVD_API_KEY (gitignored)
 ├── .gitignore

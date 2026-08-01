@@ -75,7 +75,7 @@ Isto:
 
 ```bash
 caspar doctor       # integridade da DB
-caspar targets      # 12 plugins listados
+caspar targets      # 13 plugins listados
 caspar scan /etc/nginx/nginx.conf 2>/dev/null || echo "(sem nginx instalado na VM — normal)"
 ```
 
@@ -125,9 +125,9 @@ instala os pacotes Python e restaura a base de conhecimento a partir de `data/cc
 ### 2.3 Validar
 
 ```bash
-python -m pytest tests/ -q                                   # 646 passed
+python -m pytest tests/ -q                                   # 647 passed
 caspar doctor
-caspar targets                                                   # 12 plugins
+caspar targets                                                   # 13 plugins
 caspar scan test_target/test_nginx.conf                          # ≈5.7/10 [Medium]
 caspar scan test_target/pod_vulnerable.yaml                      # ≈10.0 [Critical] + chain
 ```
@@ -164,7 +164,7 @@ caspar scan test_target/test_nginx.conf     # usa o wrapper Docker já instalado
 | 1 | Docker sem sudo | `docker version` | responde sem erro de permissão |
 | 2 | CASPAR instalado (Docker) | `caspar doctor` | ✓ healthy |
 | 3 | Plugins (Docker) | `caspar targets` | 12 |
-| 4 | Nativa instalada | `python -m pytest tests/ -q` (dentro do venv) | 646 passed |
+| 4 | Nativa instalada | `python -m pytest tests/ -q` (dentro do venv) | 647 passed |
 | 5 | Persistência Docker | `docker volume ls` | `caspar_data`, `caspar_ollama_models` existem |
 
 ---

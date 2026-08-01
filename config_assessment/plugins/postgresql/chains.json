@@ -1,0 +1,57 @@
+[
+  {
+    "chain_id": "recon-log-disconnections",
+    "target_name": "postgresql",
+    "misconfig_directives": [
+      "log_disconnections",
+      "debug_print_parse"
+    ],
+    "amplification": 1.4,
+    "justification": "Enabling log_disconnections provides detailed information about client disconnections, which can be combined with debug_print_parse to reveal more granular details of the server's operation and user activity, aiding in reconnaissance.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "recon-log-line-prefix",
+    "target_name": "postgresql",
+    "misconfig_directives": [
+      "log_line_prefix",
+      "debug_pretty_print"
+    ],
+    "amplification": 1.4,
+    "justification": "The log_line_prefix directive with a detailed format combined with debug_pretty_print can provide extensive logging information that helps attackers understand the server's internal workings and user interactions, enhancing reconnaissance efforts.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "recon-log-rotation-size",
+    "target_name": "postgresql",
+    "misconfig_directives": [
+      "log_rotation_size",
+      "debug_print_plan"
+    ],
+    "amplification": 1.4,
+    "justification": "Setting log_rotation_size to zero disables automatic rotation, allowing logs to grow indefinitely and potentially contain extensive historical data. Combined with debug_print_plan, attackers can gain deep insights into the server's operational details.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "recon-log-directory",
+    "target_name": "postgresql",
+    "misconfig_directives": [
+      "log_directory",
+      "debug_print_rewritten"
+    ],
+    "amplification": 1.4,
+    "justification": "Setting log_directory to a relative path like '.' can expose logs in the web root, making them accessible via HTTP requests. Combined with debug_print_rewritten, attackers gain detailed insights into server operations and user activities.",
+    "cross_target": false
+  },
+  {
+    "chain_id": "recon-log-min-error-statement",
+    "target_name": "postgresql",
+    "misconfig_directives": [
+      "log_min_error_statement",
+      "debug_print_plan"
+    ],
+    "amplification": 1.4,
+    "justification": "Setting log_min_error_statement to a low value can expose detailed error messages, which combined with debug_print_plan provides attackers with extensive information about the server's internal state and user interactions.",
+    "cross_target": false
+  }
+]

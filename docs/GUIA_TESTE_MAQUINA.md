@@ -83,14 +83,14 @@ sqlite3 ccss.db < data/ccss_canonical.sql
 python -m pytest tests/ -q
 ```
 
-✓ **Esperado:** `646 passed` (uns quantos *skips* se os PDFs licenciados não estiverem presentes —
+✓ **Esperado:** `647 passed` (uns quantos *skips* se os PDFs licenciados não estiverem presentes —
 normal). Nenhum teste precisa de rede nem de Ollama.
 
 ### 2.3 Smoke tests reais
 
 ```bash
 python -m cli.main doctor                                    # integridade da DB
-python -m cli.main targets                                   # 12 plugins listados
+python -m cli.main targets                                   # 13 plugins listados
 python -m cli.main scan test_target/test_nginx.conf           # ≈5.7/10 [Medium]
 python -m cli.main scan test_target/pod_vulnerable.yaml       # ≈10.0 [Critical] + attack chain
 python -m cli.main scan test_target/Dockerfile.vulnerable     # ≈9.0  [Critical]
@@ -217,7 +217,7 @@ rápido com mapeamentos um pouco menos fiáveis; re-executar sem `--dry-run` é 
 
 | # | Verificação | Como | Esperado |
 |---|---|---|---|
-| 1 | Suite de testes | `python -m pytest tests/ -q` | 646 passed, offline |
+| 1 | Suite de testes | `python -m pytest tests/ -q` | 647 passed, offline |
 | 2 | DB íntegra | `caspar doctor` | ✓ healthy |
 | 3 | Plugins registados | `caspar targets` | 12, incl. azure-iac/kubernetes/dockerfile |
 | 4 | Scan clássico | `caspar scan test_target/test_nginx.conf` | ≈5.7 [Medium] |

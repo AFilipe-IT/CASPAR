@@ -283,7 +283,7 @@ lacuna escondida):
   worst-case/best-case, não substitui um corpus de configurações reais "em
   estado selvagem" — essa continua a ser uma limitação a declarar
   explicitamente na tese, não resolvida por este trabalho.
-- **Testado:** `python -m pytest tests/ -q` — 646 passed (sem regressões
+- **Testado:** `python -m pytest tests/ -q` — 647 passed (sem regressões
   face às 636 anteriores à sessão de correções).
 
 Isto substitui a resposta anterior ("trabalho futuro concreto e

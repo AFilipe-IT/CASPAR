@@ -27,6 +27,7 @@ from __future__ import annotations
 import glob
 import os
 import re
+from collections import defaultdict, deque
 from pathlib import Path
 
 from config_assessment.core.models import Directive
@@ -216,27 +217,56 @@ def _canonical(name: str) -> str:
 class _LineTracker:
     """
     Best-effort line-number resolver. Tokenization discards positions, so we
-    do a cheap line-by-line scan and hand back the first line whose content
-    contains the directive name (and value, if findable). This is approximate
-    but good enough for report display; it never fails the parse.
+    pre-index non-comment lines by the (lowercased) first word they contain,
+    then hand back the earliest not-yet-claimed candidate line whose content
+    also contains the value (if findable). This is approximate but good
+    enough for report display; it never fails the parse.
+
+    Indexed by first-word so lookups stay near O(1) per directive instead of
+    rescanning the whole file each time (that rescan was O(directives x
+    lines), i.e. quadratic in file size for configs with many directives).
+    Each per-name bucket is consumed from the front (deque.popleft) as lines
+    are matched, so a call never re-walks lines already claimed by earlier
+    calls for the same name — keeping repeat directives (e.g. many
+    `listen` lines) O(1) amortised instead of O(remaining candidates).
     """
 
     def __init__(self, raw: str) -> None:
         self._lines = raw.splitlines()
-        self._used: set[int] = set()
+        self._by_word: dict[str, deque[int]] = defaultdict(deque)
+        for i, line in enumerate(self._lines, start=1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            first_word = stripped.split(None, 1)[0].rstrip("{};")
+            self._by_word[first_word.lower()].append(i)
 
     def line_of(self, name: str, value: str) -> int:
-        for i, line in enumerate(self._lines, start=1):
-            if i in self._used:
-                continue
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                continue
-            if name in stripped and (not value or value.split()[0] in stripped):
-                self._used.add(i)
-                return i
-        # Fallback: first line containing just the name
-        for i, line in enumerate(self._lines, start=1):
-            if name in line:
-                return i
-        return 0
+        candidates = self._by_word.get(name.lower())
+        if not candidates:
+            return 0
+        value_head = value.split()[0] if value else ""
+        if not value_head:
+            return candidates.popleft()
+        # Scan from the front for a value match, holding aside any skipped
+        # (non-matching) entries so they remain available for later calls.
+        skipped: list[int] = []
+        match = None
+        while candidates:
+            i = candidates.popleft()
+            if value_head in self._lines[i - 1]:
+                match = i
+                break
+            skipped.append(i)
+        if match is not None:
+            for i in reversed(skipped):
+                candidates.appendleft(i)
+            return match
+        # No value match anywhere in the bucket: consume the first candidate
+        # as a best-effort fallback, put the rest back.
+        if not skipped:
+            return 0
+        fallback, rest = skipped[0], skipped[1:]
+        for i in reversed(rest):
+            candidates.appendleft(i)
+        return fallback

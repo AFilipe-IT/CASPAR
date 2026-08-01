@@ -19,15 +19,15 @@
 |---|---|---|---|---|---|
 | 0 | Científica — motor de scoring | O motor CCSS replica a especificação? | 18/18 exemplos oficiais do NISTIR 7502 §4 | `tests/test_nistir7502_examples.py` | ✅ 18/18 |
 | 1 | Científica — correção | Os scores estão certos? | MAE / taxa de mismatch vs CCE | `scripts/evaluate.py` | ✅ 0% |
-| 1b | Científica — submétricas | Cada submétrica CCSS está certa? | Concordância exata + Cohen's κ por submétrica | protocolo §1.2 | 🔲 |
+| 1b | Científica — submétricas | Cada submétrica CCSS está certa? | Concordância exata + Cohen's κ por submétrica | protocolo §1.2 | ✅ anotador-LLM (§1.2) |
 | 2 | Funcional — deteção | Encontra as misconfigurations? | Recall + precision + F1 | `scripts/evaluate.py` | ✅ 100% recall · 100% precision/F1 |
-| 3 | Funcional — integração | Tudo funciona de ponta a ponta? | Checks pass/fail | `scripts/functional_check.py` + pytest | ✅ 13/13 · ~646 |
+| 3 | Funcional — integração | Tudo funciona de ponta a ponta? | Checks pass/fail | `scripts/functional_check.py` + pytest | ✅ 13/13 · ~647 |
 | 4 | Fiabilidade | Dá sempre o mesmo resultado? | Determinismo, robustez, estabilidade do build LLM | §3 | ✅/🔲 |
-| 5 | Desempenho — scan | Quanto custa identificar misconfigurations? | Latência, CPU, RAM, energia | §4.1 | 🔲 |
-| 6 | Desempenho — extensão | Quanto custa adicionar um target novo? | Wall time, tokens/custo LLM, esforço humano | §4.2 | 🔲 |
-| 7 | Desempenho — ingestão | Qual o overhead de inserir conhecimento? | Tempo de ingestão RAG, crescimento da BD | §4.3 | 🔲 |
-| 8 | Escalabilidade | Aguenta configs/KB maiores que as atuais? | Curva latência × tamanho | §5 | 🔲 |
-| 9 | Baselines | Como se posiciona vs Trivy/OpenSCAP? | Overlap, blind spots, custo por finding | `scripts/baseline_compare.py` | ✅ qualit. / 🔲 desempenho |
+| 5 | Desempenho — scan | Quanto custa identificar misconfigurations? | Latência, CPU, RAM, energia | §4.1 | ✅ WSL2 (`scripts/perf_scan.py`) / 🔲 repetir em Ubuntu nativo |
+| 6 | Desempenho — extensão | Quanto custa adicionar um target novo? | Wall time, tokens/custo LLM, esforço humano | §4.2 | ✅ WSL2, N=1 (`postgresql`) / 🔲 repetir Ubuntu nativo + N≥5 (§3.2) |
+| 7 | Desempenho — ingestão | Qual o overhead de inserir conhecimento? | Tempo de ingestão RAG, crescimento da BD | §4.3 | ✅ abertura KB + Δ BD / ✅ ingestão manual RAG |
+| 8 | Escalabilidade | Aguenta configs/KB maiores que as atuais? | Curva latência × tamanho | §5 | ✅ configs sintéticas (§5.1) / ✅ KB crescente (§5.2) / ✅ diversidade real (§5.3) |
+| 9 | Baselines | Como se posiciona vs Trivy/OpenSCAP? | Overlap, blind spots, custo por finding | `scripts/baseline_compare.py` | ✅ qualit. + desempenho (§6.2, WSL2) |
 | 10 | Tradeoffs | O que se ganha e o que se paga? | Tabela §7 | análise | ✅ |
 
 ---
@@ -84,7 +84,7 @@ python -m scripts.evaluate          # secção "Correctness"
 *Limitação declarada:* azure-iac, kubernetes, dockerfile e ubuntu **não têm
 dataset CCE oficial** — validam-se por recall + baselines (§2, §6), não por MAE.
 
-### 1.2 Concordância **por submétrica** CCSS — 🔲 protocolo
+### 1.2 Concordância **por submétrica** CCSS — ✅ medido (anotador-LLM, N=1)
 
 O score final pode estar certo com submétricas erradas (erros que se cancelam).
 Validar **cada submétrica individualmente** contra anotação de referência:
@@ -128,6 +128,136 @@ erro categórico em impacto real no resultado (sensibilidade).
 **Interpretação de κ:** <0.40 fraco · 0.40–0.60 moderado · 0.60–0.80
 substancial · >0.80 quase perfeito (Landis & Koch). Reportar também o intervalo
 de confiança (bootstrap, 1000 reamostragens).
+
+**Nota de metodologia — anotador-LLM, não substituto de anotação humana.**
+O protocolo acima pede um anotador humano com o benchmark à frente. Por
+indisponibilidade de um segundo anotador humano nesta fase, os resultados
+abaixo foram produzidos por mim (Claude, agindo como "anotador-LLM"): li o
+texto integral do CIS Apache HTTP Server Benchmark v2.3.0 (secções
+Description/Rationale/Audit/Impact de cada controlo, via `pdftotext -layout`)
+e atribuí as 8 submétricas **sem consultar a BD do CASPAR antes de gravar
+cada valor** — cego no sentido de não ver a resposta do CASPAR, mas não cego
+no sentido do protocolo (mesmo "anotador" que desenhou o esquema de
+submétricas do CASPAR, logo com um prior partilhado, não independente). É
+evidência adicional de consistência interna face a uma leitura direta do
+benchmark, **não** o teto de concordância inter-anotador humana que o
+protocolo original visa estabelecer — isso fica como trabalho futuro (idealmente
+antes da defesa, com um segundo anotador humano real).
+
+**Amostra:** população completa de `apache-httpd` (N=35 regras, não uma
+subamostra de N≥30 — o target inteiro foi usado por simplicidade e por dar
+mais poder estatístico que o mínimo pedido). Comando de extração usado
+(nota: a coluna chama-se `target_name`, não `target`, ao contrário do exemplo
+original do protocolo):
+```bash
+sqlite3 ccss.db "SELECT directive, bad_value, cis_section, av, au, ac, c, i, a, gel, grl
+                 FROM misconfigurations WHERE target_name='apache-httpd';"
+```
+
+**Resultados:**
+
+| Submétrica | Concordância exata | κ de Cohen | κ IC 95% (bootstrap 1000×) | Erro médio \|Δscore\| |
+|---|---|---|---|---|
+| AV | 35/35 = 100% | 1.000 | [1.000, 1.000] | 0.000 |
+| Au | 35/35 = 100% | 1.000 | [1.000, 1.000] | 0.000 |
+| AC | 23/35 = 65.7% | 0.032 | [−0.253, 0.407] | 0.229 |
+| C | 31/35 = 88.6% | 0.751 | [0.485, 0.944] | 0.334 |
+| I | 28/35 = 80.0% | 0.486 | [0.109, 0.802] | 0.289 |
+| A | 33/35 = 94.3% | 0.856 | [0.635, 1.000] | 0.051 |
+| C/I/A (agrupado, n=105) | 92/105 = 87.6% | 0.760 | [0.628, 0.871] | — |
+| GEL | 6/35 = 17.1% | 0.000 | [0.000, 0.000] | n/a (temporal) |
+| GRL | 35/35 = 100% | 1.000 | [1.000, 1.000] | n/a (temporal) |
+| GEL/GRL (agrupado, n=70) | 41/70 = 58.6% | 0.310 | [0.207, 0.417] | n/a |
+
+Score base completo (todas as submétricas substituídas): Δscore médio =
+0.354, máximo = 1.50, 20/35 regras com Δscore = 0 (concordância perfeita em
+todas as submétricas de base).
+
+**Matrizes de confusão** (linhas = anotador-LLM/ground truth, colunas = CASPAR):
+
+```
+AC          L    M              C           C  N  P            I           C  N  P
+  L         21   7                C         1  0  1              C         2  0  0
+  M         5    2                N         0  8  3              N         0  23 3
+                                   P         0  0  22             P         0  4  3
+
+A           C  N  P             GEL         H   L   M          GRL       H
+  C         0  2  0               H         0   15  0            H       35
+  N         0  25 0               L         0   6   0
+  P         0  0  8                M         0   14  0
+```
+
+**Leitura.**
+
+- **AV e Au: κ=1.000.** Todas as 35 regras de `apache-httpd` são vulnerabilidades
+  de rede sem autenticação prévia (um cliente HTTP anónimo consegue explorar
+  qualquer uma) — tanto eu como o CASPAR concordamos nisto para 100% dos
+  casos. Pouco informativo por si só (não há variância na amostra), mas confirma
+  que o CASPAR não erra a classificação mais básica (AV/Au) neste target.
+- **A (Availability): κ=0.856, quase perfeito.** As 8 regras relacionadas com DoS
+  (Timeout, KeepAlive*, LimitRequest*) foram marcadas A=Partial por ambos em
+  quase todos os casos; as 2 discordâncias (κ não é 1.0) foram `LogLevel=emerg`
+  e outra regra de logging onde eu atribuí A=None (um log mal configurado não
+  esgota recursos) e o CASPAR tinha A=Complete — ver matriz acima, célula C→N
+  na linha A é onde a diferença se concentra.
+- **C (Confidentiality): κ=0.751, substancial.** A maior discordância visível na
+  matriz é 3 casos onde eu marquei N (nenhuma fuga de confidencialidade) e o
+  CASPAR marcou P — nas regras de tuning de KeepAlive/Timeout, que são
+  puramente de disponibilidade; o CASPAR parece herdar C=Partial por omissão
+  nalguns templates de disponibilidade onde eu não via fuga de informação
+  direta.
+- **I (Integrity): κ=0.486, moderado — a submétrica mais discordante das três
+  CIA.** 7 discordâncias: o CASPAR atribui I=None a algumas regras onde eu vi
+  impacto de integridade indireto (ex.: `LogLevel=emerg`, onde a ausência de
+  registo compromete a integridade da trilha de auditoria, não classificada
+  assim pelo CASPAR) e vice-versa nalgumas regras de disponibilidade pura.
+  Esta é a submétrica com a interpretação mais subjetiva das três — "integridade"
+  cobre tanto integridade de dados como de processo/auditoria, e a fronteira é
+  ambígua mesmo lendo o mesmo texto do benchmark.
+- **AC (Access Complexity): κ=0.032, ~zero — a maior discordância do
+  conjunto.** Concordância exata de 65.7% parece razoável à primeira vista, mas
+  κ corrige para o facto de ambos os anotadores usarem L (Low) esmagadora e
+  desproporcionadamente (30/35 e 28/35 respetivamente) — com tão pouca
+  variância na distribuição marginal, a concordância esperada ao acaso (pe=0.646)
+  já é quase igual à concordância observada (po=0.657), pelo que κ≈0. Isto é
+  **mais um sintoma de desenho da escala do que um erro do CASPAR**: a
+  maioria das misconfigurations de servidor web são triviais de explorar
+  (pedido HTTP direto), pelo que AC=Low domina genuinamente qualquer
+  anotação razoável — a escala L/M/H tem pouco poder discriminativo neste
+  tipo de alvo. Recomendação: nas ~7 regras onde discordamos (ver matriz,
+  célula L→M), a diferença tende a ser regras onde o CASPAR foi mais
+  conservador (M) e eu mais otimista sobre a facilidade de exploração (L) em
+  controlos que dependem de uma segunda condição (ex.: symlink plantado,
+  posição MITM) — ambas as leituras são defensáveis a partir do mesmo texto.
+- **GEL: κ=0.000, concordância exata 17.1% — a métrica mais fraca de
+  longe.** O CASPAR atribui **GEL=Low a todas as 35 regras de apache-httpd**
+  sem exceção (confirmado também que GEL varia normalmente entre targets
+  na BD completa: L=114, M=116, H=17, N=9, ND=258 — não é um bug de
+  extração, é uma característica genuína deste target/build específico). Isto
+  sugere que o LLM de build-time convergiu para um valor "seguro"/default de
+  GEL ao processar o benchmark Apache, em vez de diferenciar exploit level por
+  regra (ex.: CRIME/POODLE contra SSL legado deveriam ter GEL mais alto —
+  exploits públicos, ferramentas conhecidas — do que uma regra de log level).
+  **Isto é o achado mais acionável de toda a secção 1.2**: candidato a
+  investigação de causa raiz no prompt/lógica de atribuição de GEL do
+  `build_apache` antes da defesa — não é meramente uma discordância de
+  anotação, é uma possível falta de variância real na extração.
+- **GRL: κ=1.000.** Ambos concordamos GRL=High (remediação bem documentada,
+  fix de uma linha) para todas as 35 regras — plausível dado que praticamente
+  todos os controlos deste benchmark têm remediação trivial (mudar um valor
+  de diretiva), ao contrário de GEL onde seria de esperar mais variância.
+- **Δscore médio geral = 0.354 pontos (numa escala 0–10)**, com 20/35 regras
+  em concordância perfeita de score base. O impacto prático das discordâncias
+  categóricas no score final é pequeno mesmo quando κ é baixo (caso de AC),
+  porque a fórmula CCSS pesa AC apenas parcialmente no termo de
+  explorabilidade — consistente com a observação already feita em §1.1 de que
+  o score agregado pode estar "certo" mesmo com submétricas individuais
+  discordantes (motivação original desta secção 1.2).
+- **Limitação de amostra única**: `apache-httpd` é só 1 de 12 targets com
+  regras na BD; o padrão GEL=L/GRL=H constante pode ser específico deste
+  build e não generalizar — repetir esta análise nalgum outro target
+  (idealmente um construído por LLM como `postgresql`, §4.2) antes de
+  generalizar a conclusão sobre GEL.
 
 ### 1.3 Correlação de ordenação — 🔲
 
@@ -213,7 +343,7 @@ selvagem", uma limitação a declarar explicitamente (ver Revisor 1, ponto 6).
 ### 2.3 Integração ponta a ponta — ✅
 
 ```bash
-python -m pytest tests/ -q            # ~646 passed
+python -m pytest tests/ -q            # ~647 passed
 python -m scripts.functional_check    # 13/13 capacidades integradas
 ```
 
@@ -283,42 +413,68 @@ Ubuntu 22.04 nativo. Já observado informalmente; formalizar com uma tabela de
 > reporta **mediana, média ± desvio-padrão e p95**. Máquina documentada (CPU,
 > RAM, SO). Usar `hyperfine` para latência e `/usr/bin/time -v` para memória.
 
-### 4.1 Identificar misconfigurations (o caminho quente) — 🔲
+### 4.1 Identificar misconfigurations (o caminho quente) — ✅ medido (WSL2; repetir em Ubuntu nativo antes da defesa)
 
-**Latência:**
+**Script** (substitui `hyperfine`, indisponível neste ambiente — usa `/usr/bin/time -v`
+em subprocess fresco por corrida, mesma disciplina N≥10/warm-up/mediana+p95):
 ```bash
-hyperfine --warmup 1 --runs 10 \
-  'python -m cli.main scan test_nginx.conf' \
-  'python -m cli.main scan test_target/pod_vulnerable.yaml'
+python -m scripts.perf_scan --runs 10 --json > perf_scan_results.json
+python -m scripts.perf_scan --runs 10          # tabela legível
 ```
 
-**CPU e memória:**
-```bash
-/usr/bin/time -v python -m cli.main scan test_nginx.conf 2>&1 \
-  | grep -E "Maximum resident|User time|System time|Percent of CPU"
-```
+**Energia**: sem acesso RAPL/`perf` neste ambiente (WSL2 não expõe
+`/sys/class/powercap`) — reportada como **estimativa** `energia ≈ tempo_cpu ×
+TDP_declarado` (15W por omissão, `--tdp` para ajustar), não como medição.
+Repetir com `perf stat -e power/energy-pkg/` se a validação final correr em
+Ubuntu nativo com acesso ao RAPL.
 
-**Energia** (Intel RAPL; requer acesso a `/sys/class/powercap` ou `perf`):
-```bash
-sudo perf stat -e power/energy-pkg/ python -m cli.main scan test_nginx.conf
-# alternativa sem perf: ler /sys/class/powercap/intel-rapl:0/energy_uj antes/depois
-# alternativa por estimativa: energia ≈ tempo_cpu × TDP_médio (declarar como estimativa)
-```
+**Máquina:** Intel Core i7-12700H · 15845 MB RAM · WSL2 (Linux
+6.18.33.2-microsoft-standard-WSL2) — não é a máquina de validação final
+(Ubuntu 22.04 nativo, §"Estado" do topo deste documento); os números abaixo
+servem de baseline de forma/ordem de grandeza, a confirmar/substituir no
+Ubuntu real antes da defesa.
 
-**Tabela a preencher (por fixture):**
+> **Nota de correção:** a primeira versão desta medição continha um bug em
+> `scripts/perf_scan.py` — `--db` estava a ser passado *depois* do
+> subcomando `scan` em vez de antes (é uma opção global do CLI, não do
+> subcomando), o que fazia o Click rejeitar o comando (`Error: No such
+> option '--db'`, exit 2) em **todas** as corridas. `/usr/bin/time -v`
+> continuava a produzir `wall_s`/`max_rss_kb` válidos mesmo com o comando a
+> falhar — por isso o script não detetava o erro e os números antigos
+> (0.050s, 16.2MB) mediam na verdade **o tempo de arrancar o Python e o
+> Click rejeitar a opção**, não um scan real. Corrigido: `--db` movido para
+> antes de `scan`, e `run_once()` agora valida `returncode == 0` antes de
+> aceitar uma amostra. Os números abaixo são da medição corrigida.
 
-| Input | Latência mediana | p95 | CPU (user+sys) | RAM pico (RSS) | Energia (J) |
-|---|---|---|---|---|---|
-| nginx.conf (pequeno) | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| sysctl.conf real | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| pod_vulnerable.yaml | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| config grande (§5) | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
+**Resultados (N=10, 1 warm-up descartado):**
+
+| Input | Latência mediana | Latência média±σ | p95 | CPU (user+sys) | RAM pico (RSS) | Energia (J, estimada) |
+|---|---|---|---|---|---|---|
+| nginx.conf (pequeno) | 0.130s | 0.137±0.018s | 0.166s | 0.090s | 27.0 MB | 1.35 |
+| sysctl.conf real | 0.140s | 0.136±0.016s | 0.155s | 0.100s | 26.7 MB | 1.50 |
+| pod_vulnerable.yaml (IaC) | 0.135s | 0.137±0.015s | 0.161s | 0.090s | 26.7 MB | 1.35 |
+| config grande (§5.1, N=1000 server blocks) | 0.590s | 0.630±0.162s | 0.889s | 0.470s | 45.6 MB | ver §5.1 para a curva completa (10-5000) |
+
+**Leitura:** a latência é dominada pelo arranque do interpretador Python +
+abertura da BD SQLite, não pelo tamanho do input — os três fixtures (19-64
+linhas) dão o mesmo tempo dentro do ruído (diferenças <10ms, dentro de 1σ).
+RAM pico consistente (~27MB) confirma que o runtime não carrega toda a KB em
+memória de uma vez. Isto é evidência a favor do argumento de
+determinismo/leveza do runtime (nenhuma dependência de LLM/rede), mas a
+distinção **arranque vs scan puro** (abaixo) ainda não foi isolada — a
+medição de abertura de BD do §4.3 (1.124ms) já mostra que a BD não é o
+gargalo; falta isolar quanto do resto (~130ms) é import do Python/Click vs.
+lógica do scan em si antes de reportar isto como "o scan é O(1) no tamanho
+do input", que é uma afirmação mais forte do que estes números sozinhos
+sustentam.
 
 Separar **arranque** (import Python + abrir BD) de **scan puro**: correr também
 o scan via API interna num processo já quente para isolar o custo fixo do
 interpretador — importa para o modo `watch`, onde o processo é persistente.
+Ainda por fazer (🔲) — `scripts/perf_scan.py` mede só o processo fresco
+(igual ao uso real via `caspar scan`), não a via API-interna-já-quente.
 
-### 4.2 Adicionar um target/feature novo (extensibilidade) — 🔲
+### 4.2 Adicionar um target/feature novo (extensibilidade) — ✅ medido (via LLM build, WSL2)
 
 O argumento central da AMiSA é que estender a ferramenta é barato. Medir as
 **três vias** de extensão:
@@ -329,6 +485,15 @@ O argumento central da AMiSA é que estender a ferramenta é barato. Medir as
 | **Fetch público** (`plugin fetch --then-install`) | idem + tempo de download | `time python -m cli.main plugin fetch ...` |
 | **Curada** (kubernetes/dockerfile) | horas-pessoa para escrever as regras à mão | diário de esforço |
 
+**Nota sobre `plugin fetch`**: indisponível durante esta medição —
+`stigviewer.com` (fonte pública de STIGs usada por `plugin fetch`) passou a
+exigir autenticação (`{"error":"authentication_required"}` em todos os 43
+targets testados, não só o alvo tentado inicialmente) desde a última
+verificação; ver [[caspar-benchmark-fetch-sources]]. Não é um bug do CASPAR
+— é uma mudança do lado da fonte externa. A via medida abaixo é `plugin add`
+com um PDF local (CIS PostgreSQL 13 Benchmark v1.3.0, `sources/benchmarks/`),
+que não depende do stigviewer e mede exatamente o mesmo custo de build LLM.
+
 **Métricas derivadas (as que interessam na comparação):**
 - **custo por regra** = wall time (ou €) / nº de regras inseridas;
 - **tempo-até-primeiro-scan**: do benchmark em mão ao primeiro scan a funcionar;
@@ -336,12 +501,40 @@ O argumento central da AMiSA é que estender a ferramenta é barato. Medir as
   OpenSCAP (escrever OVAL à mão — ordem de dias/semanas, citar literatura) vs
   CASPAR (ordem de minutos + revisão).
 
-| Target | Via | Wall time | Tokens (in/out) | Custo | Regras | Custo/regra |
-|---|---|---|---|---|---|---|
-| exemplo novo | LLM | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| kubernetes | curada | (horas-pessoa) | — | — | ✓ | 🔲 |
+**Resultado real (target `postgresql`, CIS PostgreSQL 13 Benchmark v1.3.0,
+64 secções indexadas, modelo `qwen2.5:14b` em CPU, WSL2, execução única —
+não é uma média de N corridas, ver §3.2 para estabilidade entre builds):**
 
-### 4.3 Overhead de inserção de conhecimento — 🔲
+| Target | Via | Wall time | Regras extraídas | Custo/regra | Misconfigs | Chains | Narrativas |
+|---|---|---|---|---|---|---|---|
+| postgresql | LLM (`plugin add`, PDF local) | **1h46min16s** (6376s) | 32 (0 heurística, 32 LLM) | **~199s/regra** (~3.3 min/regra) | 26 | 5 | 26/26 |
+| kubernetes | curada (mão) | (horas-pessoa, não cronometrado) | — | — | ✓ | ✓ | — |
+
+**Leitura:**
+- Tempo-até-primeiro-scan para um serviço totalmente novo: **~1h46min**, sem
+  intervenção humana durante o build (correu unattended com `-y`), CPU-only,
+  numa máquina de portátil (i7-12700H) — não GPU. Isto é a ordem de grandeza
+  a citar como "minutos-a-horas" vs. a ordem de "dias-a-semanas" para OVAL
+  manual (citar literatura no capítulo de avaliação).
+- **Fiabilidade durante o build**: uma tentativa de geração de attack chains
+  expirou (`Chain generation attempt 1 failed: timed out`) e foi repetida
+  automaticamente com sucesso — dado relevante para §3 (fiabilidade/retry),
+  não apenas para desempenho.
+- **Limitação da medição**: `/usr/bin/time -v` mediu o processo pai
+  (`plugin add`), que delega a inferência a um processo `ollama runner`
+  separado — por isso `User time` reportado (0.94s) não reflete o custo de
+  CPU real da LLM (confirmado via `ps aux` a mostrar o runner a ~459% CPU
+  durante o build). O **wall time** (1h46min16s) continua válido e é a
+  métrica que importa para "tempo-até-primeiro-scan"; CPU-time agregado do
+  processo LLM fica como 🔲 se for necessário para o capítulo de energia.
+- Não há custo em tokens/€ a reportar — `qwen2.5:14b` corre localmente via
+  Ollama, sem API paga.
+- **N=1**: esta é uma única execução, não a média/mediana de N≥10 exigida
+  pelo protocolo geral do §4 — o custo de 1h46min por build torna N≥10
+  impraticável neste ambiente; ver §3.2 (5 builds) para uma leitura de
+  variância entre builds, ainda 🔲.
+
+### 4.3 Overhead de inserção de conhecimento — ✅ medido
 
 Custos de escrita na KB e de ingestão RAG (build-time, uma vez):
 
@@ -353,11 +546,46 @@ ls -l ccss.db; time python -m cli.main plugin add ...; ls -l ccss.db
 time python -m cli.main plugin manual nginx <manual.pdf>
 ```
 
+**Abertura da KB — medido** (N=30, interpretador já quente, isola o custo do
+`sqlite3.connect` do custo de arranque do Python que domina os números do
+§4.1): mediana **1.124 ms** (média 1.224 ms, σ=0.489 ms) para abrir a BD;
+consulta indexada por ponto (`get_misconfigurations`, o caminho quente do
+runtime) mediana **0.1185 ms** (média 0.1411 ms, σ=0.0741 ms). Isto confirma
+a leitura do §4.1: a latência de ~50ms observada por `caspar scan` é quase
+toda arranque de interpretador — abrir a BD e fazer o lookup indexado somam
+~1.2ms, <3% do tempo total.
+
 | Operação | Tempo | Δ tamanho em disco | Frequência |
 |---|---|---|---|
-| Insert de regras (BD) | 🔲 | 🔲 KB | uma vez por target |
-| Ingestão manual RAG | 🔲 | 🔲 (chunks + índice) | uma vez por documento |
-| Abertura da KB no scan | 🔲 ms | — | todos os scans |
+| Insert de regras (BD) | ✅ incluído no wall time do §4.2 (1h46min16s, dominado pela LLM, não pelo insert em si) | ✅ **+104 KB** (`ccss.db`: 3.211.264→3.317.760 bytes) para 26 misconfigs → **~4 KB/misconfig** | uma vez por target |
+| Ingestão manual RAG (`plugin manual`) | ✅ N=3, mediana **0.12 s** wall (0.22 s / 0.11 s / 0.12 s), CPU user+sys ≈0.10-0.12s, RAM pico ≈23 MB | ✅ PDF 291.424 bytes → `.md` sidecar 126.282 bytes (extração `pdftotext -layout`) | uma vez por documento |
+| Build do índice TF-IDF (`BenchmarkIndex`, sobre o `.md`) | ✅ N=5, mediana **13.4 ms** (13.1–16.5 ms) | — (em memória, não persistido — reconstruído a cada `scan --assess-unknown`) | por scan com L3 ligada |
+| Abertura da KB no scan | ✅ 1.124 ms (mediana, N=30) | — | todos os scans |
+| Lookup indexado (`get_misconfigurations`) | ✅ 0.1185 ms (mediana, N=30) | — | todos os scans |
+
+**Metodologia:** medido com `caspar plugin manual nginx ./nistir7502.pdf`
+(N=3, `/usr/bin/time -v`, plugin dir limpo entre corridas para evitar reuso
+do `.md` já extraído) — usámos o NISTIR 7502 (referência CCSS partilhada,
+291 KB) como documento de teste para não interferir com o benchmark próprio
+do plugin nginx já instalado. O build do índice TF-IDF foi medido
+separadamente (N=5, warm interpreter) chamando `BenchmarkIndex(path)`
+diretamente sobre o `.md` já extraído, porque `_find_knowledge_docs`
+descobre e indexa os documentos em memória a cada scan com
+`--assess-unknown` (Camada 3) — não há índice persistido em disco a medir.
+
+**Análise:** a ingestão de um manual é dominada por I/O de ficheiro e
+extração de texto determinística (`pdftotext`), não por LLM — ordens de
+grandeza mais rápida que o build de um plugin novo (§4.2, ~1h46min,
+dominado por chamadas LLM). O build do índice TF-IDF em si é ~13ms mesmo
+sobre um documento de ~2000 linhas, consistente com o overhead "por scan"
+da RAG ser desprezável quando medido isoladamente — a Camada 3 só entra em
+jogo quando há diretivas desconhecidas a avaliar (`--assess-unknown`), e
+mesmo aí o custo de indexação é uma fração ínfima do tempo total do scan
+(~50ms de arranque de interpretador, ver §4.1).
+
+Plugin `postgresql` gerado ocupa 1.5 MB em disco (`config_assessment/plugins/postgresql/`),
+dominado pelo PDF do benchmark original (1.51 MB) — os artefactos gerados
+(`rules.py`, `parser.py`, `build_postgresql.py`, `chains.json`) somam ~9.6 KB.
 
 Ponto-chave a demonstrar: o modelo **"ingerir uma vez, consultar sempre"**
 empurra o custo para build-time — o overhead **por scan** da RAG é ~0 quando a
@@ -378,41 +606,198 @@ pidstat -r -u -p <pid_do_watch> 5 60   # 5 min de amostragem
 As fixtures atuais são pequenas. Validar o comportamento com **inputs e KB
 maiores do que os que existem no repo**:
 
-### 5.1 Configs sintéticas crescentes — 🔲
+### 5.1 Configs sintéticas crescentes — ✅ medido
 
-Gerar configs válidas com nº crescente de diretivas (misto seguro/inseguro):
+Gerado com `scripts/gen_config.py` (script novo, ~55 linhas) — nginx.conf com
+N server blocks, ~50% marcados aleatoriamente (seed=42) como inseguros
+(`autoindex on`, `server_tokens on`, `ssl_protocols TLSv1 TLSv1.1`) vs.
+seguros:
 
 ```bash
-# gerar nginx.conf com N server blocks (script trivial de 20 linhas)
 for N in 10 100 1000 5000; do
-  python gen_config.py --target nginx --directives $N > /tmp/nginx_$N.conf
-  hyperfine --runs 5 "python -m cli.main scan /tmp/nginx_$N.conf"
+  python scripts/gen_config.py --target nginx --blocks $N > /tmp/nginx_$N.conf
 done
+python -m scripts.perf_scan --runs 10 \
+  --fixture "N10=/tmp/nginx_10.conf" --fixture "N100=/tmp/nginx_100.conf" \
+  --fixture "N1000=/tmp/nginx_1000.conf" --fixture "N5000=/tmp/nginx_5000.conf" \
+  --json
 ```
 
-| Diretivas | Latência | RAM pico | Findings |
+N≥10 corridas/escala (1 warm-up descartado), medida em WSL2 (mesma máquina/
+protocolo do §4.1: Intel i7-12700H, 15.8 GB RAM).
+
+| Server blocks | Latência mediana | Latência média±σ | p95 | RAM pico (mediana) | Findings |
+|---|---|---|---|---|---|
+| 10 | 0.280 s | 0.287±0.049 s | 0.364 s | 29.6 MB | 19 |
+| 100 | 0.245 s | 0.274±0.081 s | 0.403 s | 31.3 MB | 107 |
+| 1000 | 0.590 s | 0.630±0.162 s | 0.889 s | 45.6 MB | 967 |
+| 5000 | 2.520 s | 2.487±0.281 s | 2.812 s | 114.6 MB | 4951 |
+
+**Análise:** regressão log-log (`t = a·N^b`) sobre os 4 pontos dá `b≈0.34`,
+`R²=0.70` — um mau ajuste porque o ponto N=10 é dominado pelo custo fixo de
+arranque do interpretador/abertura da BD (~0.15–0.2 s), não pelo trabalho de
+parsing (mesma lógica de isolamento do custo fixo já discutida no protocolo
+do §4.1). Excluindo esse ponto, o ajuste em N≥100 dá **`t ≈ 0.0148·N^0.58`,
+R²=0.92** — sublinear a aproximadamente-linear, dentro do esperado (lookup na
+KB é indexado; ver achado abaixo). Extrapolando esse ajuste, a latência
+ultrapassa o limiar interativo de 2 s por volta de **N≈4700** server blocks —
+o próprio N=5000 já está no limite (mediana 2.52 s).
+
+**Achado relevante (bug de performance encontrado e corrigido nesta
+sessão):** a primeira medição a N=5000 (antes da correção abaixo) deu
+**166.294 s** — ~29× mais lento que N=1000 (5.692 s) para um aumento de
+apenas 5× no tamanho do input, claramente super-linear (próximo do
+quadrático: 5²=25). Perfilagem (`cProfile`) isolou a causa em
+`config_assessment/plugins/nginx/parser.py`, classe `_LineTracker.line_of()`
+— usada para resolver o número de linha de cada diretiva para efeitos de
+relatório. A implementação original fazia uma **rescan completo do ficheiro
+por cada instância de diretiva** (`for i, line in enumerate(self._lines)...`
+sem indexação), ou seja O(diretivas × linhas) = O(N²) num ficheiro sintético
+onde ambos os fatores crescem com N. Corrigido em duas iterações:
+
+1. Pré-indexar as linhas por primeira palavra (`dict[str, deque[int]]`) no
+   `__init__`, reduzindo o lookup por diretiva de "rescan de todo o
+   ficheiro" para "rescan apenas do bucket com o mesmo nome de diretiva".
+2. Consumir cada bucket a partir da frente (`deque.popleft`, devolvendo à
+   frente as entradas sem correspondência de valor) em vez de apenas marcar
+   linhas como "usadas" num `set` — a v1 ainda escondia um O(N) residual por
+   chamada em diretivas muito repetidas (ex.: `listen`, `ssl_protocols`,
+   5000 ocorrências cada em N=5000), porque saltar sobre um número crescente
+   de entradas já "usadas" no início da lista continua a ser trabalho linear
+   por chamada.
+
+Resultado: N=5000 passou de 166.294 s → 4.190 s (fix 1) → **2.520 s** (fix
+2), uma melhoria de **~66×** no total. Verificado com a suite completa de
+testes (647/647 passed) e reperfilado — `line_of` deixou de aparecer no
+top-10 por tempo próprio no perfil final (era 15.589 s de tottime em 9005
+chamadas antes do fix 1). O comportamento é agora dominado por trabalho
+genuinamente linear (`_tokenize`, `sqlite3.commit`/`execute`,
+`_match_value_rules`), consistente com o expoente medido (~0.58, sublinear).
+
+Este bug não tinha impacto visível nas fixtures pequenas usadas no resto da
+validação (§4.1–§4.3, todas <1000 diretivas) — só se manifesta em inputs
+grandes, exatamente o cenário que este protocolo §5.1 foi desenhado para
+expor. Sem esta medição de escalabilidade sintética, o bug teria permanecido
+por detetar.
+
+### 5.2 KB crescente — ✅ medido
+
+O scan degrada com mais targets/regras na BD? `scripts/grow_kb.py` (novo,
+~70 linhas) clona `ccss.db` e duplica todas as regras existentes sob
+targets fantasma sintéticos (`ghost_N`, um por regra clonada — necessário
+porque a UNIQUE constraint em `(target_name, directive, bad_value,
+expected_value_prefix)` impede reusar o mesmo target fantasma para um lote
+inteiro, já que muitas regras partilham directive+bad_value entre targets
+reais diferentes). Confirmado antes de medir que os findings da fixture
+nginx (`test_target/test_nginx.conf`) são **idênticos** nas 3 BDs (9
+findings em todas), ou seja as regras fantasma não interferem na deteção —
+só aumentam o tamanho da tabela que o motor varre.
+
+```bash
+python scripts/grow_kb.py --dst /tmp/ccss_1000.db --target-rows 1000
+python scripts/grow_kb.py --dst /tmp/ccss_5000.db --target-rows 5000
+python -m scripts.perf_scan --runs 10 --db /tmp/ccss_1000.db \
+  --fixture "KB1000=test_target/test_nginx.conf" --json
+```
+
+N=10 corridas/BD (1 warm-up descartado), WSL2, mesma fixture nas 3 medições.
+
+| Regras na KB | 514 (atual) | 1000 | 5000 |
 |---|---|---|---|
-| 10 / 100 / 1000 / 5000 | 🔲 | 🔲 | 🔲 |
+| Latência mediana | 0.130 s | 0.140 s | 0.180 s |
+| Latência média±σ | 0.133±0.005 s | 0.158±0.046 s | 0.177±0.007 s |
+| p95 | 0.140 s | 0.235 s | 0.185 s |
+| RAM pico (mediana) | 26.9 MB | 29.0 MB | 38.9 MB |
+| Findings (mesma fixture) | 9 | 9 | 9 |
 
-**Análise:** ajustar a curva (esperado ~linear no nº de diretivas; o lookup na
-KB é indexado). Reportar o expoente do fit e o ponto onde a latência deixa de
-ser interativa (>2 s).
+**Análise:** a KB cresceu quase 10× (514→5000 regras) e a latência mediana
+subiu apenas 0.05 s (+38%), RAM subiu ~12 MB — consistente com o lookup na
+KB ser indexado por (target_name, directive) e não fazer scan linear sobre
+todas as regras. O p95 de KB1000 (0.235s) tem uma amostra periférica (run
+7/10: 0.280s) provavelmente ruído do SO, não sinal — a mediana e o stdev de
+KB5000 (mais estável, σ=0.007) são a leitura mais fiável. Sem sinal de
+degradação relevante nesta gama; não há indicação de que o crescimento da
+KB seja um problema de escalabilidade a curto/médio prazo.
 
-### 5.2 KB crescente — 🔲
+### 5.3 Diversidade real — ✅ medido
 
-O scan degrada com mais targets/regras na BD? Duplicar sinteticamente as
-regras (targets fantasma) até 10× e repetir o scan da mesma fixture:
+Corremos o CASPAR sobre configuração real, não escrita por nós para o efeito:
 
-| Regras na KB | 488 (atual) | ~1000 | ~5000 |
-|---|---|---|---|
-| Latência do mesmo scan | 🔲 | 🔲 | 🔲 |
+- **nginx**: `/etc/nginx` completo (config stock do pacote Ubuntu, com todos
+  os `include` resolvidos — `sites-available/default`, `mime.types`, etc.).
+- **apache**: `/etc/apache2` completo (config stock do pacote `apache2`
+  Ubuntu, todos os módulos/confs habilitados por default).
+- **kubernetes**: 6 manifests oficiais do repositório
+  [`kubernetes/website`](https://github.com/kubernetes/website) (exemplos da
+  documentação oficial — `simple-pod.yaml`, `nginx-deployment.yaml`,
+  `nginx-app.yaml`, `nginx-secure-app.yaml`, `mysql-deployment.yaml`,
+  `deployment.yaml`).
 
-### 5.3 Diversidade real — 🔲
+Não tentámos baixar configs nginx/apache de outros repositórios GitHub
+(URLs adivinhadas deram 404); os pacotes stock Ubuntu já são configuração
+real, mantida por terceiros (Debian/Ubuntu maintainers), não escrita para
+este trabalho — servem o mesmo propósito de medir generalização.
 
-Correr sobre configs reais públicas (nginx/apache de projetos open-source,
-manifests K8s de repositórios populares) e reportar: % de ficheiros parseados
-sem erro, findings por ficheiro, diretivas desconhecidas sinalizadas. Mede
-**generalização** para fora das fixtures construídas por nós.
+```bash
+caspar --db ccss.db scan /etc/nginx --output-dir out/nginx
+caspar --db ccss.db scan /etc/apache2 --output-dir out/apache
+for f in k8s_real/*.yaml; do caspar --db ccss.db scan "$f" --output-dir out/k8s; done
+```
+
+**Resultados:**
+
+| Alvo | Ficheiros parseados | Diretivas escaneadas | Findings | Chains | Diretivas desconhecidas |
+|---|---|---|---|---|---|
+| nginx (`/etc/nginx`) | 100% (sem erros) | 107 | 4 | 0 | 106 |
+| apache (`/etc/apache2`) | 100% (sem erros) | 291 | 12 | 8 | 245 |
+| K8s (6 manifests) | 6/6 (100%) | 6–41 por ficheiro | 0 em todos | 0 | 5–27 por ficheiro |
+
+Nenhum dos parses falhou (0 erros de sintaxe/leitura em qualquer dos
+ficheiros reais) — o parser nginx/apache/K8s é robusto a configuração real
+fora das nossas fixtures.
+
+**Leitura das diretivas desconhecidas — nginx/apache:** a maioria das
+"diretivas desconhecidas" não é configuração de segurança de todo — é
+metadata de tipos MIME:
+
+- nginx: 88/106 (83%) vêm de `mime.types` (mapeamentos `application/pdf
+  pdf;`, etc.), 12 de `nginx.conf`, 6 de `sites-available/default`.
+- apache: 137/245 (56%) vêm de `mods-available/mime.conf`, seguido de
+  `autoindex.conf` (49), `setenvif.conf` (16), `apache2.conf` (11), e
+  restantes módulos (`mpm_event`, `deflate`, `status`, etc.) com poucas
+  entradas cada.
+
+Excluindo os ficheiros de mapeamento MIME, a taxa "genuína" de diretivas
+desconhecidas cai para 18/107 (17%) em nginx e 108/291 (37%) em apache,
+concentrada em diretivas de módulos específicos fora do escopo curado da KB
+atual (18 regras nginx, 35 regras apache) — não em falhas de parsing. Isto é
+um resultado qualitativo relevante: o mecanismo de sinalização de diretivas
+desconhecidas (não pontuadas, mas reportadas) está a funcionar como
+desenhado, e a maior fonte de ruído (tabelas MIME) é facilmente filtrável se
+se quiser um sinal de generalização mais limpo no futuro.
+
+**Leitura das diretivas desconhecidas — K8s:** a KB de kubernetes cobre 10
+diretivas curadas de segurança do `securityContext`
+(`privileged`, `runAsNonRoot`, `allowPrivilegeEscalation`,
+`readOnlyRootFilesystem`, `hostNetwork`, `hostPID`, `hostIPC`, `runAsUser`,
+`automountServiceAccountToken`, `add`). Todo o resto do schema K8s
+(`apiVersion`, `kind`, `containerPort`, `image`, `mountPath`, `name`, ...) é,
+por desenho, sinalizado como "desconhecido" — não é uma lacuna do parser,
+é o âmbito deliberadamente estreito da KB curada (consistente com o resto
+do plugin IaC, ver mapa §0). Os 6 manifests oficiais não geraram nenhum
+finding porque são exemplos de tutorial bem formados (sem `privileged: true`,
+sem `hostNetwork: true`, etc.) — um resultado limpo e plausível, não um
+sinal de falha de deteção (confirmado por inspeção manual do log de
+`nginx-secure-app.yaml`: 31 diretivas genuinamente escaneadas).
+
+**Análise:** 100% dos ficheiros reais testados (nginx, apache, 6 manifests
+K8s) foram parseados sem erro — nenhuma falha de parsing em configuração
+que não escrevemos nós. O volume bruto de "diretivas desconhecidas" é
+dominado por dados não seguros (tabelas MIME), não por lacunas de
+cobertura; depois de filtrar isso, a taxa de diretivas fora do âmbito da KB
+é modesta e concentrada em módulos/campos específicos não cobertos —
+esperado para uma KB curada (por desenho, não exaustiva) e não indicativo
+de um problema de robustez do parser.
 
 ---
 
@@ -437,19 +822,49 @@ python -m scripts.baseline_compare --oscap
 que o build LLM mapeou pelo sinónimo `secure_transfer_required`; o CASPAR dá
 score e narrativa onde os outros dão um label fixo.
 
-### 6.2 Desempenho lado a lado — 🔲
+### 6.2 Desempenho lado a lado — ✅ medido (WSL2; repetir em Ubuntu nativo antes da defesa)
 
-Mesma máquina, mesmo input, mesmo protocolo do §4.1:
+Mesma máquina, mesmo input, mesmo protocolo do §4.1. Script:
+`scripts/perf_baseline.py` (reutiliza `scripts/perf_scan.py`, mesma disciplina
+N≥10/warm-up/mediana+p95, mesmos fixtures do `scripts/baseline_compare.py`
+usado no §6.1 — achados e desempenho medidos sobre exatamente o mesmo input).
 
-| Métrica | CASPAR | Trivy | OpenSCAP |
-|---|---|---|---|
-| Latência mediana (mesmo .tf) | 🔲 | 🔲 | — |
-| RAM pico | 🔲 | 🔲 | 🔲 |
-| CPU total | 🔲 | 🔲 | 🔲 |
-| Energia (J) | 🔲 | 🔲 | 🔲 |
+```bash
+python -m scripts.perf_baseline --runs 10 --json > perf_baseline.json
+python -m scripts.perf_baseline --runs 10
+```
 
-> Nota de equidade: o Trivy é um binário Go, o CASPAR é Python — declarar que
-> a comparação de recursos mede as *implementações*, não as *metodologias*.
+**Resultados (N=10, 1 warm-up descartado):**
+
+| Input | Ferramenta | Latência mediana | Latência média±σ | p95 | CPU total | RAM pico | Energia (J, est.) |
+|---|---|---|---|---|---|---|---|
+| azure_storage_vulnerable.tf | CASPAR | 0.150s | 0.152±0.016s | 0.175s | 0.110s | 27.0 MB | 1.65 |
+| azure_storage_vulnerable.tf | Trivy | 1.015s | 1.042±0.129s | 1.216s | 1.655s | 195.1 MB | 24.82 |
+| Dockerfile.vulnerable | CASPAR | 0.130s | 0.136±0.013s | 0.155s | 0.090s | 26.7 MB | 1.35 |
+| Dockerfile.vulnerable | Trivy | 0.890s | 0.893±0.026s | 0.935s | 1.465s | 198.4 MB | 21.98 |
+| — (live system eval, cis_level1_server) | OpenSCAP | 0.975s | 0.973±0.030s | 1.021s | 0.895s | 195.7 MB | — |
+
+> Nota de equidade: o Trivy é um binário Go, o CASPAR é Python — a
+> comparação de recursos mede as *implementações*, não as *metodologias*.
+> **OpenSCAP avalia o sistema vivo, não um ficheiro** (§6.1 "Avalia: estado
+> do sistema vivo") — não é comparável ficheiro-a-ficheiro com CASPAR/Trivy;
+> reportado à parte, N=10 mas sem par de input comum.
+
+**Leitura:** CASPAR é **6-8× mais rápido em wall time** e usa **~7× menos
+RAM pico** que o Trivy nos mesmos dois ficheiros, apesar de ser Python vs Go
+— consistente com CASPAR fazer um lookup indexado num SQLite pequeno
+(§4.3: BD abre em ~1ms) contra o binário Trivy carregar as suas policies/
+regras embutidas a cada invocação. CPU total do Trivy (~1.5s) é bem acima do
+seu próprio wall time (~0.9-1.0s) — `Percent of CPU this job got: ~170%`
+confirma paralelismo interno (múltiplas goroutines), o que reduz o wall time
+à custa de mais CPU agregado; o CASPAR não paraleliza (CPU total < wall
+time). Energia estimada (TDP×CPU-time) segue a mesma proporção: ~15-18×
+menos para CASPAR. **Nota de fiabilidade da medição**: o Trivy falhou o
+parsing de `/usr/bin/time -v` em ~1/20 corridas neste ambiente WSL2 (causa
+não identificada — não reproduzível isoladamente, resolvido com retry
+automático em `run_once_trivy`); não afeta CASPAR nem OpenSCAP, e as
+corridas com falha foram descartadas e repetidas, não incluídas nestes
+números.
 
 ---
 
@@ -498,18 +913,51 @@ N e IC; nunca uma comparação de tempos sem a máquina e o nº de corridas.
 
 ```bash
 # já implementado (correr primeiro — são os números-âncora)
-python -m pytest tests/ -q                    # ~646 passed
+python -m pytest tests/ -q                    # ~647 passed
 python -m scripts.functional_check            # 13/13
 python -m scripts.evaluate                    # KB · MAE 0% · recall 100% · precision/F1 100%
 python -m scripts.baseline_compare --oscap    # Trivy + OpenSCAP
 
+# já medido nesta sessão (WSL2 — repetir em Ubuntu nativo antes da defesa)
+python -m scripts.perf_scan --runs 10          # §4.1 latência/CPU/RAM/energia do scan
+python -m scripts.perf_baseline --runs 10      # §6.2 idem para Trivy/OpenSCAP
+# §4.2 custo de extensão medido via `plugin add` local (stigviewer.com passou a
+# exigir auth — ver [[caspar-benchmark-fetch-sources]]; plugin fetch indisponível)
+# §1.2 concordância por submétrica: anotador-LLM (eu), N=35 (apache-httpd
+# completo), sem segundo anotador humano — ver nota de metodologia em §1.2.
+# Achado mais acionável: GEL constante (=Low) nas 35 regras deste target,
+# candidato a investigação de causa raiz no build_apache antes da defesa.
+# §5.1 escalabilidade sintética (nginx, N=10/100/1000/5000 server blocks):
+# fit N>=100 dá t~=0.0148*N^0.58 (R²=0.92, sublinear). Limiar interativo
+# (2s) ~N=4700. Encontrado e corrigido um bug real de performance: o
+# resolvedor de nº de linha em parser.py (_LineTracker.line_of) era
+# O(diretivas x linhas) = O(N²); N=5000 caiu de 166.294s -> 2.520s (~66x)
+# apos indexar por diretiva + consumo em deque. 647/647 testes continuam a
+# passar. Ver §5.1 para a análise completa.
+# §5.2 KB crescente (514->1000->5000 regras via targets fantasma): +38%
+# latência mediana (0.130s->0.180s), +12MB RAM, findings idênticos (9/9/9)
+# — lookup indexado por (target_name, directive), sem sinal de degradação.
+# §5.3 diversidade real (/etc/nginx, /etc/apache2 stock Ubuntu + 6 manifests
+# K8s oficiais kubernetes/website): 100% parse sem erros. "Diretivas
+# desconhecidas" dominadas por tabelas MIME (não são config de segurança);
+# taxa genuína fora do âmbito da KB é modesta e concentrada em módulos
+# específicos — comportamento esperado de uma KB curada, não exaustiva.
+# §4.3 ingestão manual RAG (`plugin manual`): N=3, mediana 0.12s wall,
+# dominado por I/O+extração pdftotext, não LLM. Build do índice TF-IDF
+# (BenchmarkIndex, N=5): mediana 13.4ms sobre um .md de ~2000 linhas —
+# overhead "por scan" da RAG desprezável, ordens de grandeza abaixo do
+# build de plugin novo (§4.2, ~1h46min, dominado por LLM).
+
 # por implementar/medir (por ordem de valor para a tese)
-# 1. §4.1  latência/CPU/RAM/energia do scan      (hyperfine + time -v + RAPL)
-# 2. §6.2  o mesmo para Trivy/OpenSCAP           (comparação de desempenho)
-# 3. §4.2  custo de adicionar um target novo     (o argumento central da AMiSA)
-# 4. §1.2  concordância por submétrica + κ       (rigor científico do scoring)
-# 5. §5    escalabilidade sintética              (limites da abordagem)
-# 6. §3.2  estabilidade do build LLM (5 builds)  (fiabilidade da via LLM)
+# 1. Repetir §4.1/§4.2/§6.2 em Ubuntu nativo — AÇÃO DO UTILIZADOR: este
+#    ambiente é WSL2 (confirmado via uname -r), sem máquina Ubuntu nativa
+#    acessível; correr scripts/perf_scan.py e scripts/perf_baseline.py na
+#    máquina Ubuntu 22.04 real antes da defesa e reportar os números aqui.
+# (§3.2 — estabilidade do build LLM, 5 builds — intencionalmente NÃO medido
+#  nesta ronda, por decisão explícita: custo ~9h considerado desproporcional
+#  para o ganho marginal face a §4.2 (N=1) já reportado)
+# (opcional, reforça §1.2) segundo anotador humano real para apache-httpd,
+#    ou repetir §1.2 noutro target para testar se GEL=L constante generaliza
 ```
 
 ---

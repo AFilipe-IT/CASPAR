@@ -56,7 +56,7 @@ testes RAG do Apache fazem *skip*, o que é normal. Nada do que segue precisa de
 ## 2. Verificação de sanidade (unit + smoke)
 
 ```bash
-python -m pytest tests/ -q                    # ~602 passed (uns skips)
+python -m pytest tests/ -q                    # ~647 passed (uns skips)
 python -m scripts.functional_check            # 13/13 checks (end-to-end)
 ```
 
@@ -72,7 +72,7 @@ python -m scripts.evaluate
 ```
 
 ✓ **Capturar** (para a tese):
-- **Composição da KB:** 11 targets, 488 regras, 27 chains, com proveniência.
+- **Composição da KB:** 12 targets, 514 regras, 32 chains, com proveniência.
 - **Correção:** MAE vs CCE (Apache) — esperado **20/20, 0% mismatch, gate PASS**.
 - **Deteção:** recall nas fixtures — esperado **100% (14/14)**.
 
