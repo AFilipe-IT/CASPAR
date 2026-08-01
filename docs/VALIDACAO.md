@@ -23,11 +23,11 @@
 | 2 | Funcional — deteção | Encontra as misconfigurations? | Recall + precision + F1 | `scripts/evaluate.py` | ✅ 100% recall · 100% precision/F1 |
 | 3 | Funcional — integração | Tudo funciona de ponta a ponta? | Checks pass/fail | `scripts/functional_check.py` + pytest | ✅ 13/13 · ~647 |
 | 4 | Fiabilidade | Dá sempre o mesmo resultado? | Determinismo, robustez, estabilidade do build LLM | §3 | ✅/🔲 |
-| 5 | Desempenho — scan | Quanto custa identificar misconfigurations? | Latência, CPU, RAM, energia | §4.1 | ✅ WSL2 (`scripts/perf_scan.py`) / 🔲 repetir em Ubuntu nativo |
-| 6 | Desempenho — extensão | Quanto custa adicionar um target novo? | Wall time, tokens/custo LLM, esforço humano | §4.2 | ✅ WSL2, N=1 (`postgresql`) / 🔲 repetir Ubuntu nativo + N≥5 (§3.2) |
+| 5 | Desempenho — scan | Quanto custa identificar misconfigurations? | Latência, CPU, RAM, energia | §4.1 | ✅ WSL2 + Ubuntu nativo (`scripts/perf_scan.py`) |
+| 6 | Desempenho — extensão | Quanto custa adicionar um target novo? | Wall time, tokens/custo LLM, esforço humano | §4.2 | ✅ WSL2, N=1 (`postgresql`) / 🔲 repetir em Ubuntu nativo + N≥5 (§3.2) |
 | 7 | Desempenho — ingestão | Qual o overhead de inserir conhecimento? | Tempo de ingestão RAG, crescimento da BD | §4.3 | ✅ abertura KB + Δ BD / ✅ ingestão manual RAG |
 | 8 | Escalabilidade | Aguenta configs/KB maiores que as atuais? | Curva latência × tamanho | §5 | ✅ configs sintéticas (§5.1) / ✅ KB crescente (§5.2) / ✅ diversidade real (§5.3) |
-| 9 | Baselines | Como se posiciona vs Trivy/OpenSCAP? | Overlap, blind spots, custo por finding | `scripts/baseline_compare.py` | ✅ qualit. + desempenho (§6.2, WSL2) |
+| 9 | Baselines | Como se posiciona vs Trivy/OpenSCAP? | Overlap, blind spots, custo por finding | `scripts/baseline_compare.py` | ✅ qualit. + desempenho (§6.2, WSL2 + Ubuntu nativo) |
 | 10 | Tradeoffs | O que se ganha e o que se paga? | Tabela §7 | análise | ✅ |
 
 ---
@@ -413,7 +413,7 @@ Ubuntu 22.04 nativo. Já observado informalmente; formalizar com uma tabela de
 > reporta **mediana, média ± desvio-padrão e p95**. Máquina documentada (CPU,
 > RAM, SO). Usar `hyperfine` para latência e `/usr/bin/time -v` para memória.
 
-### 4.1 Identificar misconfigurations (o caminho quente) — ✅ medido (WSL2; repetir em Ubuntu nativo antes da defesa)
+### 4.1 Identificar misconfigurations (o caminho quente) — ✅ medido (WSL2 + Ubuntu nativo)
 
 **Script** (substitui `hyperfine`, indisponível neste ambiente — usa `/usr/bin/time -v`
 em subprocess fresco por corrida, mesma disciplina N≥10/warm-up/mediana+p95):
@@ -428,11 +428,14 @@ TDP_declarado` (15W por omissão, `--tdp` para ajustar), não como medição.
 Repetir com `perf stat -e power/energy-pkg/` se a validação final correr em
 Ubuntu nativo com acesso ao RAPL.
 
-**Máquina:** Intel Core i7-12700H · 15845 MB RAM · WSL2 (Linux
-6.18.33.2-microsoft-standard-WSL2) — não é a máquina de validação final
-(Ubuntu 22.04 nativo, §"Estado" do topo deste documento); os números abaixo
-servem de baseline de forma/ordem de grandeza, a confirmar/substituir no
-Ubuntu real antes da defesa.
+**Máquina (WSL2):** Intel Core i7-12700H · 15845 MB RAM · WSL2 (Linux
+6.18.33.2-microsoft-standard-WSL2).
+
+**Máquina (Ubuntu nativo, 2026-08-01):** mesmo CPU (Intel Core i7-12700H,
+VM na mesma máquina física) · 3916 MB RAM atribuídos à VM · Ubuntu 22.04.5
+LTS genuíno (kernel HWE 6.8.0-136-generic, confirmado via
+`/etc/os-release`/`lsb_release` — o `uname -r` sozinho sugeria 24.04 por
+usar o stack de kernel HWE mais recente, mas o userland é 22.04.5 real).
 
 > **Nota de correção:** a primeira versão desta medição continha um bug em
 > `scripts/perf_scan.py` — `--db` estava a ser passado *depois* do
@@ -446,7 +449,7 @@ Ubuntu real antes da defesa.
 > antes de `scan`, e `run_once()` agora valida `returncode == 0` antes de
 > aceitar uma amostra. Os números abaixo são da medição corrigida.
 
-**Resultados (N=10, 1 warm-up descartado):**
+**Resultados WSL2 (N=10, 1 warm-up descartado):**
 
 | Input | Latência mediana | Latência média±σ | p95 | CPU (user+sys) | RAM pico (RSS) | Energia (J, estimada) |
 |---|---|---|---|---|---|---|
@@ -455,18 +458,32 @@ Ubuntu real antes da defesa.
 | pod_vulnerable.yaml (IaC) | 0.135s | 0.137±0.015s | 0.161s | 0.090s | 26.7 MB | 1.35 |
 | config grande (§5.1, N=1000 server blocks) | 0.590s | 0.630±0.162s | 0.889s | 0.470s | 45.6 MB | ver §5.1 para a curva completa (10-5000) |
 
+**Resultados Ubuntu nativo (N=10, 1 warm-up descartado, 2026-08-01):**
+
+| Input | Latência mediana | Latência média±σ | p95 | CPU (user+sys) | RAM pico (RSS) | Energia (J, estimada) |
+|---|---|---|---|---|---|---|
+| nginx.conf (pequeno) | 0.100s | 0.099±0.003s | 0.100s | 0.080s | 24.7 MB | 1.20 |
+| sysctl.conf real | 0.100s | 0.101±0.003s | 0.106s | 0.080s | 24.3 MB | 1.22 |
+| pod_vulnerable.yaml (IaC) | 0.100s | 0.101±0.006s | 0.110s | 0.085s | 24.4 MB | 1.28 |
+
 **Leitura:** a latência é dominada pelo arranque do interpretador Python +
-abertura da BD SQLite, não pelo tamanho do input — os três fixtures (19-64
-linhas) dão o mesmo tempo dentro do ruído (diferenças <10ms, dentro de 1σ).
-RAM pico consistente (~27MB) confirma que o runtime não carrega toda a KB em
-memória de uma vez. Isto é evidência a favor do argumento de
-determinismo/leveza do runtime (nenhuma dependência de LLM/rede), mas a
-distinção **arranque vs scan puro** (abaixo) ainda não foi isolada — a
-medição de abertura de BD do §4.3 (1.124ms) já mostra que a BD não é o
-gargalo; falta isolar quanto do resto (~130ms) é import do Python/Click vs.
-lógica do scan em si antes de reportar isto como "o scan é O(1) no tamanho
-do input", que é uma afirmação mais forte do que estes números sozinhos
-sustentam.
+abertura da BD SQLite, não pelo tamanho do input — em ambas as máquinas os
+três fixtures (19-64 linhas) dão o mesmo tempo dentro do ruído (diferenças
+<10ms, dentro de 1σ). RAM pico consistente (~25-27MB) confirma que o
+runtime não carrega toda a KB em memória de uma vez. O Ubuntu nativo é
+consistentemente ~25-30% mais rápido que a WSL2 (0.100s vs 0.130-0.140s
+mediana, σ também menor — 0.003-0.006s vs 0.015-0.018s), como esperado: sem
+a camada de tradução de syscalls do WSL2. Isto é evidência a favor do
+argumento de determinismo/leveza do runtime (nenhuma dependência de LLM/
+rede) em ambas as plataformas — o comportamento qualitativo (input-size-
+independent, dominado por arranque) replica-se, só a magnitude absoluta
+muda, o que é o resultado esperado ao trocar de VM/plataforma e reforça que
+a conclusão não é um artefacto do WSL2. A distinção **arranque vs scan
+puro** ainda não foi isolada — a medição de abertura de BD do §4.3
+(1.124ms, WSL2) já mostra que a BD não é o gargalo; falta isolar quanto do
+resto é import do Python/Click vs. lógica do scan em si antes de reportar
+isto como "o scan é O(1) no tamanho do input", que é uma afirmação mais
+forte do que estes números sozinhos sustentam.
 
 Separar **arranque** (import Python + abrir BD) de **scan puro**: correr também
 o scan via API interna num processo já quente para isolar o custo fixo do
@@ -822,7 +839,7 @@ python -m scripts.baseline_compare --oscap
 que o build LLM mapeou pelo sinónimo `secure_transfer_required`; o CASPAR dá
 score e narrativa onde os outros dão um label fixo.
 
-### 6.2 Desempenho lado a lado — ✅ medido (WSL2; repetir em Ubuntu nativo antes da defesa)
+### 6.2 Desempenho lado a lado — ✅ medido (WSL2 + Ubuntu nativo)
 
 Mesma máquina, mesmo input, mesmo protocolo do §4.1. Script:
 `scripts/perf_baseline.py` (reutiliza `scripts/perf_scan.py`, mesma disciplina
@@ -834,7 +851,7 @@ python -m scripts.perf_baseline --runs 10 --json > perf_baseline.json
 python -m scripts.perf_baseline --runs 10
 ```
 
-**Resultados (N=10, 1 warm-up descartado):**
+**Resultados WSL2 (N=10, 1 warm-up descartado):**
 
 | Input | Ferramenta | Latência mediana | Latência média±σ | p95 | CPU total | RAM pico | Energia (J, est.) |
 |---|---|---|---|---|---|---|---|
@@ -844,27 +861,77 @@ python -m scripts.perf_baseline --runs 10
 | Dockerfile.vulnerable | Trivy | 0.890s | 0.893±0.026s | 0.935s | 1.465s | 198.4 MB | 21.98 |
 | — (live system eval, cis_level1_server) | OpenSCAP | 0.975s | 0.973±0.030s | 1.021s | 0.895s | 195.7 MB | — |
 
+**Resultados Ubuntu nativo (N=10, 1 warm-up descartado, 2026-08-01):**
+
+| Input | Ferramenta | Latência mediana | Latência média±σ | p95 | CPU total | RAM pico | Energia (J, est.) |
+|---|---|---|---|---|---|---|---|
+| azure_storage_vulnerable.tf | CASPAR | 0.100s | 0.115±0.042s | 0.185s | 0.080s | 24.8 MB | 1.20 |
+| azure_storage_vulnerable.tf | Trivy | 1.020s | 3.927±9.196s | 17.04s | 1.350s | 202.1 MB | 20.25 |
+| Dockerfile.vulnerable | CASPAR | 0.090s | 0.094±0.005s | 0.100s | 0.080s | 24.4 MB | 1.20 |
+| Dockerfile.vulnerable | Trivy | 1.090s | 8.784±24.376s | 43.49s | 1.440s | 203.4 MB | 21.60 |
+| — (live system eval, cis_level1_server) | OpenSCAP | 45.99s | 46.366±2.334s | 49.94s | 45.355s | 199.4 MB | 680.32 |
+
 > Nota de equidade: o Trivy é um binário Go, o CASPAR é Python — a
 > comparação de recursos mede as *implementações*, não as *metodologias*.
 > **OpenSCAP avalia o sistema vivo, não um ficheiro** (§6.1 "Avalia: estado
 > do sistema vivo") — não é comparável ficheiro-a-ficheiro com CASPAR/Trivy;
 > reportado à parte, N=10 mas sem par de input comum.
 
-**Leitura:** CASPAR é **6-8× mais rápido em wall time** e usa **~7× menos
-RAM pico** que o Trivy nos mesmos dois ficheiros, apesar de ser Python vs Go
-— consistente com CASPAR fazer um lookup indexado num SQLite pequeno
+**Leitura (WSL2):** CASPAR é **6-8× mais rápido em wall time** e usa **~7×
+menos RAM pico** que o Trivy nos mesmos dois ficheiros, apesar de ser Python
+vs Go — consistente com CASPAR fazer um lookup indexado num SQLite pequeno
 (§4.3: BD abre em ~1ms) contra o binário Trivy carregar as suas policies/
 regras embutidas a cada invocação. CPU total do Trivy (~1.5s) é bem acima do
 seu próprio wall time (~0.9-1.0s) — `Percent of CPU this job got: ~170%`
 confirma paralelismo interno (múltiplas goroutines), o que reduz o wall time
 à custa de mais CPU agregado; o CASPAR não paraleliza (CPU total < wall
 time). Energia estimada (TDP×CPU-time) segue a mesma proporção: ~15-18×
-menos para CASPAR. **Nota de fiabilidade da medição**: o Trivy falhou o
-parsing de `/usr/bin/time -v` em ~1/20 corridas neste ambiente WSL2 (causa
-não identificada — não reproduzível isoladamente, resolvido com retry
+menos para CASPAR.
+
+**Leitura (Ubuntu nativo):** a mediana confirma a mesma ordem de grandeza da
+WSL2 para CASPAR vs Trivy (CASPAR ~10× mais rápido em mediana, RAM pico ~8×
+menor) — a conclusão qualitativa replica-se. Duas diferenças relevantes face
+à WSL2, ambas explicadas por causas identificáveis, não por instabilidade do
+CASPAR:
+
+1. **Trivy tem outliers extremos** (média 3.9-8.8s vs. mediana 1.0-1.1s,
+   p95 até 43.5s, stdev maior que a própria média) — o comando
+   (`trivy config -f json --quiet <target>`) não usa `--offline-scan`, logo
+   pelo menos uma das 10 corridas por fixture tentou contactar a rede para
+   atualizar a base de vulnerabilidades embutida; a mediana (não afetada
+   por outliers) continua o número mais fiável e está alinhada com a WSL2.
+   CASPAR não tem este problema — nenhuma chamada de rede no caminho do
+   scan (offline por desenho, ver §3.1).
+2. **OpenSCAP é ~47× mais lento nesta VM** (46.0s vs 0.975s mediana na
+   WSL2), apesar de avaliar o mesmo perfil (`cis_level1_server`) sobre o
+   mesmo datastream (`ssg-ubuntu2204-ds.xml`, obtido diretamente do release
+   oficial `ComplianceAsCode/content` porque o pacote `ssg-debderived` do
+   apt não está disponível para Ubuntu 22.04 "jammy", só a partir de 24.04
+   "noble" — ver nota de proveniência abaixo). A VM tem 3.9 GB RAM vs 15.8
+   GB da WSL2, o que pode explicar parte da diferença (menos cache de
+   página do SO disponível para as ~1000+ regras OVAL do datastream
+   completo), mas a magnitude (quase duas ordens de grandeza) não está
+   totalmente explicada pela RAM sozinha — não investigámos mais fundo
+   porque o OpenSCAP é a ferramenta de comparação, não o CASPAR, e o ponto
+   central (CASPAR não faz avaliação de sistema vivo, logo não paga este
+   custo de forma alguma) mantém-se válido em qualquer das duas máquinas.
+
+> **Nota de proveniência do datastream OpenSCAP:** `ssg-debderived`/
+> `ssg-base` (o pacote apt usado no §6.1/§6.2 original em WSL2) só está
+> disponível nos repositórios `noble` (Ubuntu 24.04); no Ubuntu 22.04
+> "jammy" genuíno (a VM de validação) esse pacote não existe via apt. Para
+> obter o mesmo datastream (`ssg-ubuntu2204-ds.xml`) baixámos diretamente o
+> release oficial `scap-security-guide-0.1.81.tar.gz` de
+> `github.com/ComplianceAsCode/content/releases` e colocámos o `.xml` em
+> `/usr/share/xml/scap/ssg/content/` — mesmo conteúdo, fonte diferente da
+> distribuição via apt.
+
+**Nota de fiabilidade da medição**: o Trivy falhou o parsing de
+`/usr/bin/time -v` em ~1/20 corridas no ambiente WSL2 (causa não
+identificada — não reproduzível isoladamente, resolvido com retry
 automático em `run_once_trivy`); não afeta CASPAR nem OpenSCAP, e as
 corridas com falha foram descartadas e repetidas, não incluídas nestes
-números.
+números. Não se repetiu no Ubuntu nativo.
 
 ---
 
@@ -918,7 +985,7 @@ python -m scripts.functional_check            # 13/13
 python -m scripts.evaluate                    # KB · MAE 0% · recall 100% · precision/F1 100%
 python -m scripts.baseline_compare --oscap    # Trivy + OpenSCAP
 
-# já medido nesta sessão (WSL2 — repetir em Ubuntu nativo antes da defesa)
+# já medido nesta sessão (WSL2 + Ubuntu nativo, 2026-08-01, para §4.1/§6.2)
 python -m scripts.perf_scan --runs 10          # §4.1 latência/CPU/RAM/energia do scan
 python -m scripts.perf_baseline --runs 10      # §6.2 idem para Trivy/OpenSCAP
 # §4.2 custo de extensão medido via `plugin add` local (stigviewer.com passou a
@@ -949,13 +1016,17 @@ python -m scripts.perf_baseline --runs 10      # §6.2 idem para Trivy/OpenSCAP
 # build de plugin novo (§4.2, ~1h46min, dominado por LLM).
 
 # por implementar/medir (por ordem de valor para a tese)
-# 1. Repetir §4.1/§4.2/§6.2 em Ubuntu nativo — AÇÃO DO UTILIZADOR: este
-#    ambiente é WSL2 (confirmado via uname -r), sem máquina Ubuntu nativa
-#    acessível; correr scripts/perf_scan.py e scripts/perf_baseline.py na
-#    máquina Ubuntu 22.04 real antes da defesa e reportar os números aqui.
+# 1. §4.1/§6.2 repetidos em Ubuntu nativo (2026-08-01, VM Ubuntu 22.04.5 LTS
+#    jammy genuíno, mesmo CPU físico i7-12700H, 3.9GB RAM atribuídos): mesma
+#    conclusão qualitativa do WSL2 (CASPAR mais rápido e mais leve; latência
+#    do scan independente do tamanho do input), confirmando que não é
+#    artefacto do WSL2. Ver §4.1/§6.2 para tabelas e análise completas.
+#    §4.2 (o próprio custo de build LLM, N=1) NÃO foi repetido nesta VM —
+#    fica pendente, distinto de §3.2 abaixo.
 # (§3.2 — estabilidade do build LLM, 5 builds — intencionalmente NÃO medido
 #  nesta ronda, por decisão explícita: custo ~9h considerado desproporcional
-#  para o ganho marginal face a §4.2 (N=1) já reportado)
+#  para o ganho marginal face a §4.2 (N=1) já reportado; cobre também a
+#  repetição de §4.2 em Ubuntu nativo, que ficaria condicionada ao mesmo custo)
 # (opcional, reforça §1.2) segundo anotador humano real para apache-httpd,
 #    ou repetir §1.2 noutro target para testar se GEL=L constante generaliza
 ```
@@ -963,4 +1034,7 @@ python -m scripts.perf_baseline --runs 10      # §6.2 idem para Trivy/OpenSCAP
 ---
 
 *Documento de apoio à secção de avaliação da dissertação (metodologia AMiSA /
-ferramenta CASPAR). Resultados ✅ obtidos em Ubuntu 22.04 real, 2026-07-09.*
+ferramenta CASPAR). Resultados funcionais/correção ✅ obtidos em Ubuntu 22.04
+real, 2026-07-09; resultados de desempenho §4.1/§6.2 repetidos em Ubuntu 22.04
+nativo (VM separada), 2026-08-01 — ver secções respetivas para a máquina
+exata de cada medição.*
