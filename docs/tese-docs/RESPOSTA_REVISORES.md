@@ -248,7 +248,7 @@ trabalho futuro de cobertura, não de arquitetura.
 **Estado: RESOLVIDO.**
 
 A suite formal de recall/precisão/F1 (`scripts/evaluate.py`,
-`VALIDACAO.md` §2.1–2.2) foi alargada de 4 para **10 dos 11 plugins**
+`06_VALIDACAO.md` §2.1–2.2) foi alargada de 4 para **10 dos 11 plugins**
 existentes — todos exceto `docker` (as suas regras são maioritariamente
 estado do host/CLI — kernel, flags do daemon, permissões de ficheiro — não
 chaves de `daemon.json`, pelo que uma fixture de configuração não as
@@ -278,7 +278,7 @@ lacuna escondida):
 - **Resultado medido (`python -m scripts.evaluate`):** recall 100%
   (96/96 findings esperados, nos 10 alvos), precisão 100% (96 TP / 0 FP),
   F1 100% — nenhuma fixture hardened produziu um único falso positivo.
-- **`VALIDACAO.md` §2.1–2.2** atualizado com as tabelas por alvo e a nota
+- **`06_VALIDACAO.md` §2.1–2.2** atualizado com as tabelas por alvo e a nota
   honesta sobre o alcance do corpus: é sintético e deliberadamente
   worst-case/best-case, não substitui um corpus de configurações reais "em
   estado selvagem" — essa continua a ser uma limitação a declarar
@@ -321,7 +321,7 @@ diagnosticado como viável):
 - **Ponto 6 (cenários de teste):** os 6 plugins sem fixture formal (`ssh,
   mysql, redis, tomcat, ubuntu` + registo de `apache-httpd`) têm agora
   fixtures vulneráveis e hardened, com recall/precisão/F1 medidos a 100%
-  em `scripts/evaluate.py` e documentados em `VALIDACAO.md`.
+  em `scripts/evaluate.py` e documentados em `06_VALIDACAO.md`.
 
 Todas as alterações são estritamente aditivas e retrocompatíveis (626 → 646
 testes, zero regressões, `python -m pytest tests/ -q`). A limitação que

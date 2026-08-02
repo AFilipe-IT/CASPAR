@@ -10,7 +10,7 @@
 
 O CASPAR lê a configuração de um serviço (13 plugins hoje — Apache, Nginx, MySQL, PostgreSQL, Redis, SSH, Tomcat, Docker, Dockerfile, Kubernetes, Ubuntu OS, Azure IaC, mais um plugin `dummy` de teste), compara cada directiva/regra contra o CIS Benchmark ou DISA STIG de origem, e atribui um score de segurança 0–10 baseado no standard NISTIR 7502 (CCSS). O trabalho pesado — perceber o que cada má configuração significa, atribuir métricas, escrever narrativas, procurar CVEs — acontece **uma vez** no *build time*, usando um LLM local (Ollama), e fica gravado numa base SQLite. Cada *scan* depois é **100% determinístico**: lê a config, procura na base, faz aritmética, produz o relatório — sem LLM, sem internet, mesmo resultado sempre.
 
-Esta separação build/runtime é a decisão de arquitetura mais importante do projeto e o que o torna defensável academicamente: os scores são reprodutíveis e auditáveis (manifesto com hash SHA-256 do conteúdo da base de conhecimento, ver §7 do [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md)).
+Esta separação build/runtime é a decisão de arquitetura mais importante do projeto e o que o torna defensável academicamente: os scores são reprodutíveis e auditáveis (manifesto com hash SHA-256 do conteúdo da base de conhecimento, ver §7 do [03_GUIA_VM_UBUNTU22.md](03_GUIA_VM_UBUNTU22.md)).
 
 ---
 

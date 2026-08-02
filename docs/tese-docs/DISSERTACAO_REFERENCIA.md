@@ -173,7 +173,7 @@ Reproduzível com `python -m scripts.evaluate` e
 O motor de scoring foi validado contra os **18 exemplos resolvidos do próprio
 NISTIR 7502 §4** (vetores da calculadora NVD): **18/18 exatos**
 (`tests/test_nistir7502_examples.py`, 2026-07-14). O desvio conservador do
-modelo temporal simplificado está documentado em VALIDACAO.md §1.0 e §7. É a
+modelo temporal simplificado está documentado em 06_VALIDACAO.md §1.0 e §7. É a
 evidência de que a *aritmética* está certa, independente do LLM.
 
 ### 4.3 Correção das classificações — MAE vs ground truth CCE (Apache)
@@ -531,7 +531,7 @@ avaliação.
 ## 5. Como reproduzir (para a defesa / anexos)
 
 ```bash
-# setup (Ubuntu 22.04): ver GUIA_TESTE_MAQUINA.md e AVALIACAO_FUNCIONAL.md
+# setup (Ubuntu 22.04): ver 03_GUIA_VM_UBUNTU22.md e 04_AVALIACAO_FUNCIONAL.md
 python -m pytest tests/ -q                    # 647 passed (inclui NISTIR 18/18)
 python -m scripts.functional_check            # 13/13 checks end-to-end
 python -m scripts.evaluate                    # KB · MAE 0% · recall 100% · precisão/F1 100%
@@ -573,9 +573,10 @@ tratá-los como checklist):
    evitar figura e tabela redundantes com a mesma informação.
 
 ## 7. Documentos relacionados
-- [README.md](../../README.md) — vitrine + comandos
-- [GUIA_CASPAR.md](../GUIA_CASPAR.md) — guia de utilizador/demo
-- [GUIA_TECNICO.md](../GUIA_TECNICO.md) — arquitectura interna
-- [GUIA_TESTE_MAQUINA.md](../GUIA_TESTE_MAQUINA.md) — setup + build Docker
-- [AVALIACAO_FUNCIONAL.md](../AVALIACAO_FUNCIONAL.md) — roteiro de avaliação
+- [README.md](../../README.md) — vitrine + comandos (roteiro numerado 01-06)
+- [02_GUIA_CASPAR.md](../02_GUIA_CASPAR.md) — guia de utilizador/demo
+- [03_GUIA_VM_UBUNTU22.md](../03_GUIA_VM_UBUNTU22.md) — instalar + testar tudo + build Docker
+- [04_AVALIACAO_FUNCIONAL.md](../04_AVALIACAO_FUNCIONAL.md) — roteiro de avaliação
+- [05_GUIA_TECNICO.md](../05_GUIA_TECNICO.md) — arquitectura interna
+- [06_VALIDACAO.md](../06_VALIDACAO.md) — plano de validação completo
 - [HANDOFF.md](../HANDOFF.md) — briefing técnico completo

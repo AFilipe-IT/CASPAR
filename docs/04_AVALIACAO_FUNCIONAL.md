@@ -5,9 +5,9 @@
 > resultados para a secção de avaliação da dissertação. Cada passo diz o que
 > correr, o que esperar, e o que **capturar** para a tese.
 >
-> Complementa [GUIA_VM_UBUNTU22.md](GUIA_VM_UBUNTU22.md) (preparar a VM do zero),
-> [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) (setup) e
-> [scripts/evaluate.py](scripts/evaluate.py) / [scripts/baseline_compare.py](scripts/baseline_compare.py).
+> É o **guia 04** do roteiro (ver [README.md](../README.md)) — segue-se ao
+> [03_GUIA_VM_UBUNTU22.md](03_GUIA_VM_UBUNTU22.md) (instalar + testar tudo); usa
+> [scripts/evaluate.py](../scripts/evaluate.py) / [scripts/baseline_compare.py](../scripts/baseline_compare.py).
 
 ---
 

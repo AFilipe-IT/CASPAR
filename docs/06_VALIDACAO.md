@@ -7,7 +7,8 @@
 > pergunta a que responde, o protocolo, a métrica, o comando, e o estado
 > (✅ medido / 🔲 por medir).
 >
-> Complementa [AVALIACAO_FUNCIONAL.md](AVALIACAO_FUNCIONAL.md) (roteiro passo a
+> É o **guia 06** do roteiro (ver [README.md](../README.md)). Complementa
+> [04_AVALIACAO_FUNCIONAL.md](04_AVALIACAO_FUNCIONAL.md) (roteiro passo a
 > passo no Ubuntu 22.04) e [DISSERTACAO_REFERENCIA.md](tese-docs/DISSERTACAO_REFERENCIA.md)
 > (resultados consolidados para a tese).
 

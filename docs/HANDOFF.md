@@ -3,9 +3,10 @@
 > **Propósito:** dá este ficheiro a uma IA (ou a ti, noutra sessão/máquina) no
 > início. Resume, com FACTOS VERIFICADOS, o que o projeto é, onde está, as
 > decisões e invariantes que não se podem violar, e o que falta. Para detalhe:
-> [README.md](../README.md) (vitrine + comandos), [GUIA_CASPAR.md](GUIA_CASPAR.md)
-> (utilizador/demo), [GUIA_TECNICO.md](GUIA_TECNICO.md) (arquitectura interna),
-> [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) (setup + build Docker).
+> [README.md](../README.md) (vitrine + comandos, com o roteiro numerado 01-06),
+> [02_GUIA_CASPAR.md](02_GUIA_CASPAR.md) (utilizador/demo),
+> [05_GUIA_TECNICO.md](05_GUIA_TECNICO.md) (arquitectura interna),
+> [03_GUIA_VM_UBUNTU22.md](03_GUIA_VM_UBUNTU22.md) (setup + build Docker + testar tudo).
 >
 > **Última actualização:** 2026-07-18. Se números abaixo divergirem do repo,
 > o repo manda — corre os comandos da secção "Verificação" e actualiza este
@@ -116,7 +117,7 @@ Docker; CASPAR vs **OpenSCAP** `--oscap` em Ubuntu OS). Ver §7.
 - **DB canónica** (`data/ccss_canonical.sql`, restaura para `ccss.db`): **488
   regras / 27 chains** em **11 targets** (snapshot de 2026-07-31; a `ccss.db`
   viva tem desde então um 12º target, `postgresql`, 26 regras/5 chains,
-  adicionado para medir §4.2 do VALIDACAO.md — **ainda não propagado ao
+  adicionado para medir §4.2 do 06_VALIDACAO.md — **ainda não propagado ao
   snapshot canónico**, que continua a refletir os 11 targets originais até
   ser regenerado deliberadamente):
 
@@ -283,7 +284,7 @@ suppress, doctor, fix, **promote** (`--stats`).
     `FROM caspar:latest`). Ordem inversa = código velho na `full`. O build LLM
     (`plugin add`, `build_azure`) precisa da `:full` (Ollama embutido). Os
     comandos/regras novos só entram nas imagens após **rebuild** — ver
-    [GUIA_TESTE_MAQUINA.md](GUIA_TESTE_MAQUINA.md) §3.
+    [03_GUIA_VM_UBUNTU22.md](03_GUIA_VM_UBUNTU22.md) §2.5.
 
 ---
 

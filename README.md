@@ -2,20 +2,20 @@
 
 **Framework genérico de scoring de configurações de segurança baseado em NISTIR 7502 (CCSS)**
 
-> **Este documento é a vitrine e referência de comandos.** A restante documentação vive em [docs/](docs/); os documentos ligados à dissertação estão em [docs/tese-docs/](docs/tese-docs/).
+> **Este documento é a vitrine e referência de comandos — é o "01" do roteiro.** A restante
+> documentação vive em [docs/](docs/), numerada pela ordem de leitura recomendada; os documentos
+> ligados à dissertação estão em [docs/tese-docs/](docs/tese-docs/).
 >
-> | Documento | Papel | Lê-o quando… |
-> |---|---|---|
-> | **README.md** (este) | Vitrine + referência de comandos | queres saber o que é e como usar |
-> | [GUIA_CASPAR.md](docs/GUIA_CASPAR.md) | Guia de utilizador + demonstração | queres perceber e demonstrar, do zero |
-> | [GUIA_TECNICO.md](docs/GUIA_TECNICO.md) | Arquitectura interna | vais mexer no código |
-> | [GUIA_VM_UBUNTU22.md](docs/GUIA_VM_UBUNTU22.md) | Preparar uma VM Ubuntu 22.04 limpa do zero (Docker + nativa) | acabaste de criar a VM e ainda não tens Docker/Python configurados |
-> | [GUIA_TESTE_MAQUINA.md](docs/GUIA_TESTE_MAQUINA.md) | Setup + build das imagens Docker | vais testar numa máquina nova, já com Docker/deps instalados |
-> | [TESTAR_COMANDOS.md](docs/TESTAR_COMANDOS.md) | Checklist de todos os subcomandos do CLI, um a um | queres confirmar que a ferramenta está operacional |
-> | [AVALIACAO_FUNCIONAL.md](docs/AVALIACAO_FUNCIONAL.md) | Roteiro de avaliação funcional (Ubuntu 22.04) | vais avaliar o projeto de ponta a ponta |
-> | [VALIDACAO.md](docs/VALIDACAO.md) | Plano de validação completo (científica, funcional, fiabilidade, desempenho, tradeoffs) | queres saber como a ferramenta se valida e mede |
-> | [DISSERTACAO_REFERENCIA.md](docs/tese-docs/DISSERTACAO_REFERENCIA.md) | Material-fonte consolidado para a tese (funcionalidades, implementação, validações) | vais escrever a dissertação |
-> | [HANDOFF.md](docs/HANDOFF.md) | Briefing de continuação (histórico) | retomas o projeto noutra sessão/máquina |
+> | # | Documento | Papel | Lê-o quando… |
+> |---|---|---|---|
+> | 01 | **README.md** (este) | Vitrine + referência de comandos | queres saber o que é e como usar |
+> | 02 | [docs/02_GUIA_CASPAR.md](docs/02_GUIA_CASPAR.md) | Guia de utilizador + demonstração | queres perceber e demonstrar, do zero |
+> | 03 | [docs/03_GUIA_VM_UBUNTU22.md](docs/03_GUIA_VM_UBUNTU22.md) | VM Ubuntu 22.04 limpa até à comparação final: instalar, inserir vulnerabilidade, scan+relatório, **todos os comandos do CLI**, Trivy/OpenSCAP | vais testar a ferramenta numa máquina — é o guia principal, ponta a ponta |
+> | 04 | [docs/04_AVALIACAO_FUNCIONAL.md](docs/04_AVALIACAO_FUNCIONAL.md) | Roteiro de recolha de evidência para a tese (detect→fix→re-scan, checklist de artefactos) | já testaste (03) e vais recolher resultados para a dissertação |
+> | 05 | [docs/05_GUIA_TECNICO.md](docs/05_GUIA_TECNICO.md) | Arquitectura interna | vais mexer no código |
+> | 06 | [docs/06_VALIDACAO.md](docs/06_VALIDACAO.md) | Plano de validação completo (científica, funcional, fiabilidade, desempenho, tradeoffs) | queres saber como a ferramenta se valida e mede |
+> | — | [DISSERTACAO_REFERENCIA.md](docs/tese-docs/DISSERTACAO_REFERENCIA.md) | Material-fonte consolidado para a tese | vais escrever a dissertação |
+> | — | [HANDOFF.md](docs/HANDOFF.md) | Briefing de estado do projeto (histórico, não sequencial) | retomas o projeto noutra sessão/máquina |
 
 ---
 

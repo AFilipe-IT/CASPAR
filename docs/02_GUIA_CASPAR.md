@@ -1,7 +1,8 @@
 # CASPAR — Guia Comprensivo e Demonstração Prática
 
 > Documento de leitura única para **perceber o que o CASPAR faz, porquê, e como usá-lo do zero**.
-> Complementa o [GUIA_TECNICO.md](GUIA_TECNICO.md) (orientado à arquitectura interna) e o
+> É o **guia 02** do roteiro (ver [README.md](../README.md)). Complementa o
+> [05_GUIA_TECNICO.md](05_GUIA_TECNICO.md) (orientado à arquitectura interna) e o
 > [README.md](../README.md) (referência de comandos). Aqui o foco é *entender e demonstrar*.
 
 **Índice**
