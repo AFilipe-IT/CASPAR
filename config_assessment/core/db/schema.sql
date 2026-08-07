@@ -12,6 +12,16 @@ CREATE TABLE IF NOT EXISTS targets (
     updated_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- A host is an Operating System instance a user tags scans against (e.g.
+-- --host web01). Optional: scans with no host tag simply never appear in
+-- any Operating-System-level rollup.
+CREATE TABLE IF NOT EXISTS hosts (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    label      TEXT    NOT NULL UNIQUE,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS misconfigurations (
     id               TEXT    PRIMARY KEY,
     target_id        INTEGER NOT NULL REFERENCES targets(id) ON DELETE CASCADE,
@@ -115,6 +125,15 @@ CREATE INDEX IF NOT EXISTS idx_scan_results_target
 CREATE INDEX IF NOT EXISTS idx_scan_results_hash
     ON scan_results (input_hash);
 
+-- One row per `caspar watch` session, upserted on every poll tick (not just on
+-- content change, unlike scan_results) — this is what lets the dashboard tell
+-- "still running, nothing changed" apart from "process died". Deliberately
+-- separate from scan_results: it is overwritten in place, never appended to.
+CREATE TABLE IF NOT EXISTS watch_heartbeats (
+    watch_session   TEXT    PRIMARY KEY,
+    last_seen       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- Pre-fetched version exploitability (F1). Populated at build time by
 -- `ccss fetch-exploits` (NVD + Exploit-DB), read locally at runtime so the
 -- scan path stays offline and deterministic. exploits_json holds the resolved
@@ -129,4 +148,28 @@ CREATE TABLE IF NOT EXISTS version_exploits (
     exploits    TEXT    NOT NULL DEFAULT '[]',
     fetched_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (product, version)
+);
+
+-- Background jobs (build/plugin_add/...) started from the REST API. A single-
+-- process app, so job state lives here rather than Redis/Celery — a thread
+-- runs the job, this table is how the poller (and a server restart) observes
+-- it. job_logs is append-only so the poller can ask for "lines after seq N".
+CREATE TABLE IF NOT EXISTS jobs (
+    id           TEXT    PRIMARY KEY,
+    kind         TEXT    NOT NULL,
+    status       TEXT    NOT NULL DEFAULT 'queued',
+    params_json  TEXT    NOT NULL DEFAULT '{}',
+    result_json  TEXT,
+    error        TEXT,
+    created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    started_at   TEXT,
+    finished_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS job_logs (
+    job_id  TEXT    NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    seq     INTEGER NOT NULL,
+    ts      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    line    TEXT    NOT NULL,
+    PRIMARY KEY (job_id, seq)
 );

@@ -64,6 +64,7 @@ class Database:
         # Enforce FK constraints
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._init_schema()
+        self._migrate()
 
     @property
     def path(self) -> str:
@@ -132,6 +133,12 @@ class Database:
              "ALTER TABLE misconfigurations ADD COLUMN required_when TEXT NOT NULL DEFAULT 'always'"),
             ("confidence",
              "ALTER TABLE misconfigurations ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0"),
+            ("host_id",
+             "ALTER TABLE scan_results ADD COLUMN host_id INTEGER REFERENCES hosts(id)"),
+            ("watch_session",
+             "ALTER TABLE scan_results ADD COLUMN watch_session TEXT"),
+            ("watch_interval",
+             "ALTER TABLE scan_results ADD COLUMN watch_interval REAL"),
         ]
         for col_name, sql in simple_migrations:
             try:
@@ -291,6 +298,50 @@ class Database:
         )
         row = cur.fetchone()
         return row["id"] if row else None
+
+    # ------------------------------------------------------------------ #
+    # hosts (Operating System instances)                                   #
+    # ------------------------------------------------------------------ #
+
+    def upsert_host(self, label: str) -> int:
+        """Insert or fetch a host by label. Returns the host's row id."""
+        cur = self._conn.execute(
+            """
+            INSERT INTO hosts (label) VALUES (:label)
+            ON CONFLICT(label) DO UPDATE SET
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            RETURNING id
+            """,
+            {"label": label},
+        )
+        row = cur.fetchone()
+        self._conn.commit()
+        return row["id"]
+
+    def get_host_id(self, label: str) -> int | None:
+        cur = self._conn.execute("SELECT id FROM hosts WHERE label = ?", (label,))
+        row = cur.fetchone()
+        return row["id"] if row else None
+
+    def get_host_label(self, host_id: int) -> str | None:
+        cur = self._conn.execute("SELECT label FROM hosts WHERE id = ?", (host_id,))
+        row = cur.fetchone()
+        return row["label"] if row else None
+
+    def list_hosts(self) -> list[dict]:
+        """Every registered host (id, label, created_at, updated_at), sorted by label."""
+        rows = self._conn.execute("SELECT * FROM hosts ORDER BY label")
+        return [dict(r) for r in rows.fetchall()]
+
+    def get_scans_for_host(self, host_id: int, limit: int = 500) -> list[dict]:
+        """Scan summary rows (same shape as list_scans) for one host, newest first."""
+        sql = (
+            "SELECT id, target_name, input_path, global_base_score, "
+            "global_temporal_score, severity, total_directives, "
+            "total_issues, total_chains, host_id, timestamp FROM scan_results "
+            "WHERE host_id = ? ORDER BY timestamp DESC LIMIT ?"
+        )
+        return [dict(r) for r in self._conn.execute(sql, (host_id, limit)).fetchall()]
 
     # ------------------------------------------------------------------ #
     # misconfigurations                                                    #
@@ -615,7 +666,13 @@ class Database:
     # scan_results                                                         #
     # ------------------------------------------------------------------ #
 
-    def save_scan_result(self, result: ScanResult) -> None:
+    def save_scan_result(
+        self,
+        result: ScanResult,
+        host_id: int | None = None,
+        watch_session: str | None = None,
+        watch_interval: float | None = None,
+    ) -> None:
         self._conn.execute(
             """
             INSERT INTO scan_results (
@@ -623,13 +680,15 @@ class Database:
                 profile_av, profile_au,
                 global_base_score, global_temporal_score, severity,
                 total_directives, total_issues, total_chains,
-                issues_json, chains_json
+                issues_json, chains_json, host_id,
+                watch_session, watch_interval
             ) VALUES (
                 :id, :target_name, :input_path, :input_hash,
                 :profile_av, :profile_au,
                 :global_base_score, :global_temporal_score, :severity,
                 :total_directives, :total_issues, :total_chains,
-                :issues_json, :chains_json
+                :issues_json, :chains_json, :host_id,
+                :watch_session, :watch_interval
             )
             """,
             {
@@ -647,6 +706,9 @@ class Database:
                 "total_chains": result.total_chains_detected,
                 "issues_json": json.dumps([i.model_dump() for i in result.issues], default=str),
                 "chains_json": json.dumps([c.model_dump() for c in result.chains], default=str),
+                "host_id": host_id,
+                "watch_session": watch_session,
+                "watch_interval": watch_interval,
             },
         )
         self._conn.commit()
@@ -680,7 +742,7 @@ class Database:
         filtered to one input_path. Returns lightweight dicts, not full
         ScanResults — history only needs score/severity/when."""
         sql = ("SELECT timestamp, input_path, global_temporal_score, severity, "
-               "total_issues FROM scan_results ")
+               "total_issues, host_id FROM scan_results ")
         params: tuple = ()
         if input_path:
             sql += "WHERE input_path = ? "
@@ -688,3 +750,176 @@ class Database:
         sql += "ORDER BY timestamp DESC LIMIT ?"
         params = params + (limit,)
         return [dict(r) for r in self._conn.execute(sql, params).fetchall()]
+
+    # ------------------------------------------------------------------ #
+    # watch sessions (caspar watch, persisted for live dashboard viewing)  #
+    # ------------------------------------------------------------------ #
+
+    def touch_watch_heartbeat(self, watch_session: str) -> None:
+        """Record that a watch session's poll loop is still running, whether
+        or not this tick found a content change. Called once per poll tick
+        (every `--interval` seconds) — this is what lets a quiet, unchanged
+        config still read as "live" instead of going stale after one missed
+        scan_results row (which only ever appends on a real change)."""
+        self._conn.execute(
+            """
+            INSERT INTO watch_heartbeats (watch_session, last_seen)
+            VALUES (:session, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            ON CONFLICT(watch_session) DO UPDATE SET
+                last_seen = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            """,
+            {"session": watch_session},
+        )
+        self._conn.commit()
+
+    def get_active_watches(self, limit: int = 50) -> list[dict]:
+        """One row per distinct watch_session — its latest scan summary plus
+        the session's last heartbeat (for liveness — see touch_watch_heartbeat)."""
+        # Timestamp alone can tie (millisecond resolution, fast polling), so
+        # rowid — monotonically increasing with insertion order — breaks ties
+        # and guarantees "latest" means the most recently inserted row.
+        sql = """
+            SELECT scan_results.target_name, scan_results.input_path,
+                   scan_results.host_id, scan_results.global_temporal_score,
+                   scan_results.severity, scan_results.total_issues,
+                   scan_results.total_chains, scan_results.watch_session,
+                   scan_results.watch_interval, scan_results.timestamp,
+                   h.last_seen
+            FROM scan_results
+            LEFT JOIN watch_heartbeats AS h
+                ON h.watch_session = scan_results.watch_session
+            WHERE scan_results.watch_session IS NOT NULL
+              AND scan_results.rowid = (
+                  SELECT MAX(rowid) FROM scan_results AS s2
+                  WHERE s2.watch_session = scan_results.watch_session
+              )
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """
+        return [dict(r) for r in self._conn.execute(sql, (limit,)).fetchall()]
+
+    def get_watch_events(self, watch_session: str, limit: int = 200) -> list[dict]:
+        """Full event history for one watch session, newest first."""
+        sql = (
+            "SELECT timestamp, target_name, input_path, global_temporal_score, "
+            "severity, total_issues, total_chains, watch_interval "
+            "FROM scan_results WHERE watch_session = ? "
+            "ORDER BY rowid DESC LIMIT ?"
+        )
+        return [dict(r) for r in self._conn.execute(sql, (watch_session, limit)).fetchall()]
+
+    def get_watch_heartbeat(self, watch_session: str) -> str | None:
+        """Last poll-tick timestamp recorded for a session, or None if it
+        never sent one (e.g. a session persisted before this table existed)."""
+        row = self._conn.execute(
+            "SELECT last_seen FROM watch_heartbeats WHERE watch_session = ?",
+            (watch_session,),
+        ).fetchone()
+        return row["last_seen"] if row else None
+
+    def delete_scan_result(self, scan_id: str) -> bool:
+        """Remove a persisted scan record. Returns True if a row was deleted."""
+        cur = self._conn.execute("DELETE FROM scan_results WHERE id = ?", (scan_id,))
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def list_scans(self, target_name: str | None = None,
+                   input_path: str | None = None,
+                   severity_min: float | None = None,
+                   host_id: int | None = None,
+                   limit: int = 50, offset: int = 0) -> list[dict]:
+        """Paginated scan listing (id + summary fields), newest first — the
+        REST API's GET /scans. Filterable by target, input_path, host, and a
+        minimum global_temporal_score threshold."""
+        sql = ("SELECT id, target_name, input_path, global_base_score, "
+               "global_temporal_score, severity, total_directives, "
+               "total_issues, total_chains, host_id, timestamp FROM scan_results ")
+        clauses: list[str] = []
+        params: list = []
+        if target_name:
+            clauses.append("target_name = ?")
+            params.append(target_name)
+        if input_path:
+            clauses.append("input_path = ?")
+            params.append(input_path)
+        if severity_min is not None:
+            clauses.append("global_temporal_score >= ?")
+            params.append(severity_min)
+        if host_id is not None:
+            clauses.append("host_id = ?")
+            params.append(host_id)
+        if clauses:
+            sql += "WHERE " + " AND ".join(clauses) + " "
+        sql += "ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        return [dict(r) for r in self._conn.execute(sql, params).fetchall()]
+
+    # ------------------------------------------------------------------ #
+    # Background jobs (REST API build/plugin_add) — Phase 2                #
+    # ------------------------------------------------------------------ #
+
+    def create_job(self, job_id: str, kind: str, params: dict) -> None:
+        import json as _json
+        self._conn.execute(
+            "INSERT INTO jobs (id, kind, status, params_json) VALUES (?, ?, 'queued', ?)",
+            (job_id, kind, _json.dumps(params, ensure_ascii=False)),
+        )
+        self._conn.commit()
+
+    def mark_job_started(self, job_id: str) -> None:
+        self._conn.execute(
+            "UPDATE jobs SET status = 'running', "
+            "started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+            (job_id,),
+        )
+        self._conn.commit()
+
+    def finish_job(self, job_id: str, status: str, result: dict | None = None,
+                    error: str | None = None) -> None:
+        """status is 'succeeded', 'failed', or 'cancelled'."""
+        import json as _json
+        self._conn.execute(
+            "UPDATE jobs SET status = ?, result_json = ?, error = ?, "
+            "finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+            (status, _json.dumps(result, ensure_ascii=False) if result is not None else None,
+             error, job_id),
+        )
+        self._conn.commit()
+
+    def append_job_log(self, job_id: str, line: str) -> None:
+        row = self._conn.execute(
+            "SELECT COALESCE(MAX(seq), -1) + 1 FROM job_logs WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        seq = row[0]
+        self._conn.execute(
+            "INSERT INTO job_logs (job_id, seq, line) VALUES (?, ?, ?)",
+            (job_id, seq, line),
+        )
+        self._conn.commit()
+
+    def get_job(self, job_id: str) -> dict | None:
+        row = self._conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        return dict(row) if row else None
+
+    def list_jobs(self, kind: str | None = None, limit: int = 50) -> list[dict]:
+        sql = "SELECT * FROM jobs "
+        params: list = []
+        if kind:
+            sql += "WHERE kind = ? "
+            params.append(kind)
+        sql += "ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        return [dict(r) for r in self._conn.execute(sql, params).fetchall()]
+
+    def get_job_logs(self, job_id: str, after: int = -1) -> list[dict]:
+        """Lines with seq > after, so a poller need not re-ship the whole log."""
+        return [dict(r) for r in self._conn.execute(
+            "SELECT seq, ts, line FROM job_logs WHERE job_id = ? AND seq > ? ORDER BY seq",
+            (job_id, after),
+        ).fetchall()]
+
+    def get_running_jobs(self) -> list[dict]:
+        return [dict(r) for r in self._conn.execute(
+            "SELECT * FROM jobs WHERE status IN ('queued', 'running')"
+        ).fetchall()]
