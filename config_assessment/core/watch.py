@@ -8,14 +8,16 @@ misconfigurations found and their impact — data already in the DB.
 Design notes (keeps the CASPAR runtime invariants):
   * Deterministic detection — the loop only *triggers* re-scans; scoring stays
     the zero-LLM/zero-network `runtime.scan`.
-  * No baseline, no history, no alerting side-channel. A change → a re-scan →
-    the findings on screen. Nothing is written.
+  * No alerting side-channel beyond the terminal/log/notify the CLI already
+    offers. A change → a re-scan → the findings on screen.
   * Polling (mtime + content hash), not inotify — works identically on native
     Linux, WSL2, and bind-mounted Docker volumes where inotify is unreliable.
 
-The module is I/O-only: it computes *when* to re-scan and yields an event. The
-CLI owns *what to print* (it reuses the normal scan renderer), so watch and scan
-never drift apart in how a finding looks.
+The module itself is I/O-only: it computes *when* to re-scan and yields an
+event. The CLI owns *what to print* (it reuses the normal scan renderer) and
+*what to persist* — each event's ScanResult is saved under a shared watch
+session id, so a run can be followed live from the console's Watch page —
+so watch and scan never drift apart in how a finding looks or is stored.
 """
 
 from __future__ import annotations

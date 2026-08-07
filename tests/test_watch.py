@@ -187,10 +187,14 @@ def test_log_flag_writes_colourless_alerts_and_keeps_terminal_clean(
         yield ChangeEvent(cfg, "d1", "d0")
     monkeypatch.setattr("config_assessment.core.watch.watch", fake_loop)
 
-    # A real DB isn't needed — a no-op context manager suffices.
+    # A real DB isn't needed — a no-op context manager suffices, but it must
+    # still accept the persistence calls watch() always makes now.
     class _DummyDB:
         def __enter__(self): return self
         def __exit__(self, *a): return False
+        def upsert_host(self, label): return 1
+        def save_scan_result(self, result, **kw): pass
+        def touch_watch_heartbeat(self, session_id): pass
     monkeypatch.setattr("config_assessment.core.db.database.Database",
                         lambda *a, **k: _DummyDB())
     # Bypass the DB-file existence check.
@@ -242,6 +246,9 @@ def test_live_flag_resolves_service_and_labels_by_name(tmp_path, monkeypatch):
     class _DummyDB:
         def __enter__(self): return self
         def __exit__(self, *a): return False
+        def upsert_host(self, label): return 1
+        def save_scan_result(self, result, **kw): pass
+        def touch_watch_heartbeat(self, session_id): pass
     monkeypatch.setattr("config_assessment.core.db.database.Database",
                         lambda *a, **k: _DummyDB())
 
@@ -294,6 +301,153 @@ def test_pts_fallback_writes_to_writable_ptys(tmp_path, monkeypatch):
 
     m._write_to_ptys("\n⚠  CASPAR: cfg 0.0→6.1\n")
     assert "CASPAR: cfg 0.0→6.1" in fake_pts.read_text()
+
+
+# ── persistence (each event saved under a shared watch session) ────────
+
+def test_watch_persists_each_event_under_shared_session(tmp_path, monkeypatch):
+    """Every event `watch` emits — including the baseline — is persisted via
+    save_scan_result, tagged with one session id shared across the whole
+    invocation and the --interval in effect, so the dashboard can group and
+    later stale-check them."""
+    from click.testing import CliRunner
+    import cli.main as m
+
+    cfg = tmp_path / "httpd.conf"
+    cfg.write_text("ServerTokens Prod\n")
+
+    scores = iter([_Res(0.0, "None", []),
+                   _Res(8.9, "High", [_Issue("ServerTokens", 7.1, "Full")])])
+    monkeypatch.setattr("config_assessment.core.runtime.scan",
+                        lambda *a, **k: next(scores))
+
+    def fake_loop(path, **k):
+        yield ChangeEvent(cfg, "d0", None)
+        yield ChangeEvent(cfg, "d1", "d0")
+    monkeypatch.setattr("config_assessment.core.watch.watch", fake_loop)
+    monkeypatch.setattr(m.Path, "exists", lambda self: True)
+
+    saved = []
+
+    class _DummyDB:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def upsert_host(self, label): return 1
+        def save_scan_result(self, result, **kw): saved.append(kw)
+        def touch_watch_heartbeat(self, session_id): pass
+    monkeypatch.setattr("config_assessment.core.db.database.Database",
+                        lambda *a, **k: _DummyDB())
+
+    runner = CliRunner()
+    result = runner.invoke(m.cli, ["watch", str(cfg), "--interval", "3"])
+    assert result.exit_code == 0
+
+    assert len(saved) == 2   # baseline + one change
+    sessions = {kw["watch_session"] for kw in saved}
+    assert len(sessions) == 1 and all(sessions)   # one shared, non-empty id
+    assert all(kw["watch_interval"] == 3 for kw in saved)
+    assert all(kw["host_id"] is None for kw in saved)   # no --host given
+
+
+def test_watch_host_option_tags_persisted_events(tmp_path, monkeypatch):
+    """`--host` (mirroring `scan --host`) upserts a host and tags every
+    persisted event with it, so the session surfaces under that host's page."""
+    from click.testing import CliRunner
+    import cli.main as m
+
+    cfg = tmp_path / "httpd.conf"
+    cfg.write_text("ServerTokens Prod\n")
+
+    monkeypatch.setattr("config_assessment.core.runtime.scan",
+                        lambda *a, **k: _Res(0.0, "None", []))
+
+    def fake_loop(path, **k):
+        yield ChangeEvent(cfg, "d0", None)
+    monkeypatch.setattr("config_assessment.core.watch.watch", fake_loop)
+    monkeypatch.setattr(m.Path, "exists", lambda self: True)
+
+    saved = []
+    hosts_upserted = []
+
+    class _DummyDB:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def upsert_host(self, label):
+            hosts_upserted.append(label)
+            return 42
+        def save_scan_result(self, result, **kw): saved.append(kw)
+        def touch_watch_heartbeat(self, session_id): pass
+    monkeypatch.setattr("config_assessment.core.db.database.Database",
+                        lambda *a, **k: _DummyDB())
+
+    result = CliRunner().invoke(
+        m.cli, ["watch", str(cfg), "--host", "web01"])
+    assert result.exit_code == 0
+    assert hosts_upserted == ["web01"]
+    assert saved and all(kw["host_id"] == 42 for kw in saved)
+
+
+def test_watch_heartbeat_advances_on_quiet_polls_with_no_content_change(
+        tmp_path, monkeypatch):
+    """The real bug this guards against: watch() only yields ChangeEvents on
+    a real content change, so a quiet, unedited config must not look 'dead' —
+    the heartbeat has to advance on every poll tick regardless, via the CLI's
+    sleep-wrapping (see _sleep_and_heartbeat in scan_cmds.py)."""
+    import os
+    import tempfile
+    from click.testing import CliRunner
+    import cli.main as m
+    from config_assessment.core.db.database import Database as RealDatabase
+
+    cfg = tmp_path / "httpd.conf"
+    cfg.write_text("ServerTokens Prod\n")
+
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.unlink(db_path)
+
+    from config_assessment.core.models import ScanResult, SystemProfile
+
+    def fake_scan(*a, **k):
+        return ScanResult(
+            target_name="dummy", input_path=str(cfg), input_hash="h0",
+            profile=SystemProfile(av="N", au="N"),
+            global_temporal_score=0.0, severity="None")
+    monkeypatch.setattr("config_assessment.core.runtime.scan", fake_scan)
+
+    # Real watch() loop, real (fast, injected) sleep, stop after 3 ticks —
+    # the file is never touched, so no ChangeEvent fires past the baseline.
+    ticks = {"n": 0}
+
+    def fast_stop():
+        ticks["n"] += 1
+        return ticks["n"] > 3
+
+    monkeypatch.setattr("config_assessment.core.watch.time.sleep",
+                        lambda _: None)
+    # watch_loop is imported by name into scan_cmds; patch stop via a thin
+    # wrapper so the CLI's own `sleep=` still gets exercised for real.
+    import config_assessment.core.watch as watch_mod
+    real_watch = watch_mod.watch
+
+    def watch_with_fast_stop(path, **kw):
+        kw["stop"] = fast_stop
+        return real_watch(path, **kw)
+    monkeypatch.setattr("config_assessment.core.watch.watch", watch_with_fast_stop)
+    monkeypatch.setattr(m.Path, "exists", lambda self: True)
+
+    result = CliRunner().invoke(
+        m.cli, ["--db", db_path, "watch", str(cfg), "--interval", "0.01"])
+    assert result.exit_code == 0
+
+    db = RealDatabase(db_path)
+    sessions = db.get_active_watches()
+    assert len(sessions) == 1
+    # Only the baseline scan_results row exists (no content change happened),
+    # yet the heartbeat must have been touched on every quiet poll tick too.
+    assert db.get_watch_heartbeat(sessions[0]["watch_session"]) is not None
+    db.close()
+    os.unlink(db_path)
 
 
 def test_log_path_in_missing_dir_errors_cleanly(tmp_path, monkeypatch):
