@@ -46,6 +46,15 @@ htmlcov/
 # it at the app root — bake it in so it works on any machine, offline.
 !nistir7502.pdf
 
+# Frontend (CVM console). The console is built in its own stage in
+# docker/caspar/Dockerfile, which COPYs frontend/ explicitly *before* this
+# ignore applies to the final stage's `COPY . .`. Only node_modules and local
+# build output are excluded — 128MB of dependencies that the runtime image
+# never needs, and a dist/ that must come from the build stage (reproducible)
+# rather than from whatever the developer happened to have built locally.
+frontend/node_modules/
+frontend/dist/
+
 # Editor / OS.
 .vscode/
 .idea/

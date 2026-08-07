@@ -4,8 +4,26 @@
 #   docker build -t caspar:latest -f docker/caspar/Dockerfile .
 #
 # Includes: scan (file / directory / docker://), targets, fetch-exploits,
-#           report generation. Build-time commands (plugin add / build) need
-#           an external Ollama — see docker-compose.yml (profile "full").
+#           report generation, and `caspar serve` (REST API + the CVM React
+#           console). Build-time commands (plugin add / build) need an
+#           external Ollama — see docker-compose.yml (profile "full").
+
+# --- Stage 1: build the CVM React console ----------------------------------
+# Built here rather than COPYing a local frontend/dist so the image is
+# reproducible from source alone — a developer's stale local build can never
+# end up baked into it. .dockerignore excludes frontend/dist for this reason.
+FROM node:22-slim AS console
+
+WORKDIR /build
+# package*.json first so `npm ci` is layer-cached on dependency changes only.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+
+# --- Stage 2: the runtime image --------------------------------------------
 FROM python:3.12-slim
 
 # System dependencies:
@@ -38,11 +56,21 @@ WORKDIR /home/caspar/app
 
 # --- Python dependencies (layer-cached on pyproject.toml) -------------------
 COPY pyproject.toml .
-RUN pip install --no-cache-dir click pydantic openpyxl requests pypdf pyyaml
+# The last three are the [api] extra — `caspar serve` needs them to host the
+# REST API and the React console. They are installed explicitly (rather than
+# via `-e .[api]`) to keep the `--no-deps` install below, which is what makes
+# this layer cacheable on pyproject.toml alone.
+RUN pip install --no-cache-dir click pydantic openpyxl requests pypdf pyyaml \
+        "fastapi>=0.110" "uvicorn[standard]>=0.29" "python-multipart>=0.0.9"
 
 # --- Application code -------------------------------------------------------
 COPY . .
 RUN pip install --no-cache-dir -e . --no-deps
+
+# The console's built assets, from stage 1. _mount_frontend (in
+# cli/commands/serve_cmds.py) looks for <repo>/frontend/dist and soft-fails if
+# it is absent, so this path is what makes /app available in the image.
+COPY --from=console /build/dist ./frontend/dist
 
 # --- Canonical database: restored from SQL, never copied as a .db -----------
 # Baked at a fixed *seed* path. At runtime the entrypoint copies it into the
