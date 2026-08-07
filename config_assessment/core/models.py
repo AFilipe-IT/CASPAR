@@ -1,14 +1,10 @@
 """
 core/models.py
 --------------
-Shared data models.
+Shared data models (Pydantic v2 BaseModel).
 
-NOTE (Phase 1 bootstrap): uses Python stdlib dataclasses + TypedDict
-because the environment has no network access for pip.
-The public interface is intentionally designed to be a drop-in swap
-to Pydantic v2 models: field names, types, and defaults are identical.
-Migration: replace @dataclass with BaseModel, remove field() defaults
-where Pydantic infers them, and the rest of the codebase is unaffected.
+These are the models the CVM Core, CLI, REST API, and Dashboard all share —
+FastAPI uses them directly as request/response schemas, with no adapter layer.
 
 Naming conventions
   - Literal types use SHORT UPPERCASE strings matching the CCSS spec.
@@ -18,10 +14,11 @@ Naming conventions
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Literal, Optional
 from uuid import uuid4
+
+from pydantic import BaseModel, Field, field_validator
 
 # ------------------------------------------------------------------ #
 # CCSS metric value types                                              #
@@ -40,8 +37,7 @@ SeverityLabel = Literal["None", "Low", "Medium", "High", "Critical"]
 # Plugin / target metadata                                             #
 # ------------------------------------------------------------------ #
 
-@dataclass
-class TargetMetadata:
+class TargetMetadata(BaseModel):
     name: str
     display_name: str
     version: str
@@ -60,25 +56,24 @@ class TargetMetadata:
 # Directive                                                            #
 # ------------------------------------------------------------------ #
 
-@dataclass
-class Directive:
+class Directive(BaseModel):
     name: str
     value: str
     context: str = "global"
     source_file: str = ""
     line_number: Optional[int] = None
 
-    def __post_init__(self):
-        self.name = str(self.name).strip()
-        self.value = str(self.value).strip()
+    @field_validator("name", "value", mode="after")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        return str(v).strip()
 
 
 # ------------------------------------------------------------------ #
 # SystemProfile                                                        #
 # ------------------------------------------------------------------ #
 
-@dataclass
-class SystemProfile:
+class SystemProfile(BaseModel):
     av: AVValue
     au: AuValue
     rationale_av: str = ""
@@ -89,8 +84,7 @@ class SystemProfile:
 # Misconfiguration                                                     #
 # ------------------------------------------------------------------ #
 
-@dataclass
-class Misconfiguration:
+class Misconfiguration(BaseModel):
     target_name: str
     directive: str
     bad_value: str
@@ -99,14 +93,14 @@ class Misconfiguration:
     i: CIAValue
     a: CIAValue
     good_value: str = ""
-    id: str = field(default_factory=lambda: str(uuid4()))
+    id: str = Field(default_factory=lambda: str(uuid4()))
     av: AVValue = "N"             # runtime
     au: AuValue = "N"             # runtime
     base_score: float = 0.0
     temporal_score: float = 0.0
     gel: GELValue = "ND"          # build-time
     grl: GRLValue = "ND"          # build-time
-    cves: list = field(default_factory=list)
+    cves: list = Field(default_factory=list)
     cce_id: str = ""
     cis_section: str = ""
     justification: str = ""
@@ -121,49 +115,36 @@ class Misconfiguration:
     narrative: str = "{}"  # JSON string — rich narrative from Stage 3 LLM pipeline
     confidence: float = 1.0  # build-time — self-consistency agreement rate (1.0 = no LLM/unanimous, 0.0 = fallback)
 
-    def model_dump(self) -> dict:
-        """Compatibility shim — matches Pydantic's .model_dump() API."""
-        import dataclasses
-        d = dataclasses.asdict(self)
-        # source_directive contains a Directive — convert to dict already done by asdict
-        return d
-
 
 # ------------------------------------------------------------------ #
 # AttackChain                                                          #
 # ------------------------------------------------------------------ #
 
-@dataclass
-class AttackChain:
+class AttackChain(BaseModel):
     chain_id: str
     target_name: str
-    misconfig_directives: list = field(default_factory=list)
+    misconfig_directives: list = Field(default_factory=list)
     amplification: float = 1.0
     justification: str = ""
     cross_target: bool = False
     active: bool = False
-    triggered_by: list = field(default_factory=list)
+    triggered_by: list = Field(default_factory=list)
     amplified_score: float = 0.0
-
-    def model_dump(self) -> dict:
-        import dataclasses
-        return dataclasses.asdict(self)
 
 
 # ------------------------------------------------------------------ #
 # ScanResult                                                           #
 # ------------------------------------------------------------------ #
 
-@dataclass
-class ScanResult:
+class ScanResult(BaseModel):
     target_name: str
     input_path: str
     input_hash: str
     profile: SystemProfile
-    scan_id: str = field(default_factory=lambda: str(uuid4()))
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    issues: list = field(default_factory=list)
-    chains: list = field(default_factory=list)
+    scan_id: str = Field(default_factory=lambda: str(uuid4()))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    issues: list[Misconfiguration] = Field(default_factory=list)
+    chains: list[AttackChain] = Field(default_factory=list)
     global_base_score: float = 0.0
     global_temporal_score: float = 0.0
     severity: SeverityLabel = "None"
@@ -177,7 +158,7 @@ class ScanResult:
     # Public exploits (Exploit-DB) for the detected version's CVEs (F1 extension).
     # Each entry is a dict (edb_id, title, type, verified, cve, path). Empty when
     # there is no version, no exploits, or searchsploit is unavailable.
-    version_exploits: list = field(default_factory=list)
+    version_exploits: list = Field(default_factory=list)
     # True when the CVE/exploit lookup could not run (e.g. NVD timeout). Lets the
     # report distinguish "no exploits found" from "could not check".
     exploit_lookup_failed: bool = False
@@ -189,12 +170,12 @@ class ScanResult:
     # each is an UnknownDirective. NEVER folded into the CCSS scores — these are
     # coverage gaps, not scored issues. LLM assessment (Layer 3) fills the
     # optional llm_* fields only when the caller opts in.
-    unknown_directives: list = field(default_factory=list)
+    unknown_directives: list = Field(default_factory=list)
     # Reproducibility manifest (core/manifest.py): CASPAR version, SHA-256 of
     # the knowledge base, target + rule count, Python version. Matching
     # manifests + matching input_hash ⇒ identical scores, by construction —
     # makes the determinism claim auditable from the report itself.
-    manifest: dict = field(default_factory=dict)
+    manifest: dict = Field(default_factory=dict)
 
     @property
     def highest_issue_score(self) -> float:
@@ -213,17 +194,3 @@ class ScanResult:
         the report say *what* produced the headline number, so a 9.9 overall
         with a 7.1 top issue is explained (it came from a chain), not confusing."""
         return "chain" if self.highest_chain_score > self.highest_issue_score else "issue"
-
-    def model_dump_json(self, indent: int = 2) -> str:
-        """Compatibility shim — matches Pydantic's .model_dump_json() API."""
-        import json
-        import dataclasses
-
-        def default(obj):
-            if isinstance(obj, datetime):
-                return obj.isoformat()
-            if dataclasses.is_dataclass(obj):
-                return dataclasses.asdict(obj)
-            return str(obj)
-
-        return json.dumps(dataclasses.asdict(self), indent=indent, default=default)

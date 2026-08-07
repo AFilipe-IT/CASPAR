@@ -1,21 +1,22 @@
 """
 core/runtime.py
 ---------------
-Runtime scan engine.
+CVM Core — top-level pipeline orchestrator.
 
 This is the performance-critical, zero-LLM path.
 For any given input file (and version), it produces the same ScanResult.
 
-Pipeline (executed for every scan):
-  1. detect()           — select the right plugin(s) for this input
-  2. parse_config()     — extract normalised directives (via plugin)
-  3. get_profile()      — infer system-level AV and Au (via plugin rule engine)
-  4. scan()             — lookup each directive in the database
-  5. score()            — adjust AV/Au, recompute temporal scores
-  5b version-amplify    — amplify version-exposing misconfigs (F1, see below)
-  6. detect_chains()    — subset-match active directives against known chains
-  7. aggregate()        — compute global score from worst-case temporal scores
-  8. report()           — assemble ScanResult
+Pipeline (executed for every scan), each step delegated to its named engine
+under config_assessment.core.engines:
+  1. detect()           — select the right plugin(s) for this input   [Assessment Engine]
+  2. parse_config()     — extract normalised directives (via plugin)  [Plugin]
+  3. get_profile()      — infer system-level AV and Au (via plugin)   [Plugin]
+  4. scan()             — lookup each directive in the database       [Assessment Engine]
+  5. score()             — adjust AV/Au, recompute temporal scores    [Assessment Engine]
+  5b version-amplify    — amplify version-exposing misconfigs (F1)    [Assessment Engine]
+  6. detect_chains()    — subset-match active directives              [Attack Chain Engine]
+  7. aggregate()        — compute global score from worst-case scores [Aggregation Engine]
+  8. report()            — assemble ScanResult
 
 Database knowledge is pre-calculated at build time; lookup is O(1) per directive.
 EXCEPTION (F1): when a version is supplied, step 5b consults the NVD for the
@@ -23,302 +24,48 @@ version's exploitability. This is the one network-touching step in runtime — i
 is online-first with a 24h persistent cache, and degrades to a ×1.0 no-op when
 there is no version, no network, or an unknown product. Without a version the
 runtime stays fully offline and deterministic, as before.
+
+This module is a thin orchestrator only — it contains no scoring, matching
+or aggregation logic of its own. `scan()` is the only public function
+external code should call.
 """
 
 from __future__ import annotations
 
-import hashlib
 import logging
-from pathlib import Path
 
-import config_assessment.core.ccss as ccss
 from config_assessment.core.db.database import Database
+from config_assessment.core.engines import assessment, attack_chain
+from config_assessment.core.engines.aggregation import aggregate_scan
+from config_assessment.core.engines.assessment import (  # noqa: F401  (compat re-exports)
+    _REGISTRY,
+    cap_av as _cap_av,
+    hash_input as _hash_input,
+    register_plugin,
+    registered_plugins,
+    select_plugin as _select_plugin,
+)
+from config_assessment.core.engines.scoring import aggregate as _ccss_aggregate, severity_label
 from config_assessment.core.manifest import build_manifest
 from config_assessment.core.models import (
-    AttackChain,
     Misconfiguration,
     ScanResult,
     SystemProfile,
 )
-from config_assessment.core.target import Target
 
 logger = logging.getLogger(__name__)
 
 
-# ------------------------------------------------------------------ #
-# Plugin registry                                                      #
-# ------------------------------------------------------------------ #
+# Environment profiles: override the system exposure (AV/Au) the scoring uses.
+# The default (None) keeps the plugin's inferred profile (worst case). A named
+# profile reflects how the service is actually deployed, which changes the
+# Access Vector — an internal service is Adjacent, a dev box is Local.
+ENV_PROFILES = {
+    "production": ("N", "N"),   # internet-facing, no auth boundary (== default worst case)
+    "internal":   ("A", "N"),   # reachable only from an adjacent/internal network
+    "dev":        ("L", "N"),   # local/dev only, not network-exposed
+}
 
-_REGISTRY: list[Target] = []
-
-
-def register_plugin(plugin: Target) -> None:
-    """Register a plugin instance.  Called from plugins/<name>/__init__.py."""
-    _REGISTRY.append(plugin)
-    meta = plugin.metadata()
-    logger.debug("Registered plugin: %s v%s", meta.name, meta.version)
-
-
-def registered_plugins() -> list[Target]:
-    """Return a copy of the current plugin registry."""
-    return list(_REGISTRY)
-
-
-# ------------------------------------------------------------------ #
-# Detection                                                            #
-# ------------------------------------------------------------------ #
-
-def _select_plugin(path: str) -> Target:
-    """
-    Choose the best plugin for *path*.
-
-    Raises RuntimeError if no plugin matches.
-    If multiple match, the one with the highest metadata.priority wins.
-    """
-    candidates = [p for p in _REGISTRY if p.detect(path)]
-    if not candidates:
-        raise RuntimeError(
-            f"No registered plugin can handle input: {path}\n"
-            f"Registered plugins: {[p.metadata().name for p in _REGISTRY]}"
-        )
-    return max(candidates, key=lambda p: p.detection_confidence(path))
-
-
-# ------------------------------------------------------------------ #
-# Input hashing                                                        #
-# ------------------------------------------------------------------ #
-
-def _hash_input(path: str) -> str:
-    """SHA-256 of the input file (or directory tree, sorted)."""
-    p = Path(path)
-    h = hashlib.sha256()
-    if p.is_dir():
-        for f in sorted(p.rglob("*")):
-            if f.is_file():
-                h.update(f.read_bytes())
-    else:
-        h.update(p.read_bytes())
-    return h.hexdigest()
-
-
-# ------------------------------------------------------------------ #
-# Absence detection                                                    #
-# ------------------------------------------------------------------ #
-
-def _check_condition(required_when: str, all_parsed_names: set[str]) -> bool:
-    """
-    Evaluate the firing condition of an absence rule against the set of
-    directive names parsed from the config.
-
-    Supported forms:
-      "always"              — fire unconditionally
-      "if_directive:X"      — fire only when directive X is present
-      "if_not_directive:X"  — fire only when directive X is absent
-
-    Scope note (v1 limitation): all_parsed_names is the *global* union
-    across all server/location blocks. A condition on ssl_certificate fires
-    if ssl_certificate appears anywhere in the config, not per-server.
-    This is correct for directives configured at the http{} level (ssl_protocols)
-    and a documented approximation for per-server directives.
-    """
-    if required_when == "always":
-        return True
-    if required_when.startswith("if_directive:"):
-        return required_when[len("if_directive:"):] in all_parsed_names
-    if required_when.startswith("if_not_directive:"):
-        return required_when[len("if_not_directive:"):] not in all_parsed_names
-    return False
-
-
-def _match_value_rules(db, target_name: str, directive) -> list[Misconfiguration]:
-    """
-    Return the value-rules a directive triggers.
-
-    Two matching modes, in order:
-
-    1. Exact match (the O(1) hot path) — bad_value == directive.value. Covers
-       scalar directives like ``server_tokens on``.
-
-    2. Token-subset match — for list-valued directives like
-       ``ssl_protocols SSLv3 TLSv1 TLSv1.1`` a single config line carries several
-       bad_value tokens stored as separate rules ('SSLv3', 'TLSv1 TLSv1.1'). A
-       rule fires when *all* of its bad_value tokens appear among the directive's
-       tokens. This is what makes detection robust on real-world configs, not
-       just the worst-case fixtures where each bad_value sits on its own line.
-
-    Results are de-duplicated by rule id so a rule matched both ways is not
-    double-counted.
-    """
-    matched: dict[int, Misconfiguration] = {}
-
-    for row in db.get_misconfigurations(
-        target_name=target_name,
-        directive=directive.name,
-        bad_value=directive.value,
-    ):
-        matched[row.id] = row
-
-    directive_tokens = set(directive.value.split())
-    if len(directive_tokens) > 1:
-        for rule in db.get_value_rules(target_name, directive.name):
-            if rule.id in matched:
-                continue
-            rule_tokens = set(rule.bad_value.split())
-            # Subset, but never an empty rule (would match everything).
-            if rule_tokens and rule_tokens <= directive_tokens:
-                matched[rule.id] = rule
-
-    return list(matched.values())
-
-
-def _detect_absences(
-    absence_rules: list[Misconfiguration],
-    all_parsed_names: set[str],
-    directives: list,
-) -> list[Misconfiguration]:
-    """
-    Return absence rules whose condition is met and whose directive is absent.
-
-    For rules with expected_value_prefix='': pure absence — the directive does
-    not appear anywhere in the config.
-
-    For rules with expected_value_prefix!='': multi-instance directives (e.g.
-    add_header) — the directive is present but none of its instances has a value
-    starting with expected_value_prefix.
-
-    Each returned rule has detected_in_scan=True and source_directive=None.
-    """
-    found: list[Misconfiguration] = []
-    for rule in absence_rules:
-        if not _check_condition(rule.required_when, all_parsed_names):
-            continue
-        if rule.expected_value_prefix:
-            # Multi-instance: check that no matching directive instance exists.
-            # Use token membership rather than startswith because the header name
-            # may not be the first token (e.g. Apache "Header always set X-Frame-Options").
-            prefix = rule.expected_value_prefix
-            if not any(
-                d.name == rule.directive and prefix in d.value.split()
-                for d in directives
-            ):
-                rule.detected_in_scan = True
-                rule.source_directive = None
-                found.append(rule)
-        else:
-            # Pure absence: directive not present at all
-            if rule.directive not in all_parsed_names:
-                rule.detected_in_scan = True
-                rule.source_directive = None
-                found.append(rule)
-    return found
-
-
-# ------------------------------------------------------------------ #
-# Chain detection                                                      #
-# ------------------------------------------------------------------ #
-
-def _detect_chains(
-    active_directives: set[str],
-    misconfig_directives: set[str],
-    chains: list[AttackChain],
-) -> list[AttackChain]:
-    """
-    Subset-match directive names against known attack chains.
-
-    A chain fires when TWO conditions are both true:
-      1. ALL of its required directives are present in the config (parsed).
-      2. AT LEAST ONE of those directives is a confirmed misconfiguration.
-
-    Condition 2 prevents clean configs from triggering chains just because
-    a neutral directive like Listen happens to be present.
-    """
-    fired: list[AttackChain] = []
-    for chain in chains:
-        required = set(chain.misconfig_directives)
-        present = required & active_directives
-        has_misconfig = bool(present & misconfig_directives)
-        if present == required and has_misconfig:
-            chain.active = True
-            chain.triggered_by = list(present)
-            fired.append(chain)
-            logger.info("Chain fired: %s (directives: %s)", chain.chain_id, present)
-    return fired
-
-
-# ------------------------------------------------------------------ #
-# Score adjustment and chain amplification                             #
-# ------------------------------------------------------------------ #
-
-# Access Vector ordering, most exposed → least. Used to cap AV downward for an
-# environment profile (an internal service cannot be scored as Network-facing).
-_AV_ORDER = {"N": 3, "A": 2, "L": 1}
-
-
-def _cap_av(av: str, ceiling: str) -> str:
-    """Return the less-exposed of `av` and `ceiling` (cap AV at the ceiling)."""
-    return av if _AV_ORDER.get(av, 3) <= _AV_ORDER.get(ceiling, 3) else ceiling
-
-
-def _score_issues(
-    issues: list[Misconfiguration],
-    profile: SystemProfile,
-    av_ceiling: str | None = None,
-) -> list[Misconfiguration]:
-    """
-    Adjust AV/Au on each issue using the system profile (worst-case),
-    then recompute BaseScore and TemporalScore.
-
-    When `av_ceiling` is set (an explicit environment profile), the effective
-    Access Vector is *capped* at that level afterwards — so an 'internal' or
-    'dev' deployment lowers exposure instead of the worst-case default. Without
-    it, the original worst-case behaviour is unchanged.
-    """
-    for issue in issues:
-        adj_av, adj_au = ccss.adjust_av_au(
-            misconfig_base_av=issue.av,
-            misconfig_base_au=issue.au,
-            system_av=profile.av,
-            system_au=profile.au,
-        )
-        if av_ceiling:
-            adj_av = _cap_av(adj_av, av_ceiling)
-        issue.av = adj_av
-        issue.au = adj_au
-        issue.base_score = ccss.base_score(adj_av, adj_au, issue.ac, issue.c, issue.i, issue.a)
-        issue.temporal_score = ccss.temporal_score(issue.base_score, issue.gel, issue.grl)
-    return issues
-
-
-def _amplify_chains(
-    chains: list[AttackChain],
-    issues: list[Misconfiguration],
-) -> list[AttackChain]:
-    """
-    For each active chain, compute the amplified score as:
-        amplified = max(TemporalScore of constituent issues) × amplification
-    capped at 10.0.
-    """
-    issue_map = {m.directive: m for m in issues}
-    for chain in chains:
-        if not chain.active:
-            continue
-        constituents = [issue_map[d] for d in chain.misconfig_directives
-                        if d in issue_map]
-        if constituents:
-            amplified = ccss.amplified_score(
-                max(m.temporal_score for m in constituents), chain.amplification
-            )
-            # Cap by impact kind: a pure information-disclosure chain (only
-            # Confidentiality across its misconfigs) cannot reach Critical.
-            # Deterministic, auditable ceiling — not a per-chain human call.
-            impacts = [(m.c, m.i, m.a) for m in constituents]
-            chain.amplified_score = ccss.impact_capped_score(amplified, impacts)
-    return chains
-
-
-# ------------------------------------------------------------------ #
-# Main scan entry point                                                #
-# ------------------------------------------------------------------ #
 
 def _amplify_version_exposure(
     issues: list[Misconfiguration],
@@ -402,17 +149,6 @@ def _version_risk_note(product: str, version: str, info) -> str:
             f"CVE{'s' if info.cve_count != 1 else ''} detected")
 
 
-# Environment profiles: override the system exposure (AV/Au) the scoring uses.
-# The default (None) keeps the plugin's inferred profile (worst case). A named
-# profile reflects how the service is actually deployed, which changes the
-# Access Vector — an internal service is Adjacent, a dev box is Local.
-ENV_PROFILES = {
-    "production": ("N", "N"),   # internet-facing, no auth boundary (== default worst case)
-    "internal":   ("A", "N"),   # reachable only from an adjacent/internal network
-    "dev":        ("L", "N"),   # local/dev only, not network-exposed
-}
-
-
 def scan(input_path: str, db: Database, *, version: str | None = None,
          auto_detect_version: bool = True, image: str | None = None,
          env_profile: str | None = None) -> ScanResult:
@@ -450,7 +186,7 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
     logger.info("[scan] Starting scan: %s (version=%s)", input_path, version or "unknown")
 
     # 1. Detect
-    plugin = _select_plugin(input_path)
+    plugin = assessment.select_plugin(input_path)
     meta = plugin.metadata()
     logger.info("[scan] Plugin selected: %s", meta.name)
 
@@ -480,7 +216,7 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
     # 4. Scan — lookup each directive in the DB
     issues: list[Misconfiguration] = []
     for directive in directives:
-        for row in _match_value_rules(db, meta.name, directive):
+        for row in assessment.match_value_rules(db, meta.name, directive):
             row.detected_in_scan = True
             row.source_directive = directive
             issues.append(row)
@@ -490,7 +226,7 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
     # 4b. Absence detection — directives that should be present but are missing
     all_parsed_names: set[str] = {d.name for d in directives}
     absence_rules = db.get_absence_rules(meta.name)
-    absence_issues = _detect_absences(absence_rules, all_parsed_names, directives)
+    absence_issues = assessment.detect_absences(absence_rules, all_parsed_names, directives)
     issues.extend(absence_issues)
     if absence_issues:
         logger.info("[scan] %d absence issues detected", len(absence_issues))
@@ -515,7 +251,7 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
     # keep the worst-case behaviour.
     _av_ceiling = ENV_PROFILES[env_profile][0] if env_profile in (
         "internal", "dev") else None
-    issues = _score_issues(issues, profile, av_ceiling=_av_ceiling)
+    issues = assessment.score_issues(issues, profile, av_ceiling=_av_ceiling)
 
     # 5b. Version-aware amplification + exploit lookup (F1). No-op without a
     # version. The plugin declares which directives expose the version, so the
@@ -533,28 +269,24 @@ def scan(input_path: str, db: Database, *, version: str | None = None,
     all_parsed_directives = all_parsed_names  # already computed in step 4b
     active_misconfig_directives = {m.directive for m in issues}
     known_chains = db.get_attack_chains(target_name=meta.name)
-    fired_chains = _detect_chains(all_parsed_directives, active_misconfig_directives, known_chains)
-    fired_chains = _amplify_chains(fired_chains, issues)
+    fired_chains = attack_chain.detect_chains(
+        all_parsed_directives, active_misconfig_directives, known_chains)
+    fired_chains = attack_chain.amplify_chains(fired_chains, issues)
 
     # 7. Aggregate
-    all_temporal_scores = [m.temporal_score for m in issues]
-    # Also include chain amplified scores
-    all_temporal_scores += [c.amplified_score for c in fired_chains if c.active]
-
-    global_temporal = ccss.aggregate(all_temporal_scores)
-    global_base = ccss.aggregate([m.base_score for m in issues])
+    global_base, global_temporal = aggregate_scan(issues, fired_chains)
 
     # 8. Assemble result
     result = ScanResult(
         target_name=meta.name,
         input_path=input_path,
-        input_hash=_hash_input(input_path),
+        input_hash=assessment.hash_input(input_path),
         profile=profile,
         issues=issues,
         chains=fired_chains,
         global_base_score=global_base,
         global_temporal_score=global_temporal,
-        severity=ccss.severity_label(global_temporal),
+        severity=severity_label(global_temporal),
         total_directives_scanned=len(directives),
         total_issues_found=len(issues),
         total_chains_detected=len(fired_chains),
