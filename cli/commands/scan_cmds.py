@@ -63,10 +63,17 @@ logger = logging.getLogger("ccss")
               type=click.Choice(["production", "internal", "dev"]),
               help="Deployment profile — adjusts exposure (AV) used for scoring: "
                    "production=Network (default), internal=Adjacent, dev=Local.")
+@click.option("--publish-to", "publish_to", default=None,
+              help="Convenience: publish this scan's result to a platform API "
+                   "after scanning, e.g. http://host/api/v1/assets/<id>/scans "
+                   "(same effect as `caspar scan ... -r -f json -o x.json && "
+                   "caspar publish x.json --api <url>`, routed through the "
+                   "same publishing code). Reads CASPAR_API_KEY from the "
+                   "environment; best-effort, never fails the scan.")
 @click.pass_context
 def scan(ctx, input_path, live, report, fmt, output, threshold,
          differentiated_exit, suppress_file, online, service_version,
-         assess_unknown, docs_path, show_uncovered, env_profile) -> None:
+         assess_unknown, docs_path, show_uncovered, env_profile, publish_to) -> None:
     """Analyse service configurations — 4 modes.
 
     \b
@@ -131,6 +138,10 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
                 db.save_scan_result(result)
             except Exception as exc:
                 logger.warning("Could not save scan history: %s", exc)
+
+            if publish_to:
+                from cli._publish import publish_scan_result
+                publish_scan_result(result, publish_to)
     except Exception:
         if _deferred_cleanup:
             _deferred_cleanup()

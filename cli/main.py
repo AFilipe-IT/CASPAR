@@ -14,6 +14,7 @@ registration, and logging setup. The implementation lives in:
   cli/_discovery.py          plugin auto-discovery
   cli/_knowledge.py          build-time RAG knowledge base
   cli/commands/scan_cmds.py    scan, watch
+  cli/commands/publish_cmds.py publish
   cli/commands/plugin_cmds.py  plugin add / fetch
   cli/commands/build_cmds.py   build, fetch-exploits, refresh
   cli/commands/report_cmds.py  targets, diff, badge, explain, history, report
@@ -54,6 +55,7 @@ from cli._knowledge import (                                          # noqa: E4
 from cli.commands.scan_cmds import (                                  # noqa: E402,F401
     scan, watch, _notify_system, _write_to_ptys, _watch_alert_line,
 )
+from cli.commands.publish_cmds import publish                          # noqa: E402,F401
 from cli.commands.plugin_cmds import plugin_group, plugin_add, plugin_fetch  # noqa: E402,F401
 from cli.commands.build_cmds import build, fetch_exploits, refresh    # noqa: E402,F401
 from cli.commands.report_cmds import (                                # noqa: E402,F401
@@ -81,7 +83,7 @@ def cli(ctx: click.Context, db: str, verbose: bool) -> None:
 
 
 for _cmd in (
-    scan, watch,                                   # runtime
+    scan, watch, publish,                          # runtime
     plugin_group,                                  # plugin add / fetch
     build, fetch_exploits, refresh,                # build-time
     targets, diff, badge, explain, history, report, trend,  # reporting

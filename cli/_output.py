@@ -7,7 +7,20 @@ Split out of cli/main.py (which re-exports these names for compatibility).
 
 from __future__ import annotations
 
+import shutil
+from itertools import zip_longest
+
 import click
+
+_BANNER = [
+    r" ██████╗ █████╗ ███████╗██████╗  █████╗ ██████╗ ",
+    r"██╔════╝██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔══██╗",
+    r"██║     ███████║███████╗██████╔╝███████║██████╔╝",
+    r"██║     ██╔══██║╚════██║██╔═══╝ ██╔══██║██╔══██╗",
+    r"╚██████╗██║  ██║███████║██║     ██║  ██║██║  ██║",
+    r" ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝",
+]
+_RISK_BOX_W = 28
 
 _AV_DESC  = {"L": "Local", "A": "Adjacent", "N": "Network"}
 _AU_DESC  = {"M": "Multiple", "S": "Single", "N": "None"}
@@ -59,6 +72,89 @@ def _dedup_chains(chains: list) -> list:
     return result
 
 
+# ── Cabeçalho: banner + Risk Score box ──────────────────────────────
+
+def _boxed_center(plain: str, inner_w: int, **style_kw) -> str:
+    """Center `plain` inside a box row of interior width `inner_w`, styling
+    only the text so ANSI codes never throw off the padding math."""
+    pad = inner_w - len(plain)
+    left = pad // 2
+    right = pad - left
+    return "│" + " " * left + click.style(plain, **style_kw) + " " * right + "│"
+
+
+def _risk_box_lines(score: float, severity: str) -> list[str]:
+    """Right-hand 'Risk Score' panel: bordered box with a block-bar meter."""
+    color = _sev_color(score)
+    w = _RISK_BOX_W
+    inner_w = w - 2
+    top = "┌─" + " Risk Score ".center(w - 4, "─") + "─┐"
+    bot = "└" + "─" * inner_w + "┘"
+    blank = "│" + " " * inner_w + "│"
+
+    score_line = _boxed_center(f"{score:.1f}/10", inner_w, bold=True, fg=color)
+    sev_line = _boxed_center(severity.upper(), inner_w, bold=True, fg=color)
+
+    filled = round(score / 10 * (w - 4))
+    meter = click.style("█" * filled, fg=color) + click.style("░" * (w - 4 - filled), dim=True)
+    meter_line = "│ " + meter + " │"
+
+    return [
+        click.style(top, dim=True),
+        blank,
+        score_line,
+        sev_line,
+        blank,
+        meter_line,
+        click.style(bot, dim=True),
+    ]
+
+
+def _print_header(result, resolved, score: float) -> None:
+    """Banner + Risk Score box side by side (falls back to stacked on narrow
+    terminals so redirected/CI output never wraps mid-box)."""
+    from config_assessment.core.ccss import severity_label as sl
+
+    term_w = shutil.get_terminal_size(fallback=(100, 24)).columns
+    banner = list(_BANNER)
+    box = _risk_box_lines(score, sl(score))
+    banner_w = max(len(l) for l in banner)
+
+    mode_labels = {"file": "file", "directory": "directory", "live": "service", "docker": "Docker"}
+    input_str = result.input_path
+    mode_str = mode_labels.get(resolved.mode, resolved.mode) if resolved else "file"
+    if resolved:
+        if resolved.mode == "docker":
+            input_str = resolved.metadata.get("image", result.input_path)
+        elif resolved.mode == "live":
+            svc = resolved.metadata.get("service", "")
+            ver = resolved.metadata.get("version", "")
+            input_str = f"{svc} {ver}".strip() if ver and ver != "unknown" else svc
+
+    click.echo()
+    if term_w >= banner_w + _RISK_BOX_W + 6:
+        for b_line, box_line in zip_longest(banner, box, fillvalue=""):
+            pad = " " * (banner_w - len(b_line) + 3)
+            click.echo(f"  {click.style(b_line, fg='bright_red', bold=True)}{pad}{box_line}")
+    else:
+        for line in banner:
+            click.echo(f"  {click.style(line, fg='bright_red', bold=True)}")
+        click.echo()
+        for line in box:
+            click.echo(f"  {line}")
+
+    click.echo()
+    click.echo(f"  {click.style('CASPAR', bold=True)} · Configuration Analysis, Security Posture Assessment & Reporting")
+    click.echo()
+    click.echo(click.style("  Scan_Summary" + "‗" * 54, dim=True))
+    click.echo()
+    click.echo(f"  {click.style('Target:', dim=True)}   {input_str}")
+    click.echo(f"  {click.style('Mode:', dim=True)}     {mode_str}")
+    click.echo(f"  {click.style('Profile:', dim=True)}  AV:{result.profile.av} Au:{result.profile.au}")
+    click.echo(f"  {click.style('Date:', dim=True)}     {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+    click.echo()
+
+
 # ── Relatório terminal ─────────────────────────────────────────────
 
 def _print_result(result, resolved=None, show_uncovered=False) -> None:
@@ -70,57 +166,34 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
         key=lambda x: -x.amplified_score,
     )
     score = result.global_temporal_score
-    sc = _sev_color(score)
 
-    click.echo()
-    click.echo(click.style("  ══════════════════════════════════════════════════════════════", dim=True))
-    click.echo()
+    _print_header(result, resolved, score)
 
-    # Modo e input
-    mode_labels = {"file": "file", "directory": "directory", "live": "service", "docker": "Docker"}
-    input_str = result.input_path
-    mode_str = ""
-    if resolved:
-        mode_str = f"  [{click.style(mode_labels.get(resolved.mode, resolved.mode), fg='cyan')}]"
-        if resolved.mode == "docker":
-            input_str = resolved.metadata.get("image", result.input_path)
-        elif resolved.mode == "live":
-            svc = resolved.metadata.get("service", "")
-            ver = resolved.metadata.get("version", "")
-            input_str = f"{svc} {ver}".strip() if ver and ver != "unknown" else svc
-
-    click.echo(
-        f"  {click.style(f'{score:.1f}', bold=True, fg=sc)}/10  "
-        f"{click.style(f'[{result.severity}]', bold=True, fg=sc)}"
-        f"{mode_str}  {click.style(input_str, dim=True)}"
-    )
-    click.echo(f"  {_bar(score, 30)}")
-    # Explain WHAT drives the overall score, so a high overall from a chain is
-    # not mistaken for a high individual issue.
     hi, hc = result.highest_issue_score, result.highest_chain_score
+    driver = "attack chain" if result.overall_driver == "chain" else "issue"
+    click.echo(
+        f"  {click.style('Total Score (worst-case):', bold=True)} "
+        f"{click.style(f'{score:.1f}/10', bold=True, fg=_sev_color(score))} "
+        f"({result.severity.upper()})   "
+        f"{click.style('Total Findings:', dim=True)} {len(groups)}"
+    )
     if hi or hc:
-        driver = "attack chain" if result.overall_driver == "chain" else "issue"
         click.echo(
             f"  {click.style('Highest issue', dim=True)} {hi:.1f}   "
             f"{click.style('Highest chain', dim=True)} {hc:.1f}   "
             f"{click.style(f'(overall driven by {driver})', dim=True)}"
         )
-    click.echo()
-
-    # Perfil numa linha
-    av_str = f"AV:{result.profile.av}={_AV_DESC.get(result.profile.av, '?')}"
-    au_str = f"Au:{result.profile.au}={_AU_DESC.get(result.profile.au, '?')}"
-    click.echo(
-        f"  {click.style(av_str, dim=True)}  {click.style(au_str, dim=True)}"
-        f"  ·  {result.total_directives_scanned} directivas  ·  {result.timestamp.strftime('%Y-%m-%d %H:%M')}"
-    )
+    click.echo(f"  {click.style('Attack Chains Triggered:', dim=True)} "
+               f"{len(active_chains)}   "
+               f"{click.style('Directives Scanned:', dim=True)} {result.total_directives_scanned}")
     click.echo()
 
     if not result.issues:
         click.echo(click.style("  ✓  No issues detected.", fg="green", bold=True))
         click.echo()
-        click.echo(click.style("  ══════════════════════════════════════════════════════════════", dim=True))
+        click.echo(click.style("  Reproducibility" + "‗" * 51, dim=True))
         click.echo()
+        _print_manifest_line(getattr(result, "manifest", {}))
         return
 
     # Contadores por severidade
@@ -129,11 +202,49 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
         sev = sl(g["issue"].temporal_score)
         counts[sev] = counts.get(sev, 0) + 1
 
+    click.echo(click.style("  Top_Findings" + "‗" * 54, dim=True))
+    click.echo()
+    top_sorted = sorted(groups, key=lambda g: -g["issue"].temporal_score)[:10]
+    for g in top_sorted:
+        issue = g["issue"]
+        sc2 = _sev_color(issue.temporal_score)
+        sev_lbl = f"[{sl(issue.temporal_score).upper()}]"
+        sec = issue.cis_section or "—"
+        detail = issue.justification[:44] if issue.justification else issue.bad_value
+        click.echo(
+            f"  {click.style(sev_lbl.ljust(11), fg=sc2, bold=True)}"
+            f"{click.style(sec.ljust(7), dim=True)}"
+            f"{click.style(issue.directive.ljust(20), bold=True)}"
+            f" : {click.style(detail.ljust(46), dim=True)}"
+            f" {click.style(f'{issue.temporal_score:.1f}', bold=True, fg=sc2)}"
+        )
+    click.echo()
+
+    if active_chains:
+        click.echo(click.style("  Attack_Chains_Triggered" + "‗" * 42, dim=True))
+        click.echo()
+        for chain in active_chains:
+            sc2 = _sev_color(chain.amplified_score)
+            dirs = " -> ".join(chain.triggered_by)
+            click.echo(
+                f"  {click.style(f'[{sl(chain.amplified_score).upper()}]', fg=sc2, bold=True)} "
+                f"{chain.chain_id}: {dirs}   "
+                f"{click.style(f'Score: {chain.amplified_score:.1f}', bold=True, fg=sc2)}"
+            )
+        click.echo()
+
+    top_finding = top_sorted[0]["issue"] if top_sorted else None
+    if top_finding and top_finding.recommendation:
+        click.echo(click.style("  Recommendation_(Top_Priority)" + "‗" * 36, dim=True))
+        click.echo()
+        click.echo(f"  1. {top_finding.recommendation}")
+        click.echo()
+
     summary_parts = []
     for sev, color in [("Critical", "bright_red"), ("High", "red"), ("Medium", "yellow"), ("Low", "cyan")]:
         if counts.get(sev, 0):
             summary_parts.append(click.style(f"{counts[sev]} {sev}", fg=color, bold=sev in ("Critical", "High")))
-    click.echo(f"  {click.style('ISSUES', bold=True)}  {' · '.join(summary_parts)}")
+    click.echo(f"  {click.style('ISSUES (detail)', bold=True)}  {' · '.join(summary_parts)}")
     click.echo()
 
     for sev_name in ["Critical", "High", "Medium", "Low"]:
@@ -147,7 +258,7 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
             _print_issue_compact(g)
 
     if active_chains:
-        click.echo(f"  {click.style('ATTACK CHAINS', bold=True)}  {click.style(f'({len(active_chains)})', dim=True)}")
+        click.echo(f"  {click.style('ATTACK CHAINS (detail)', bold=True)}  {click.style(f'({len(active_chains)})', dim=True)}")
         click.echo()
         for chain in active_chains:
             _print_chain_compact(chain)
@@ -155,9 +266,9 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
     _print_unknown_directives(getattr(result, "unknown_directives", []),
                               show_all=show_uncovered)
 
-    _print_manifest_line(getattr(result, "manifest", {}))
-    click.echo(click.style("  ══════════════════════════════════════════════════════════════", dim=True))
+    click.echo(click.style("  Reproducibility" + "‗" * 51, dim=True))
     click.echo()
+    _print_manifest_line(getattr(result, "manifest", {}))
 
 
 def _print_manifest_line(manifest: dict) -> None:
