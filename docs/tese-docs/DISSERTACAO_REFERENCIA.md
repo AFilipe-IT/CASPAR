@@ -1,18 +1,25 @@
-# AEGIS / CASPAR — Referência para a Dissertação
+# AEGIS — Referência para a Dissertação
 
 > **Propósito:** documento único e verificado com tudo o que a dissertação
 > precisa — funcionalidades, arquitectura/implementação, e validação com
 > resultados finais (verificados num Ubuntu 22.04 real). A tese escreve-se em
 > **inglês**; este documento é o material-fonte em Português Europeu.
 >
-> **Metodologia:** AEGIS — *A methodology for the automated and quantitative
-> assessment of security misconfigurations in systems and services*.
-> **Prova de conceito:** CASPAR — Configuration Analysis, Security Posture
-> Assessment and Reporting (o código deste repositório).
+> **Nomenclatura (actualizada 2026-08-02):** **AEGIS** é o nome único, usado
+> tanto para a metodologia (a contribuição científica: a separação
+> build-time/runtime que torna o CCSS aplicável automaticamente sem perder
+> reprodutibilidade) como para a sua própria implementação de referência
+> (prova de conceito, CLI `sca`). Já não existe um segundo nome — "AMiSA"
+> (metodologia) e "CASPAR" (ferramenta) foram unificados sob AEGIS; ver
+> primeira menção por capítulo em `tese/` para o enquadramento
+> framework-vs-PoC. Zero ocorrências de AMiSA/CASPAR restam em `tese/*.tex`.
 > **Estado:** parte prática FECHADA e validada (2026-07-09). Adenda pós-fecho:
-> replicação NISTIR 7502 18/18 (2026-07-14) e experiência de determinismo da
+> replicação NISTIR 7502 18/18 (2026-07-14), experiência de determinismo da
 > extração LLM (2026-07-18), motivadas pelo feedback dos revisores do INForum
-> (§6).
+> (§6), e três gaps fechados na simulação de defesa de 2026-08-02 — IC de
+> Wilson 95% nas proporções-chave, admissão explícita de falta de análise de
+> sensibilidade, e nomeação do conflito CIS/STIG como assunção não testada
+> (ver §4.8 e §4.9).
 
 ---
 
@@ -22,7 +29,7 @@
 recomendações em prosa; as ferramentas existentes dão veredictos binários
 (pass/fail) sem uma medida de risco reproduzível e explicável.
 
-**Contribuição (AMiSA).** Uma metodologia para transformar benchmarks em
+**Contribuição (AEGIS).** Uma metodologia para transformar benchmarks em
 **scores CCSS (NISTIR 7502) reproduzíveis e auditáveis** de misconfigurations,
 com a separação **build-time / runtime** como garantia central:
 
@@ -525,6 +532,44 @@ avaliação.
   (LLM-extracted, curated, promoted) são documentação/convenção, não um
   campo de schema validado — uma regra `curated` incorrecta entra sem
   verificação automática além da revisão humana (ver §4.7.2).
+- **Conflito entre benchmarks (CIS vs STIG) não é resolvido, é evitado por
+  construção:** a chave de unicidade da tabela `misconfigurations`
+  (`UNIQUE (target_name, directive, bad_value, expected_value_prefix)`) não
+  inclui a origem do benchmark. Nenhum plugin actual mistura duas famílias
+  de benchmark para a mesma diretiva — mas isso nunca foi testado, é uma
+  assunção não exercitada. O mesmo vale para versões sucessivas do mesmo
+  benchmark (CIS Apache v2.1 vs v2.2): a proveniência $\pi$ por regra torna
+  a discrepância rastreável a posteriori, mas nada no build a deteta.
+  Nomeado explicitamente como limitação em `Chapter4_AEGIS.tex`
+  §Trust and Threat Model e como trabalho futuro em
+  `Chapter7_Conclusion.tex` §Future Work ("Cross-benchmark conflict
+  resolution").
+
+### 4.9 Três gaps fechados na simulação de defesa (2026-08-02)
+
+Uma simulação de arguição (júri cético, várias personas) identificou três
+lacunas genuínas — já corrigidas na tese, detalhe completo em
+`caspar-defesa-simulada-qa` (memória da sessão):
+
+1. **Intervalos de confiança de Wilson (95%)** para as três proporções-chave
+   sobre universo finito: 20/20 (concordância CCE/DISA) → **[83.9%, 100%]**;
+   96/96 (recall) → **[96.2%, 100%]**; 29/30 (estabilidade build-time) →
+   **[83.3%, 99.4%]**. Adicionado a `Chapter6_Evaluation.tex` §Conclusion
+   Validity. O intervalo largo do 20/20 é o ponto pedagógico: a amostra
+   pequena não sustenta a leitura "100% populacional" que o ponto isolado
+   sugere — o `06_VALIDACAO.md` já recomendava isto (linha 337-338) e agora
+   está aplicado no capítulo.
+2. **Análise de sensibilidade ausente + justificação de N=5**: admitido
+   explicitamente como trabalho futuro em `Chapter7_Conclusion.tex`
+   §Future Work — os resultados são pontuais sob os parâmetros actuais
+   (thresholds, política worst-case, bandas $\phi$), não perturbados; e a
+   escolha de N=5 no teste de determinismo nunca foi testada quanto a
+   saturação do IC (10 ou 20 podiam apertar o intervalo).
+3. **Conflito CIS/STIG e versionamento de benchmark**: ver último ponto de
+   §4.8 acima.
+
+Todas as três edições verificadas contra o código antes de escrever
+(schema.sql, plugins/*/rules.py) e compilam sem referências indefinidas.
 
 ---
 
