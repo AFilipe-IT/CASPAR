@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from config_assessment.core.engines.aggregation import HostRollup, aggregate_hosts
+
 
 # ── issue identity ─────────────────────────────────────────────────────
 
@@ -80,15 +82,20 @@ def _severity_color(score: float) -> str:
     return "brightgreen"
 
 
-def badge_url(score: float, label: str = "CASPAR") -> str:
-    """A shields.io badge URL for a scan score."""
+def badge_url(score: float, label: str = "CVM") -> str:
+    """A shields.io badge URL for a scan score.
+
+    The label is the methodology name (CVM), not the tool's — the badge lands
+    in someone else's README, where what the score *means* matters more than
+    which binary produced it.
+    """
     color = _severity_color(score)
     value = f"{score:.1f}/10"
     return (f"https://img.shields.io/badge/"
             f"{label}-{value.replace('/', '%2F').replace(' ', '%20')}-{color}")
 
 
-def badge_markdown(score: float, label: str = "CASPAR") -> str:
+def badge_markdown(score: float, label: str = "CVM") -> str:
     return f"![{label} Score]({badge_url(score, label)})"
 
 
@@ -197,42 +204,15 @@ def search_catalog(rows: list[dict], term: str, limit: int = 10) -> list[dict]:
 
 
 # ── #5 merge (executive multi-scan summary) ────────────────────────────
+#
+# The rollup logic now lives in the Aggregation Engine
+# (config_assessment.core.engines.aggregation.aggregate_hosts). MergedReport
+# and merge_scans are kept as compatibility aliases.
 
-@dataclass
-class MergedReport:
-    scans: list[dict] = field(default_factory=list)   # per-target summary rows
-    total_issues: int = 0
-    total_chains: int = 0
-    worst_score: float = 0.0
-    worst_target: str = ""
-
-    @property
-    def average_score(self) -> float:
-        if not self.scans:
-            return 0.0
-        return round(sum(s["score"] for s in self.scans) / len(self.scans), 1)
+MergedReport = HostRollup
 
 
 def merge_scans(scan_dicts: list[dict]) -> MergedReport:
     """Aggregate several scan JSONs (e.g. every service on a host) into one
     executive summary — per-target scores, worst offender, totals."""
-    m = MergedReport()
-    for d in scan_dicts:
-        score = d.get("global_temporal_score", 0.0)
-        row = {
-            "target": d.get("target_name", "?"),
-            "input": d.get("input_path", ""),
-            "score": score,
-            "severity": d.get("severity", "None"),
-            "issues": len(d.get("issues", [])),
-            "chains": len([c for c in d.get("chains", [])
-                           if c.get("active", True)]),
-        }
-        m.scans.append(row)
-        m.total_issues += row["issues"]
-        m.total_chains += row["chains"]
-        if score > m.worst_score:
-            m.worst_score, m.worst_target = score, row["target"]
-    # Worst-first ordering for the report.
-    m.scans.sort(key=lambda s: -s["score"])
-    return m
+    return aggregate_hosts(scan_dicts)

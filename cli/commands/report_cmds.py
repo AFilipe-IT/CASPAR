@@ -14,6 +14,7 @@ import click
 
 from cli._discovery import _discover_plugins
 from cli._output import _sev_color
+from config_assessment.core.engines.aggregation import sparkline as _sparkline
 
 
 @click.command("targets")
@@ -84,7 +85,7 @@ def diff(old_json, new_json) -> None:
 
 @click.command("badge")
 @click.argument("scan_json", type=click.Path(exists=True))
-@click.option("--label", default="CASPAR", show_default=True)
+@click.option("--label", default="CVM", show_default=True)
 @click.option("--url-only", is_flag=True, help="Print just the URL, not markdown.")
 def badge(scan_json, label, url_only) -> None:
     """Print a shields.io score badge (URL or markdown) for a scan JSON.
@@ -200,14 +201,6 @@ def history(ctx, input_path, last) -> None:
 
 # ── trend (score drift over time, per input) ──────────────────────────
 
-_SPARK = "▁▂▃▄▅▆▇█"
-
-
-def _sparkline(scores: list[float]) -> str:
-    """Map 0..10 scores onto ▁▂▃▄▅▆▇█ — the whole history in one glance."""
-    return "".join(_SPARK[min(7, max(0, int(s / 10 * 8)))] for s in scores)
-
-
 @click.command("trend")
 @click.argument("input_filter", required=False, metavar="[INPUT]")
 @click.option("--last", "-n", default=200, show_default=True, type=int,
@@ -225,6 +218,7 @@ def trend(ctx, input_filter, last) -> None:
       caspar trend nginx          # only inputs matching 'nginx'
     """
     from config_assessment.core.db.database import Database
+    from config_assessment.core.engines.aggregation import aggregate_trend
 
     db_path = ctx.obj["db_path"]
     if not Path(db_path).exists():
@@ -234,40 +228,28 @@ def trend(ctx, input_filter, last) -> None:
     with Database(db_path) as db:
         rows = db.get_scan_history(limit=last)
 
-    # Group chronologically per input (rows arrive most-recent-first).
-    groups: dict[str, list[dict]] = {}
-    for r in reversed(rows):
-        if input_filter and input_filter.lower() not in r["input_path"].lower():
-            continue
-        groups.setdefault(r["input_path"], []).append(r)
-
-    plotted = {k: v for k, v in groups.items() if len(v) >= 2}
-    if not plotted:
+    series = aggregate_trend(rows, input_filter=input_filter)
+    if not series:
         click.echo("  Not enough history to trend (need 2+ scans of an input). "
                    "Scans are recorded automatically — just scan again later.")
         return
 
     click.echo()
     click.echo(f"  {click.style('TREND', bold=True)}  "
-               f"{click.style(f'{len(plotted)} input(s)', dim=True)}")
+               f"{click.style(f'{len(series)} input(s)', dim=True)}")
     click.echo()
-    for path, seq in sorted(plotted.items()):
-        scores = [s["global_temporal_score"] for s in seq]
-        first, last_s = scores[0], scores[-1]
-        delta = last_s - first
-        worse = delta > 0.05
-        better = delta < -0.05
+    for s in series:
+        worse = s.delta > 0.05
+        better = s.delta < -0.05
         color = "red" if worse else "green" if better else "white"
         arrow = "▲" if worse else "▼" if better else "="
-        verdict = ("risk increased" if worse
-                   else "risk reduced" if better else "stable")
-        span = f"{seq[0]['timestamp'][:10]} → {seq[-1]['timestamp'][:10]}"
-        click.echo(f"  {click.style(_sparkline(scores), fg=color)}  "
-                   f"{first:.1f} → {last_s:.1f}  "
-                   f"{click.style(f'{arrow} {abs(delta):.1f}', fg=color, bold=True)}"
-                   f"  {click.style(f'({verdict})', fg=color)}")
+        span = f"{s.timestamps[0][:10]} → {s.timestamps[-1][:10]}"
+        click.echo(f"  {click.style(s.sparkline, fg=color)}  "
+                   f"{s.first:.1f} → {s.last:.1f}  "
+                   f"{click.style(f'{arrow} {abs(s.delta):.1f}', fg=color, bold=True)}"
+                   f"  {click.style(f'({s.verdict})', fg=color)}")
         click.echo(click.style(
-            f"      {len(seq)} scans · {span} · {path}", dim=True))
+            f"      {len(s.scores)} scans · {span} · {s.input_path}", dim=True))
         click.echo()
 
 

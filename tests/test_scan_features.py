@@ -61,7 +61,7 @@ def test_badge_color_by_score(score, color):
 
 def test_badge_markdown_shape():
     md = badge_markdown(5.7)
-    assert md.startswith("![CASPAR Score](https://img.shields.io/badge/")
+    assert md.startswith("![CVM Score](https://img.shields.io/badge/")
     assert "5.7" in md
 
 
