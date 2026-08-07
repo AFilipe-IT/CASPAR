@@ -8,10 +8,37 @@ once so scans stay offline. Registered on the group in cli/main.py.
 from __future__ import annotations
 
 import sys
+from typing import Callable
 
 import click
 
 from cli._discovery import _discover_plugins
+
+
+def run_build_job(benchmark: str, model: str, ollama_url: str, target: str,
+                   dry_run: bool, db_path: str,
+                   emit: Callable[[str], None]) -> int:
+    """The `build` command's actual work, factored out so both the CLI
+    command (emit=click.echo) and the REST job runner (emit=db.append_job_log)
+    drive the exact same logic. Returns the misconfiguration count; raises on
+    an unknown target so callers can report failure uniformly."""
+    if target == "apache-httpd":
+        from config_assessment.plugins.apache_httpd.build_llm import run_build
+    elif target == "nginx":
+        from config_assessment.plugins.nginx.build_nginx import run_build
+    else:
+        raise ValueError(f"Target '{target}' not implemented.")
+
+    emit(f"  Building '{target}' with {model}...")
+    count = run_build(
+        benchmark_path=benchmark,
+        db_path=db_path,
+        model=model,
+        ollama_url=ollama_url,
+        dry_run=dry_run,
+    )
+    emit(f"  Concluído: {count} misconfigurations.")
+    return count
 
 
 @click.command("build")
@@ -28,30 +55,11 @@ def build(ctx, benchmark, model, ollama_url, target, dry_run) -> None:
     Example:
       caspar build --benchmark plugins/apache_httpd/Benchmark.pdf
     """
-    if target == "apache-httpd":
-        from config_assessment.plugins.apache_httpd.build_llm import run_build
-        click.echo(f"  Building '{target}' with {model}...")
-        count = run_build(
-            benchmark_path=benchmark,
-            db_path=ctx.obj["db_path"],
-            model=model,
-            ollama_url=ollama_url,
-            dry_run=dry_run,
-        )
-        click.echo(click.style(f"  Concluído: {count} misconfigurations.", fg="green"))
-    elif target == "nginx":
-        from config_assessment.plugins.nginx.build_nginx import run_build
-        click.echo(f"  Building '{target}' with {model}...")
-        count = run_build(
-            benchmark_path=benchmark,
-            db_path=ctx.obj["db_path"],
-            model=model,
-            ollama_url=ollama_url,
-            dry_run=dry_run,
-        )
-        click.echo(click.style(f"  Concluído: {count} misconfigurations.", fg="green"))
-    else:
-        click.echo(f"Target '{target}' not implemented.", err=True)
+    try:
+        run_build_job(benchmark, model, ollama_url, target, dry_run,
+                      ctx.obj["db_path"], emit=click.echo)
+    except ValueError as exc:
+        click.echo(str(exc), err=True)
         sys.exit(1)
 
 
