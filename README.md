@@ -1,6 +1,11 @@
 # CASPAR
 
-**Framework genérico de scoring de configurações de segurança baseado em NISTIR 7502 (CCSS)**
+**Configuration Vulnerability Meter — framework genérico de scoring de configurações de segurança baseado em NISTIR 7502 (CCSS)**
+
+O CASPAR é a implementação de referência de um *Configuration Vulnerability Meter* (CVM): uma
+categoria de instrumento de segurança situada entre os scanners de conformidade (veredictos
+binários pass/fail) e os scanners de vulnerabilidades (CVEs conhecidos), que mede quantitativamente
+a vulnerabilidade introduzida pela configuração de um sistema.
 
 > **Este documento é a vitrine e referência de comandos — é o "01" do roteiro.** A restante
 > documentação vive em [docs/](docs/), numerada pela ordem de leitura recomendada; os documentos

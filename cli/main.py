@@ -1,6 +1,11 @@
 """
 cli/main.py — CASPAR CLI entry point.
 
+CASPAR is the reference implementation of a Configuration Vulnerability
+Meter (CVM): a security instrument that quantitatively scores the
+vulnerability a system's configuration introduces, positioned between
+compliance scanners (pass/fail) and vulnerability scanners (known CVEs).
+
   caspar scan /tmp/httpd.conf
   caspar scan /etc/apache2/
   caspar scan --live apache2
@@ -72,9 +77,10 @@ from cli.commands.manage_cmds import suppress, doctor, fix, promote   # noqa: E4
 @click.option("--verbose", "-v", is_flag=True)
 @click.pass_context
 def cli(ctx: click.Context, db: str, verbose: bool) -> None:
-    """CASPAR — Configuration Analysis, Security Posture Assessment and Reporting.
+    """CASPAR — Configuration Vulnerability Meter (CVM) reference implementation.
 
-    Security configuration scoring framework based on CCSS/NISTIR 7502.
+    Quantitative, reproducible security configuration scoring based on
+    CCSS/NISTIR 7502.
     """
     if verbose:
         logging.getLogger().setLevel(logging.INFO)
