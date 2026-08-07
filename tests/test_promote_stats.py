@@ -59,12 +59,11 @@ def test_promoted_rule_carries_the_marker():
     """The contract the scoreboard relies on: promote_to_misconfiguration
     stamps the attribution marker into the justification."""
     from config_assessment.core.unknown_directives import (
-        UnknownDirective, promote_to_misconfiguration)
+        PROMOTED_MARK, UnknownDirective, promote_to_misconfiguration)
     u = UnknownDirective(name="x_flag", value="1")
     u.llm_is_misconfig = True
     u.llm_impact = "C:P"
     u.llm_justification = "test"
     rule = promote_to_misconfiguration(u, target_name="nginx")
-    from cli.commands.manage_cmds import _PROMOTED_MARK
-    assert _PROMOTED_MARK in rule.justification
+    assert PROMOTED_MARK in rule.justification
     assert rule.good_value == ""   # review is still required, by design

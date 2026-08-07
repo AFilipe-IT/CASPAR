@@ -31,6 +31,14 @@ if TYPE_CHECKING:  # avoid import cycles / heavy imports at runtime
     from config_assessment.core.models import Directive
 
 
+# The attribution marker stamped into a promoted rule's justification, and the
+# only way to tell a promoted rule from a curated one afterwards. Defined here
+# because this module *writes* it; `caspar promote --stats` and the REST
+# scoreboard both match against it, and a copy that drifted would silently
+# make the learning-loop counts wrong rather than fail.
+PROMOTED_MARK = "promoted from unknown-directive assessment"
+
+
 # ── Layer 1: surfacing ─────────────────────────────────────────────────
 
 @dataclass
@@ -297,7 +305,7 @@ def promote_to_misconfiguration(u: "UnknownDirective", *, target_name: str):
         gel="ND", grl="ND",
         cis_section="",
         justification=(u.llm_justification or "LLM-assessed unknown directive")
-                      + " [promoted from unknown-directive assessment; review before trusting]",
+                      + f" [{PROMOTED_MARK}; review before trusting]",
         recommendation="Review this promoted rule and set a concrete good_value.",
         rule_type="value",
     )

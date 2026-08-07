@@ -238,19 +238,20 @@ def fix(ctx, input_path, live, dry_run, in_place, output) -> None:
 
 # ── promote (#2: candidate → permanent rule) ───────────────────────────
 
-# The attribution marker promote_to_misconfiguration stamps into a promoted
-# rule's justification — how the learning loop's output is counted later.
-_PROMOTED_MARK = "promoted from unknown-directive assessment"
-
-
 def _promote_stats(db) -> None:
     """The learning-loop scoreboard: per target, how much of the knowledge base
     came from candidate→rule promotions (vs benchmark extraction), and how many
     promoted rules still await operator review (empty good_value)."""
+    # The attribution marker comes from the module that stamps it — a local
+    # copy would drift and silently make these counts wrong. Imported inside
+    # the function like every other config_assessment import here, so `caspar
+    # --help` doesn't pay for the engine import.
+    from config_assessment.core.unknown_directives import PROMOTED_MARK
+
     rows = []
     for t in db.get_target_names():
         rules = db.get_all_misconfigurations(t)
-        promoted = [m for m in rules if _PROMOTED_MARK in (m.justification or "")]
+        promoted = [m for m in rules if PROMOTED_MARK in (m.justification or "")]
         if not rules:
             continue
         pending = sum(1 for m in promoted if not m.good_value)
