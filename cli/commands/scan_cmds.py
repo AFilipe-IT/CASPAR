@@ -63,6 +63,10 @@ logger = logging.getLogger("ccss")
               type=click.Choice(["production", "internal", "dev"]),
               help="Deployment profile — adjusts exposure (AV) used for scoring: "
                    "production=Network (default), internal=Adjacent, dev=Local.")
+@click.option("--host", "host_label", default=None,
+              help="Tag this scan as belonging to a host/OS instance (e.g. "
+                   "--host web01). Groups this scan with others sharing the "
+                   "same label under the Operating System dashboard level.")
 @click.option("--publish-to", "publish_to", default=None,
               help="Convenience: publish this scan's result to a platform API "
                    "after scanning, e.g. http://host/api/v1/assets/<id>/scans "
@@ -73,7 +77,8 @@ logger = logging.getLogger("ccss")
 @click.pass_context
 def scan(ctx, input_path, live, report, fmt, output, threshold,
          differentiated_exit, suppress_file, online, service_version,
-         assess_unknown, docs_path, show_uncovered, env_profile, publish_to) -> None:
+         assess_unknown, docs_path, show_uncovered, env_profile, host_label,
+         publish_to) -> None:
     """Analyse service configurations — 4 modes.
 
     \b
@@ -135,7 +140,8 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
             # Record the scan for history/trending (#4). Best-effort — a failure
             # to persist history must never break the scan itself.
             try:
-                db.save_scan_result(result)
+                host_id = db.upsert_host(host_label) if host_label else None
+                db.save_scan_result(result, host_id=host_id)
             except Exception as exc:
                 logger.warning("Could not save scan history: %s", exc)
 
@@ -270,6 +276,10 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
 @click.option("--profile", "env_profile", default=None,
               type=click.Choice(["production", "internal", "dev"]),
               help="Environment baseline for scoring (as in scan).")
+@click.option("--host", "host_label", default=None,
+              help="Tag this watch session's scans as belonging to a host/OS "
+                   "instance (as in scan --host), so they appear under that "
+                   "host's Operating System dashboard page too.")
 @click.option("--log", "log_path", default=None, metavar="FILE",
               help="Append alerts to FILE instead of the terminal (for "
                    "background use: `caspar watch cfg --log watch.log &`).")
@@ -278,7 +288,7 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
                    "(wall / notify-send), so they reach any terminal.")
 @click.pass_context
 def watch(ctx, input_path, live, service_version, interval, env_profile,
-          log_path, notify) -> None:
+          host_label, log_path, notify) -> None:
     """Continuously audit a config: alert on screen whenever it changes.
 
     Watches a file, a directory, or (with --live) an installed service's config
@@ -290,7 +300,9 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
     ideal for `caspar watch cfg --log watch.log &`; read it with `cat watch.log`.
 
     Full detail is intentionally omitted — run `caspar scan <config>` for the
-    complete report. Data comes from the DB (zero-LLM, zero-network).
+    complete report. Scoring comes from the DB (zero-LLM, zero-network); each
+    event is also persisted under a session id, so the run can be followed
+    live from the dashboard's Watch page while it's running.
 
     \b
     caspar watch /etc/nginx/nginx.conf
@@ -298,10 +310,13 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
     caspar watch --live apache2                    # find + watch its config dir
     caspar watch nginx.conf --log watch.log &      # background, terminal free
     """
+    import time
+    from uuid import uuid4
+
     from config_assessment.core.db.database import Database
     from config_assessment.core.input_resolver import resolve
-    from config_assessment.core import runtime
     from config_assessment.core.watch import watch as watch_loop
+    from config_assessment.core.watch_loop import run_watch_tick
 
     _discover_plugins()
     db_path: str = ctx.obj["db_path"]
@@ -363,14 +378,36 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
     if _version == "unknown":
         _version = None
 
+    # One session id for this whole watch invocation — every persisted event
+    # shares it, so the dashboard's Watch page can group them and tell one
+    # "caspar watch" run apart from another over the same input.
+    session_id = str(uuid4())
+    with Database(db_path) as db:
+        host_id = db.upsert_host(host_label) if host_label else None
+        db.touch_watch_heartbeat(session_id)   # live immediately, not after 1 interval
+
     def _scan():
+        # Shared with the API's watch runner (config_assessment/api/
+        # watch_runner.py) so both paths scan and persist identically.
         with Database(db_path) as db:
-            return runtime.scan(resolved.path, db, version=_version,
-                                env_profile=env_profile)
+            return run_watch_tick(db, resolved.path, session_id=session_id,
+                                  interval=interval, host_id=host_id,
+                                  version=_version, env_profile=env_profile)
+
+    # watch_loop only yields on a real content change — a quiet, unchanged
+    # config would otherwise go stale on the dashboard within one interval
+    # even though this process is still running. Piggyback a heartbeat touch
+    # on its injectable `sleep`, which fires every poll tick regardless of
+    # whether anything changed.
+    def _sleep_and_heartbeat(seconds: float) -> None:
+        time.sleep(seconds)
+        with Database(db_path) as db:
+            db.touch_watch_heartbeat(session_id)
 
     prev = None   # previous ScanResult, for the delta
     try:
-        for event in watch_loop(resolved.path, interval=interval):
+        for event in watch_loop(resolved.path, interval=interval,
+                                sleep=_sleep_and_heartbeat):
             result = _scan()
             ts = datetime.now().strftime("%H:%M:%S")
             if event.previous is None:

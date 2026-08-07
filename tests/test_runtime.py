@@ -316,6 +316,106 @@ class TestDatabase:
         assert {"timestamp", "input_path", "global_temporal_score",
                 "severity"} <= set(only_a[0])
 
+    def test_watch_session_columns_default_to_null(self, db):
+        """Ordinary (non-watch) scans must not accidentally get tagged."""
+        result = ScanResult(
+            target_name="dummy", input_path="/tmp/plain.conf",
+            input_hash="h0", profile=SystemProfile(av="N", au="N"),
+            global_temporal_score=3.0, severity="Low")
+        db.save_scan_result(result)
+        assert db.get_active_watches() == []
+
+    def test_get_active_watches_returns_latest_row_per_session(self, db):
+        for i, score in enumerate([4.0, 5.0, 6.0]):
+            db.save_scan_result(ScanResult(
+                target_name="dummy", input_path="/tmp/a.conf",
+                input_hash=f"a{i}", profile=SystemProfile(av="N", au="N"),
+                global_temporal_score=score, severity="Medium"),
+                watch_session="sess-a", watch_interval=2.0)
+        db.save_scan_result(ScanResult(
+            target_name="dummy", input_path="/tmp/b.conf",
+            input_hash="b0", profile=SystemProfile(av="N", au="N"),
+            global_temporal_score=9.0, severity="High"),
+            watch_session="sess-b", watch_interval=5.0)
+
+        active = db.get_active_watches()
+        assert len(active) == 2
+        by_session = {r["watch_session"]: r for r in active}
+        assert by_session["sess-a"]["global_temporal_score"] == 6.0
+        assert by_session["sess-b"]["global_temporal_score"] == 9.0
+        assert by_session["sess-b"]["watch_interval"] == 5.0
+
+    def test_get_active_watches_honours_limit(self, db):
+        for i in range(3):
+            db.save_scan_result(ScanResult(
+                target_name="dummy", input_path=f"/tmp/s{i}.conf",
+                input_hash=f"s{i}", profile=SystemProfile(av="N", au="N"),
+                global_temporal_score=1.0, severity="None"),
+                watch_session=f"sess-{i}", watch_interval=1.0)
+        assert len(db.get_active_watches(limit=2)) == 2
+
+    def test_get_active_watches_passes_through_host_id(self, db):
+        host_id = db.upsert_host("web01")
+        db.save_scan_result(ScanResult(
+            target_name="dummy", input_path="/tmp/a.conf",
+            input_hash="h0", profile=SystemProfile(av="N", au="N"),
+            global_temporal_score=2.0, severity="Low"),
+            host_id=host_id, watch_session="sess-a", watch_interval=1.0)
+        assert db.get_active_watches()[0]["host_id"] == host_id
+
+    def test_get_watch_events_orders_newest_first_and_filters_session(self, db):
+        for i, score in enumerate([4.0, 5.0, 6.0]):
+            db.save_scan_result(ScanResult(
+                target_name="dummy", input_path="/tmp/a.conf",
+                input_hash=f"a{i}", profile=SystemProfile(av="N", au="N"),
+                global_temporal_score=score, severity="Medium"),
+                watch_session="sess-a", watch_interval=2.0)
+        db.save_scan_result(ScanResult(
+            target_name="dummy", input_path="/tmp/b.conf",
+            input_hash="b0", profile=SystemProfile(av="N", au="N"),
+            global_temporal_score=9.0, severity="High"),
+            watch_session="sess-b", watch_interval=5.0)
+
+        events = db.get_watch_events("sess-a")
+        assert [e["global_temporal_score"] for e in events] == [6.0, 5.0, 4.0]
+
+    def test_get_watch_events_honours_limit(self, db):
+        for i in range(5):
+            db.save_scan_result(ScanResult(
+                target_name="dummy", input_path="/tmp/a.conf",
+                input_hash=f"a{i}", profile=SystemProfile(av="N", au="N"),
+                global_temporal_score=float(i), severity="Low"),
+                watch_session="sess-a", watch_interval=1.0)
+        assert len(db.get_watch_events("sess-a", limit=3)) == 3
+
+    def test_get_watch_events_unknown_session_returns_empty(self, db):
+        assert db.get_watch_events("no-such-session") == []
+
+    def test_touch_watch_heartbeat_creates_and_updates(self, db):
+        """A quiet config (no content change) must still update last_seen on
+        every poll tick — this is what tells the dashboard "still running"
+        apart from "process died", since scan_results only appends on change."""
+        db.touch_watch_heartbeat("sess-a")
+        first = db.get_watch_heartbeat("sess-a")
+        assert first is not None
+
+        db.touch_watch_heartbeat("sess-a")   # second tick, no new scan row
+        second = db.get_watch_heartbeat("sess-a")
+        assert second is not None   # still one row, not duplicated/erroring
+
+    def test_get_watch_heartbeat_unknown_session_returns_none(self, db):
+        assert db.get_watch_heartbeat("no-such-session") is None
+
+    def test_get_active_watches_includes_last_seen(self, db):
+        db.save_scan_result(ScanResult(
+            target_name="dummy", input_path="/tmp/a.conf",
+            input_hash="h0", profile=SystemProfile(av="N", au="N"),
+            global_temporal_score=4.0, severity="Medium"),
+            watch_session="sess-a", watch_interval=2.0)
+        db.touch_watch_heartbeat("sess-a")
+        active = db.get_active_watches()
+        assert active[0]["last_seen"] is not None
+
 
 # ------------------------------------------------------------------ #
 # End-to-end integration test  (Phase 1 completion criterion)          #
@@ -425,7 +525,7 @@ class TestVersionPropagation:
         runtime.register_plugin(DummyPlugin())
 
         result = runtime.scan(dummy_config_file, db, version="1.27.0")
-        assert '"detected_version": "1.27.0"' in result.model_dump_json()
+        assert '"detected_version":"1.27.0"' in result.model_dump_json()
 
 
 class TestVersionAmplificationE2E:

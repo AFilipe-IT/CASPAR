@@ -67,6 +67,7 @@ from cli.commands.report_cmds import (                                # noqa: E4
     targets, diff, badge, explain, history, report, trend,
 )
 from cli.commands.manage_cmds import suppress, doctor, fix, promote   # noqa: E402,F401
+from cli.commands.serve_cmds import serve                              # noqa: E402,F401
 
 
 # ── CLI ────────────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ for _cmd in (
     build, fetch_exploits, refresh,                # build-time
     targets, diff, badge, explain, history, report, trend,  # reporting
     suppress, doctor, fix, promote,                # state management
+    serve,                                          # REST API + Dashboard
 ):
     cli.add_command(_cmd)
 
