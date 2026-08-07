@@ -26,6 +26,11 @@ dev = [
 publish = [
     "requests>=2.31",
 ]
+api = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "python-multipart>=0.0.9",  # UploadFile/Form support (POST /scans/upload)
+]
 
 [project.scripts]
 caspar = "cli.main:cli"

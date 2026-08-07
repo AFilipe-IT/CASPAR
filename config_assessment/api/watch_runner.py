@@ -1,0 +1,172 @@
+"""
+config_assessment/api/watch_runner.py
+-------------------------------------
+Server-driven watch sessions for the REST API.
+
+A watch session is a *long-running loop*, not a one-shot job, so it does not
+use the `jobs` table: its state is already fully expressed by the
+existing watch_heartbeats/scan_results mechanism, and "stopped" is simply
+"the loop stopped touching the heartbeat" — exactly how a CLI `caspar watch`
+run reads today. Adding a parallel job row would give the same session two
+sources of truth.
+
+What *is* new here is lifecycle control. `caspar watch` is a blocking loop
+killed only by Ctrl-C; a session started through the API carries a pause and
+a stop `threading.Event`, so the console can pause, resume, and stop it. The
+scan-and-persist work per tick is `core.watch_loop.run_watch_tick`, shared
+verbatim with the CLI so the two paths cannot drift.
+
+Like the job runner, sessions live in this process only: a server restart
+ends them, after which they simply go stale on their own (no reconciliation
+pass is needed — a heartbeat that stops being touched *is* the stopped state).
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+from dataclasses import dataclass, field
+from uuid import uuid4
+
+from config_assessment.core.db.database import Database
+from config_assessment.core.watch_loop import run_watch_tick
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _Session:
+    """A live watch loop owned by this process."""
+    session_id: str
+    path: str
+    label: str
+    interval: float
+    thread: threading.Thread | None = None
+    # `pause` is set while RUNNING (so wait() falls through) and cleared to
+    # pause — an Event used as a gate, which is the standard shape and avoids
+    # a busy-wait while paused.
+    resumed: threading.Event = field(default_factory=threading.Event)
+    stop: threading.Event = field(default_factory=threading.Event)
+    error: str | None = None
+
+
+_SESSIONS: dict[str, _Session] = {}
+_LOCK = threading.Lock()
+
+
+def start_watch(db_path: str, *, path: str, label: str, interval: float,
+                 version: str | None = None, env_profile: str | None = None,
+                 host_label: str | None = None) -> str:
+    """Start a watch loop in a daemon thread; return its session id.
+
+    The heartbeat is touched before returning, so the session reads as live
+    immediately rather than only after the first poll tick — matching what
+    the CLI does at startup.
+    """
+    session_id = str(uuid4())
+
+    with Database(db_path) as db:
+        host_id = db.upsert_host(host_label) if host_label else None
+        db.touch_watch_heartbeat(session_id)
+
+    session = _Session(session_id=session_id, path=path, label=label,
+                       interval=interval)
+    session.resumed.set()   # starts running, not paused
+
+    def _run() -> None:
+        from config_assessment.core.watch import watch as watch_loop
+        import time
+
+        def _beat() -> None:
+            if not session.stop.is_set():
+                with Database(db_path) as db:
+                    db.touch_watch_heartbeat(session_id)
+
+        def _sleep_and_heartbeat(seconds: float) -> None:
+            # Piggyback the heartbeat on the poll tick, as the CLI does: an
+            # unchanged config yields no event, and without this the session
+            # would read as stale within one interval while still running.
+            time.sleep(seconds)
+            _beat()
+            # A paused session is alive and deliberately idle, not dead, so it
+            # must KEEP beating while it waits — blocking here without beating
+            # would make `live` flip false within 2x interval and the console
+            # would show a paused session as stopped. Wait in interval-sized
+            # slices, beating each time, until resumed or stopped.
+            while not session.resumed.wait(timeout=seconds):
+                if session.stop.is_set():
+                    return
+                _beat()
+
+        try:
+            for _event in watch_loop(path, interval=interval,
+                                     stop=session.stop.is_set,
+                                     sleep=_sleep_and_heartbeat):
+                if session.stop.is_set():
+                    break
+                session.resumed.wait()
+                with Database(db_path) as db:
+                    run_watch_tick(db, path, session_id=session_id,
+                                   interval=interval, host_id=host_id,
+                                   version=version, env_profile=env_profile)
+        except Exception as exc:                      # noqa: BLE001
+            logger.exception("Watch session %s failed", session_id)
+            session.error = str(exc)
+
+    thread = threading.Thread(target=_run, name=f"watch-{session_id}",
+                              daemon=True)
+    session.thread = thread
+    with _LOCK:
+        _SESSIONS[session_id] = session
+    thread.start()
+    return session_id
+
+
+def pause_watch(session_id: str) -> bool:
+    """Stop scanning without ending the session. False if not owned here."""
+    session = _SESSIONS.get(session_id)
+    if session is None or session.stop.is_set():
+        return False
+    session.resumed.clear()
+    return True
+
+
+def resume_watch(session_id: str) -> bool:
+    session = _SESSIONS.get(session_id)
+    if session is None or session.stop.is_set():
+        return False
+    session.resumed.set()
+    return True
+
+
+def stop_watch(session_id: str) -> bool:
+    """End the loop. The heartbeat stops being touched, so the session goes
+    stale on its own within 2x its interval — the same signal a killed CLI
+    run produces."""
+    session = _SESSIONS.get(session_id)
+    if session is None:
+        return False
+    session.stop.set()
+    session.resumed.set()   # release a paused loop so it can observe the stop
+    return True
+
+
+def runner_state(session_id: str) -> str | None:
+    """'running' | 'paused' | 'stopped' for a session owned by this process,
+    or None for one this process doesn't own (a CLI run, or a session from
+    before a restart) — whose liveness is then heartbeat-derived only."""
+    session = _SESSIONS.get(session_id)
+    if session is None:
+        return None
+    if session.stop.is_set() or (session.thread and not session.thread.is_alive()):
+        return "stopped"
+    return "running" if session.resumed.is_set() else "paused"
+
+
+def clear_registry() -> None:
+    """Stop and forget every session — for tests and interpreter shutdown."""
+    with _LOCK:
+        for session in list(_SESSIONS.values()):
+            session.stop.set()
+            session.resumed.set()
+        _SESSIONS.clear()

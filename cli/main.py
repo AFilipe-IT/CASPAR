@@ -95,7 +95,7 @@ for _cmd in (
     build, fetch_exploits, refresh,                # build-time
     targets, diff, badge, explain, history, report, trend,  # reporting
     suppress, doctor, fix, promote,                # state management
-    serve,                                          # REST API + Dashboard
+    serve,                                          # REST API + CVM Console
 ):
     cli.add_command(_cmd)
 
