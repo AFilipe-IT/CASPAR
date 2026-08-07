@@ -75,3 +75,6 @@ documentosccss/
 dissertacao/
 tese/
 tese-pt/
+
+# WSL: Windows "downloaded from the internet" metadata streams
+*:Zone.Identifier
