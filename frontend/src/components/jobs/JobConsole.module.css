@@ -1,0 +1,121 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.statusLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+  color: var(--accent);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+  .bar::after {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+/* Indeterminate: the build pipeline cannot report a real completion
+   fraction, so this deliberately conveys "working", not "n% done". */
+.bar {
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--panel-alt);
+  overflow: hidden;
+}
+
+.bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  background: var(--accent);
+  border-radius: 2px;
+  animation: slide 1.4s ease-in-out infinite;
+}
+
+@keyframes slide {
+  0% {
+    left: -35%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.console {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1.65;
+  color: var(--text-muted);
+  height: 320px;
+  overflow-y: auto;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.line {
+  display: block;
+}
+
+.lineError {
+  display: block;
+  color: var(--sev-critical);
+}
+
+.placeholder {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.errorBox {
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--sev-critical-soft);
+  border: 1px solid var(--sev-critical);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  line-height: 1.5;
+}

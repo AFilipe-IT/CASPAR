@@ -1,0 +1,145 @@
+/* Effective-config rows: label left, value right, value in mono. */
+.configRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.configRow:last-child {
+  border-bottom: none;
+}
+
+.configKey {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  flex: 0 0 auto;
+}
+
+.configValue {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  text-align: right;
+  word-break: break-all;
+}
+
+.unset {
+  color: var(--text-faint);
+  font-style: italic;
+  font-family: var(--font-sans);
+}
+
+.pluginTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  justify-content: flex-end;
+}
+
+/* Preferences form */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-4);
+}
+
+.label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.input,
+.select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-base);
+  font-family: inherit;
+  max-width: 320px;
+}
+
+.input:focus-visible,
+.select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Doctor */
+.doctorHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.counts {
+  display: flex;
+  gap: var(--sp-4);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.findingList {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+/* Severity is carried by the leading stripe AND the written word, never by
+   colour alone. */
+.finding {
+  display: grid;
+  grid-template-columns: 3px auto 1fr;
+  gap: var(--sp-3);
+  align-items: baseline;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) 0;
+  font-size: var(--fs-sm);
+  overflow: hidden;
+}
+
+.stripe {
+  align-self: stretch;
+}
+
+.error .stripe {
+  background: var(--sev-critical);
+}
+
+.warning .stripe {
+  background: var(--sev-medium);
+}
+
+.findingMeta {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.findingMessage {
+  color: var(--text);
+  word-break: break-word;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}

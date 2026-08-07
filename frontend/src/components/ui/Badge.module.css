@@ -1,0 +1,47 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+
+.critical {
+  background: var(--sev-critical-soft);
+  color: var(--sev-critical);
+}
+
+.high {
+  background: var(--sev-high-soft);
+  color: var(--sev-high);
+}
+
+.medium {
+  background: var(--sev-medium-soft);
+  color: var(--sev-medium);
+}
+
+.low {
+  background: var(--sev-low-soft);
+  color: var(--sev-low);
+}
+
+.neutral {
+  background: var(--panel-alt);
+  color: var(--text-muted);
+}
+
+.accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ok {
+  background: var(--sev-low-soft);
+  color: var(--ok);
+}
