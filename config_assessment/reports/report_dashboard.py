@@ -168,6 +168,34 @@ def _svg_donut(counts):
 </div>'''
 
 
+def _svg_trend_line(scores, width=680, height=140):
+    """Line chart of worst-case score over time (0..10 scale), for the
+    Infrastructure overview's global trend panel. `scores` is oldest-first."""
+    if len(scores) < 2:
+        return '<div class="empty-chart">Not enough history yet — needs at least 2 scans.</div>'
+    pad_l, pad_r, pad_t, pad_b = 8, 8, 12, 22
+    plot_w = width - pad_l - pad_r
+    plot_h = height - pad_t - pad_b
+    n = len(scores)
+    xs = [pad_l + (i / (n - 1)) * plot_w for i in range(n)]
+    ys = [pad_t + (1 - min(s, 10.0) / 10.0) * plot_h for s in scores]
+    line = " ".join(f"{'M' if i == 0 else 'L'} {x:.1f} {y:.1f}" for i, (x, y) in enumerate(zip(xs, ys)))
+    area = line + f" L {xs[-1]:.1f} {pad_t + plot_h:.1f} L {xs[0]:.1f} {pad_t + plot_h:.1f} Z"
+    grid = "".join(
+        f'<line x1="{pad_l}" y1="{pad_t + f * plot_h:.1f}" x2="{width - pad_r}" y2="{pad_t + f * plot_h:.1f}" class="trend-grid"/>'
+        for f in (0.0, 0.5, 1.0)
+    )
+    dots = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" class="trend-dot"/>' for x, y in zip(xs, ys))
+    return f'''<svg viewBox="0 0 {width} {height}" class="trend-chart" role="img" aria-label="Score trend, {scores[0]:.1f} to {scores[-1]:.1f}">
+  {grid}
+  <path d="{area}" class="trend-area"/>
+  <path d="{line}" class="trend-line"/>
+  {dots}
+  <text x="{pad_l}" y="{height - 4}" class="trend-axis-label">oldest</text>
+  <text x="{width - pad_r}" y="{height - 4}" class="trend-axis-label" text-anchor="end">latest</text>
+</svg>'''
+
+
 _CIA_RANK = {"C": 2, "P": 1, "N": 0}
 
 def _svg_score_bars(groups, rank_key="score"):
