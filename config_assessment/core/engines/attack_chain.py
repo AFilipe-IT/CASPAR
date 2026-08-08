@@ -39,7 +39,13 @@ def detect_chains(
         has_misconfig = bool(present & misconfig_directives)
         if present == required and has_misconfig:
             chain.active = True
-            chain.triggered_by = list(present)
+            # Ordered by the chain's own declaration, not by set iteration:
+            # `list(a_set)` varies between processes (PYTHONHASHSEED), which
+            # made two identical scans produce byte-different reports. The
+            # declared order is also the meaningful one — it reads as the
+            # attack's progression (ServerTokens -> ServerSignature).
+            chain.triggered_by = [d for d in chain.misconfig_directives
+                                  if d in present]
             fired.append(chain)
             logger.info("Chain fired: %s (directives: %s)", chain.chain_id, present)
     return fired
