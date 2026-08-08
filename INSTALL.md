@@ -278,8 +278,18 @@ o faz automaticamente:
 
 ```bash
 sudo usermod -aG docker $USER
-newgrp docker        # ou termina a sessão e volta a entrar
+exit                 # termina a sessão e volta a entrar
 ```
+
+Depois de reentrares, confirma que o grupo se aplicou:
+
+```bash
+id -nG               # 'docker' tem de aparecer na lista
+```
+
+> Existe `newgrp docker` como atalho, mas só afecta o sub-shell que abre: os
+> comandos escritos a seguir na mesma linha correm fora dele e continuam sem
+> acesso. Terminar a sessão é o caminho sem ambiguidade.
 
 > `sudo curl … | sh` **não** resolve este problema: o `sudo` aplica-se ao
 > `curl`, não ao shell que executa o script, por isso a instalação continua a
