@@ -278,18 +278,23 @@ o faz automaticamente:
 
 ```bash
 sudo usermod -aG docker $USER
-exit                 # termina a sessão e volta a entrar
+getent group docker      # confirma que o teu utilizador aparece na lista
+sudo reboot
 ```
 
-Depois de reentrares, confirma que o grupo se aplicou:
+Depois de reiniciar, confirma:
 
 ```bash
-id -nG               # 'docker' tem de aparecer na lista
+id -nG                   # 'docker' tem de aparecer
+docker ps                # tem de correr sem erro de permissões
 ```
 
-> Existe `newgrp docker` como atalho, mas só afecta o sub-shell que abre: os
-> comandos escritos a seguir na mesma linha correm fora dele e continuam sem
-> acesso. Terminar a sessão é o caminho sem ambiguidade.
+> **Porque reiniciar e não apenas voltar a entrar.** Os grupos são fixados no
+> arranque da sessão. Num ambiente gráfico, um terminal novo herda os grupos da
+> sessão X/Wayland que o lançou, que é anterior ao `usermod` — por isso pode
+> continuar sem acesso mesmo depois de "abrir outro terminal". O `newgrp
+> docker` dá acesso imediato, mas só ao sub-shell que abre, e não sobrevive a
+> essa sessão. Reiniciar é o único caminho que se aplica a tudo de uma vez.
 
 > `sudo curl … | sh` **não** resolve este problema: o `sudo` aplica-se ao
 > `curl`, não ao shell que executa o script, por isso a instalação continua a

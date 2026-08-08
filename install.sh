@@ -22,11 +22,13 @@ if ! docker info >/dev/null 2>&1; then
     echo "   Causa habitual: '$USER' não pertence ao grupo 'docker'. Resolve com:"
     echo
     echo "     sudo usermod -aG docker \$USER"
-    echo "     exit                 # termina a sessão e volta a entrar"
+    echo "     getent group docker  # confirma que ficaste na lista"
+    echo "     sudo reboot"
     echo
-    echo "   Ao reentrar, confirma com 'id -nG' que 'docker' aparece na lista."
-    echo "   ('newgrp docker' só afecta o sub-shell que abre — terminar a"
-    echo "   sessão é mais fiável.) Depois repete este comando de instalação."
+    echo "   Reiniciar não é exagero: os grupos são fixados no arranque da"
+    echo "   sessão, e num ambiente gráfico um terminal novo herda os da"
+    echo "   sessão que o lançou. Ao voltar, 'id -nG' deve mostrar 'docker'."
+    echo "   Depois repete este comando de instalação."
     echo
     echo "   Nota: 'sudo curl … | sh' NÃO resolve — o sudo aplica-se ao curl,"
     echo "   não ao shell que executa o script."
