@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CASPAR — Configuration Analysis, Security Posture Assessment and Reporting
+# CASPAR — Configuration Vulnerability Meter (CVM) reference implementation
 # Instalação via Docker (um único comando):
 #   curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
 #
@@ -13,9 +13,27 @@ WRAPPER="$INSTALL_DIR/caspar"
 echo "🔍 A verificar dependências..."
 command -v docker >/dev/null 2>&1 || { echo "❌ Docker não encontrado. Instala em https://docs.docker.com/get-docker/"; exit 1; }
 
+# O Docker pode estar instalado mas inacessível: o utilizador não pertence ao
+# grupo 'docker'. Vale a pena diagnosticar aqui, com a solução, em vez de
+# deixar o 'docker pull' falhar com uma mensagem sobre sockets.
+if ! docker info >/dev/null 2>&1; then
+    echo "❌ O Docker está instalado mas não está acessível a este utilizador."
+    echo
+    echo "   Causa habitual: '$USER' não pertence ao grupo 'docker'. Resolve com:"
+    echo
+    echo "     sudo usermod -aG docker \$USER"
+    echo "     newgrp docker        # ou termina a sessão e volta a entrar"
+    echo
+    echo "   Depois repete este comando de instalação."
+    echo
+    echo "   Nota: 'sudo curl … | sh' NÃO resolve — o sudo aplica-se ao curl,"
+    echo "   não ao shell que executa o script."
+    exit 1
+fi
+
 echo "📦 A descarregar imagens CASPAR..."
-docker pull alfilipe/caspar:latest
-docker pull alfilipe/caspar:full
+docker pull alfilipe/caspar:latest || { echo "❌ Falhou o download de alfilipe/caspar:latest."; exit 1; }
+docker pull alfilipe/caspar:full   || { echo "❌ Falhou o download de alfilipe/caspar:full."; exit 1; }
 
 echo "📝 A instalar wrapper..."
 mkdir -p "$INSTALL_DIR"

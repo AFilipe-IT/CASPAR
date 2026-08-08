@@ -236,12 +236,26 @@ pip install -e ".[dev]"
 python3 -m pytest tests/ -q
 ```
 
-**Esperado:** `777 passed`.
+**Esperado:** `755 passed, 22 skipped`, sem falhas nem erros de colecção.
 
-Se instalaste só `pytest` (sem o extra `[dev]`), o resultado é
-`692 passed, 4 skipped` — os 85 testes em falta são os da API REST, que
-precisam do FastAPI. É um resultado válido: a suite não falha por causa de
-uma dependência opcional, apenas assinala o que não pôde exercitar.
+Os skips são esperados e não indicam problema. A suite adapta-se ao que o
+ambiente tem:
+
+| Cenário | Resultado | Porquê |
+|---|---|---|
+| Clone limpo + `[dev]` | `755 passed, 22 skipped` | os skips dependem de ficheiros-fonte que o repositório não redistribui (PDFs dos CIS Benchmarks em `sources/benchmarks/`) |
+| Só `pytest`, sem `[dev]` | `692 passed, 4 skipped` | os 4 módulos da API REST precisam do FastAPI |
+| Com todos os ficheiros-fonte presentes | `777 passed` | nada por exercitar |
+
+Para ver o motivo de cada skip no teu ambiente:
+
+```bash
+python3 -m pytest tests/ -q -rs 2>&1 | grep SKIPPED | sort | uniq -c
+```
+
+O critério de aceitação é **zero falhas e zero erros**, não um número exacto
+de testes. Um `passed` acompanhado de `skipped` é um resultado válido; um
+`failed` ou `error` não é.
 
 Se isto falhar com `ResolutionTooDeep`, o pip está desactualizado — corre
 `pip install --upgrade pip` e repete (ver secção 2).
@@ -252,6 +266,24 @@ Se isto falhar com `ResolutionTooDeep`, o pip está desactualizado — corre
 
 Não precisa de Python, nem de clonar o repositório, nem do passo do seed — a
 imagem já traz a base de conhecimento e semeia-a na primeira utilização.
+
+**Antes de começar**, confirma que o teu utilizador consegue falar com o Docker:
+
+```bash
+docker info >/dev/null 2>&1 && echo "OK" || echo "sem acesso ao Docker"
+```
+
+Se não tiveres acesso, acrescenta-te ao grupo `docker` — instalar o Docker não
+o faz automaticamente:
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker        # ou termina a sessão e volta a entrar
+```
+
+> `sudo curl … | sh` **não** resolve este problema: o `sudo` aplica-se ao
+> `curl`, não ao shell que executa o script, por isso a instalação continua a
+> correr sem privilégios.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | sh
