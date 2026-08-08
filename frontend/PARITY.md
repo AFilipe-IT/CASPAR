@@ -4,7 +4,11 @@ Every command registered in `cli/main.py` is listed here exactly once, mapped
 either to a REST endpoint or to a documented reason for staying CLI-only.
 "CLI-only by design" is a decision recorded here, not a gap left implicit.
 
-Generated against Phase 4. Verify with:
+The **Console page** column is a third, separate question: an endpoint can exist
+and still have no UI. Everything left blank there is listed under
+[Deliberately CLI-only in the console](#deliberately-cli-only-in-the-console).
+
+Verify the REST column with:
 
 ```bash
 python3 -c "
@@ -52,8 +56,8 @@ for p in sorted(spec['paths']):
 | CLI | REST | Console page | Notes |
 |---|---|---|---|
 | `doctor` | `GET /doctor` | Settings | Always 200 when the check *ran*. The CLI's `exit 1` has no honest HTTP equivalent — a non-200 would mean "the check failed to run", so counts carry the verdict. |
-| `suppress` | `GET`/`POST`/`DELETE /suppressions` | — | **Deliberately narrower:** `suppress_file` is required. The CLI defaults to `.caspar-suppress.json` relative to the process cwd, which for a long-running server means "wherever it was launched" — not something a browser user can reason about. `reason` is mandatory in both. |
-| `fix` | `POST /fix/preview` | — | **Deliberately narrower: preview only.** `caspar fix --in-place` overwrites a real config file with no backup, and this API's auth is a no-op unless `CASPAR_API_KEY` is set. Exposing a remote file-write is a separate security decision, not an implementation detail of parity. |
+| `suppress` | `GET`/`POST`/`DELETE /suppressions` | Settings → Accepted risks | **Deliberately narrower:** `suppress_file` is required. The CLI defaults to `.caspar-suppress.json` relative to the process cwd, which for a long-running server means "wherever it was launched" — not something a browser user can reason about. The console asks for the path once and remembers it in browser preferences. `reason` is mandatory in both. |
+| `fix` | `POST /fix/preview` | Assessment → Remediate | **Deliberately narrower: preview only.** `caspar fix --in-place` overwrites a real config file with no backup, and this API's auth is a no-op unless `CASPAR_API_KEY` is set. Exposing a remote file-write is a separate security decision, not an implementation detail of parity. The console renders the diff and prints the exact `caspar fix` command to run, so applying stays a deliberate act on the server. |
 | `promote` | `POST /promote`, `GET /promote/stats` | Settings (stats) | Job-backed: promotion runs the LLM over every uncovered directive. |
 
 ## Serving
@@ -62,6 +66,25 @@ for p in sorted(spec['paths']):
 |---|---|---|
 | `serve` | — | **CLI-only by necessity.** It is the process that hosts the API; it cannot be one of its own endpoints. |
 
+## Deliberately CLI-only in the console
+
+These have working REST endpoints and are reachable from any HTTP client — they
+simply have no page in the console. The console covers the day-to-day loop
+(assess → review → remediate → accept risk); the operations below are
+administrative or one-off, and the CLI is the better place for them. Recorded
+here as a decision, not a backlog.
+
+| Capability | Endpoint | Why not in the console |
+|---|---|---|
+| `promote` (trigger) | `POST /promote` | Administrative: it rewrites the knowledge base with LLM output. The *result* is visible in Settings → Learning loop; starting a run is a deliberate operator act. |
+| `fetch-exploits`, `refresh` | `POST /maintenance/*` | Maintenance jobs, typically scheduled rather than hand-run. `refresh` also takes an NVD API key, which is better supplied by a shell than a browser form. |
+| `plugin manual` | `POST /plugins/manual` | Retroactive RAG ingest for an already-installed plugin — a rare, per-plugin curation step. |
+| `badge` | `GET /scans/{id}/badge` | Produces a Markdown snippet to paste into someone else's README; a copy button is a convenience, not a workflow. |
+| Host registry detail | `GET /hosts/registry/{host_id}` | Fleet inventory detail. The Dashboard already aggregates what the console needs from it. |
+
+Anything here can be added later without a REST change — the endpoints exist and
+are covered by tests.
+
 ## Summary
 
 - 21 leaf commands: 18 top-level (`plugin` is a group) + `plugin add` / `fetch` / `manual`.
@@ -69,3 +92,4 @@ for p in sorted(spec['paths']):
 - 2 are CLI-only by design: `publish` (outbound third-party integration) and `serve` (hosts the API itself). `fix` is a third partial case — its read path *is* exposed while its write path is not.
 - 2 endpoints are deliberately narrower than their CLI counterpart (`fix`, `suppress`); both narrowings are security-driven and asserted by tests in `tests/test_api_manage.py`.
 - 3 lifecycle endpoints are deliberately *wider* (`watch` pause/resume/stop).
+- 5 capabilities are REST-exposed but intentionally absent from the console, listed above.
