@@ -1,0 +1,104 @@
+.diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.hunk {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.hunkHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--panel-alt);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* Long config lines scroll inside their own hunk — the page body must never
+   scroll sideways because one directive happens to be verbose. */
+.line {
+  display: flex;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  white-space: pre;
+  color: var(--text);
+}
+
+.sign {
+  flex: none;
+  user-select: none;
+  color: var(--text-faint);
+}
+
+/* Severity tokens carry the +/- meaning, so the diff reads the same way as
+   the rest of the console. Colour is never the only signal — the sign
+   character is there for anyone who can't distinguish the two grounds. */
+.line[data-kind="removed"] {
+  background: var(--sev-high-soft);
+}
+
+.line[data-kind="removed"] .sign {
+  color: var(--sev-high);
+}
+
+.line[data-kind="added"] {
+  background: var(--sev-low-soft);
+}
+
+.line[data-kind="added"] .sign {
+  color: var(--sev-low);
+}
+
+.applyNote {
+  display: flex;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--panel-alt);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.applyNote strong {
+  color: var(--text);
+}
+
+.cmd {
+  display: block;
+  margin: var(--sp-3) 0;
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  white-space: pre;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+.mono {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}

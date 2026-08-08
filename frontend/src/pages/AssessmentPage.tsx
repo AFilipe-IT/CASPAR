@@ -4,10 +4,11 @@ import { RunAssessmentForm } from "@/components/assessment/RunAssessmentForm";
 import { ScanResultView } from "@/components/assessment/ScanResultView";
 import { HistoryView } from "@/components/assessment/HistoryView";
 import { CompareView } from "@/components/assessment/CompareView";
+import { RemediateView } from "@/components/assessment/RemediateView";
 import type { ScanResponse } from "@/api/types";
 import styles from "./AssessmentPage.module.css";
 
-type Tab = "run" | "history" | "compare";
+type Tab = "run" | "history" | "compare" | "remediate";
 
 export function AssessmentPage() {
   const [tab, setTab] = useState<Tab>("run");
@@ -39,6 +40,12 @@ export function AssessmentPage() {
         >
           Compare
         </button>
+        <button
+          className={[styles.tab, tab === "remediate" ? styles.tabActive : ""].join(" ")}
+          onClick={() => setTab("remediate")}
+        >
+          Remediate
+        </button>
       </div>
 
       {tab === "run" && (
@@ -54,6 +61,7 @@ export function AssessmentPage() {
 
       {tab === "history" && <HistoryView />}
       {tab === "compare" && <CompareView />}
+      {tab === "remediate" && <RemediateView />}
     </>
   );
 }
