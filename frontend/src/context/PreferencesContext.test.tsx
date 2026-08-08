@@ -10,6 +10,7 @@ function Probe() {
     <div>
       <span data-testid="profile">{preferences.envProfile || "(none)"}</span>
       <span data-testid="threshold">{preferences.threshold || "(none)"}</span>
+      <span data-testid="suppressFile">{preferences.suppressFile || "(none)"}</span>
       <button onClick={() => setPreferences({ threshold: "7.5" })}>set</button>
       <button onClick={resetPreferences}>reset</button>
     </div>
@@ -49,12 +50,14 @@ describe("PreferencesContext", () => {
   });
 
   it("fills in a preference the stored object predates", () => {
-    // Someone who saved preferences before `threshold` existed must not get
-    // `undefined` back — React would then flip its input to uncontrolled.
+    // Someone who saved preferences before `threshold` or `suppressFile`
+    // existed must not get `undefined` back — React would then flip the
+    // corresponding input from controlled to uncontrolled mid-session.
     localStorage.setItem(KEY, JSON.stringify({ envProfile: "dev" }));
     renderProbe();
     expect(screen.getByTestId("profile")).toHaveTextContent("dev");
     expect(screen.getByTestId("threshold")).toHaveTextContent("(none)");
+    expect(screen.getByTestId("suppressFile")).toHaveTextContent("(none)");
   });
 
   it("falls back to defaults when the stored value is corrupt", () => {

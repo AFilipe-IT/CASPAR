@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Moon, Sun, Stethoscope, CheckCircle2, RotateCcw } from "lucide-react";
+import { Moon, Sun, Stethoscope, CheckCircle2, RotateCcw, ShieldOff } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Table } from "@/components/ui/Table";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
+import { SuppressionsPanel } from "@/components/settings/SuppressionsPanel";
 import { useDoctor, usePromoteStats, useSettings } from "@/api/manage";
 import type { PromoteStatsRow } from "@/api/types";
 import { useTheme } from "@/context/ThemeContext";
@@ -211,6 +212,14 @@ export function SettingsPage() {
         subtitle="How this server was launched. Read-only — changing server paths over HTTP is a separate, security-relevant decision."
       >
         <EffectiveConfig />
+      </Card>
+
+      <Card
+        title="Accepted risks"
+        subtitle="Findings excluded from threshold decisions, each with the reason it was accepted — the same file `caspar suppress` writes."
+        icon={<ShieldOff size={18} />}
+      >
+        <SuppressionsPanel />
       </Card>
 
       <Card

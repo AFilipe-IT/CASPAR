@@ -13,11 +13,20 @@ export interface Preferences {
   envProfile: EnvProfile;
   /** Empty string means "no CI gate", matching the form's optional field. */
   threshold: string;
+  /**
+   * Path to the suppression file, as the *server* sees it.
+   *
+   * The API refuses to guess this: the CLI's `.caspar-suppress.json` default is
+   * relative to the process working directory, which for a long-running server
+   * means "wherever it was launched" — not something a browser user can reason
+   * about. So the path is asked for once and remembered here.
+   */
+  suppressFile: string;
 }
 
 const STORAGE_KEY = "cvm.preferences";
 
-const DEFAULTS: Preferences = { envProfile: "", threshold: "" };
+const DEFAULTS: Preferences = { envProfile: "", threshold: "", suppressFile: "" };
 
 interface PreferencesContextValue {
   preferences: Preferences;

@@ -280,6 +280,37 @@ export interface SuppressionItem {
   date: string;
 }
 
+/** One line the remediation plan can rewrite automatically. */
+export interface FixEdit {
+  file: string;
+  line_number: number;
+  directive: string;
+  old_line: string;
+  new_line: string;
+}
+
+/** A finding the plan cannot rewrite — it needs a human decision. */
+export interface FixManualStep {
+  directive: string;
+  good_value: string;
+  reason: string;
+  recommendation: string;
+  score: number;
+}
+
+/**
+ * A remediation plan. `applied` is always false over REST: this endpoint
+ * never writes to disk, unlike the CLI's `caspar fix --in-place`.
+ */
+export interface FixPreview {
+  /** Null when the scanned file matched no known target plugin. */
+  target_name: string | null;
+  edits: FixEdit[];
+  manual: FixManualStep[];
+  diff: string;
+  applied: boolean;
+}
+
 export interface PromoteStatsRow {
   target: string;
   rules: number;
