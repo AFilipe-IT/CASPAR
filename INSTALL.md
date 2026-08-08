@@ -68,8 +68,15 @@ Confirmar:
 caspar --help
 ```
 
-**Esperado:** o texto de ajuda, começando por
-`CASPAR — Configuration Vulnerability Meter (CVM) reference implementation.`
+**Esperado:** o texto de ajuda. Após a linha `Usage:`, a descrição é
+`CASPAR — Configuration Vulnerability Meter (CVM) reference implementation.`,
+seguida da lista de comandos (`scan`, `build`, `plugin`, `watch`, …).
+
+> Se em vez disso aparecer `CASPAR — Configuration Analysis, Security Posture
+> Assessment and Reporting`, o clone é anterior à uniformização de nomenclatura
+> para CVM (anterior a `66f1159`). Confirma com `git log --oneline -1`: uma
+> versão antiga não tem a correcção de determinismo e pode falhar a verificação
+> da secção 4.
 
 > ⚠️ **O `pip install --upgrade pip` acima não é decorativo.** Com o pip que
 > vem de origem no Ubuntu 22.04, `pip install -e ".[dev]"` falha com
@@ -135,27 +142,38 @@ caspar scan apache.conf
 **Esperado** — o cabeçalho CASPAR, seguido de:
 
 ```
-  Total Score (worst-case): 8.9/10 (HIGH)   Total Findings: 4
-  Highest issue 7.1   Highest chain 8.9   (overall driven by attack chain)
+  Total Score (worst-case): 6.1/10 (MEDIUM)   Total Findings: 4
+  Highest issue 6.0   Highest chain 6.1   (overall driven by attack chain)
   Attack Chains Triggered: 1   Directives Scanned: 3
 
-  [HIGH]     8.1    ServerTokens         : ServerTokens Full expõe a versão…
-  [MEDIUM]   5.16   Header               : sem Content-Security-Policy…
-  [MEDIUM]   8.2    ServerSignature      : ServerSignature On revela a versão…
-  [MEDIUM]   5.8    TraceEnable          : HTTP TRACE permite Cross-Site Tracing…
+  [MEDIUM]   5.16   Header               : sem Content-Security-Policy…      6.0
+  [MEDIUM]   8.1    ServerTokens         : ServerTokens Full expõe a versão…  4.7
+  [MEDIUM]   8.2    ServerSignature      : ServerSignature On revela a versão… 4.7
+  [MEDIUM]   5.8    TraceEnable          : HTTP TRACE permite Cross-Site…     4.0
 
-  [HIGH] info-disclosure-chain: ServerTokens -> ServerSignature   Score: 8.9
+  [MEDIUM] info-disclosure-chain: ServerTokens -> ServerSignature   Score: 6.1
+
+  reproducible: caspar 0.1.0 · kb sha256:37087229989b · 35 rules (apache-httpd)
 ```
 
 **O código de saída é 1, e isso está correcto.** Não é um erro: `caspar scan`
 devolve 1 quando encontra problemas, para poder ser usado como gate de CI. Um
 scan de uma configuração limpa devolve 0.
 
-Repara no resultado central da metodologia: o score global (8.9) é **superior ao
-pior finding individual** (7.1). Isso é a cadeia de ataque — `ServerTokens` e
-`ServerSignature` isoladamente são divulgação de informação; combinadas dão ao
-atacante versão exacta *e* confirmação do software. É precisamente o que um
-scanner de conformidade pass/fail não captura.
+Repara no resultado central da metodologia: o score global (6.1) é **superior ao
+pior finding individual** que o compõe (4.7 + 4.7). Isso é a cadeia de ataque —
+`ServerTokens` e `ServerSignature` isoladamente são divulgação de informação;
+combinadas dão ao atacante versão exacta *e* confirmação do software. É
+precisamente o que um scanner de conformidade pass/fail não captura.
+
+> **Porque é que estes valores são MEDIUM e não HIGH.** Todos os findings acima
+> mostram `GEL:L GRL:H` — os factores temporais por omissão da base canónica.
+> Isso é o esperado logo após o seed: os scores ainda não incorporam dados de
+> exploração pública. Depois de correr `caspar refresh` (NVD + CISA KEV) e
+> `caspar fetch-exploits`, os mesmos findings sobem — `ServerTokens` passa a
+> 8.1 e a cadeia a 8.9 (HIGH). **Não corras esses comandos agora**: precisam de
+> rede e mudam os valores, o que impede a comparação com o output acima. O
+> percurso base é deliberadamente offline e determinístico.
 
 ### Verificar a reprodutibilidade
 
@@ -188,18 +206,22 @@ voláteis (data, caminho, id) são excluídos do hash por variarem por construç
 tudo o resto — scores, findings, cadeias, justificações — tem de ser idêntico.
 
 ```
-run 1: score=8.9  sha=a9621ace0f0fe8e4
-run 2: score=8.9  sha=a9621ace0f0fe8e4
-run 3: score=8.9  sha=a9621ace0f0fe8e4
-run 4: score=8.9  sha=a9621ace0f0fe8e4
-run 5: score=8.9  sha=a9621ace0f0fe8e4
+run 1: score=6.1  sha=c6ec56b851fc812d
+run 2: score=6.1  sha=c6ec56b851fc812d
+run 3: score=6.1  sha=c6ec56b851fc812d
+run 4: score=6.1  sha=c6ec56b851fc812d
+run 5: score=6.1  sha=c6ec56b851fc812d
 ```
 
 Se os hashes divergirem, **não continues** — é um problema de reprodutibilidade
 e deve ser registado, não contornado.
 
-> O valor exacto do hash depende da versão da base de conhecimento; o que tem
-> de se verificar é que as cinco linhas são **iguais entre si**. Este teste não
+> O hash acima corresponde à base canónica acabada de semear
+> (`kb sha256:37087229989b`), sem enriquecimento por rede. Se tiveres corrido
+> `refresh` ou `fetch-exploits`, os scores sobem e o hash muda — é esperado. O
+> critério que tem sempre de se verificar é que as cinco linhas sejam **iguais
+> entre si**; o valor absoluto só é comparável entre bases idênticas, e a linha
+> `reproducible:` de cada scan identifica qual foi usada. Este teste não
 > é decorativo: foi ele que expôs uma fonte real de não-determinismo (a ordem
 > das directivas numa cadeia de ataque variava com o `PYTHONHASHSEED` do
 > processo), corrigida em `config_assessment/core/engines/attack_chain.py` e

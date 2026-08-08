@@ -144,7 +144,7 @@ def _print_header(result, resolved, score: float) -> None:
             click.echo(f"  {line}")
 
     click.echo()
-    click.echo(f"  {click.style('CASPAR', bold=True)} · Configuration Analysis, Security Posture Assessment & Reporting")
+    click.echo(f"  {click.style('CASPAR', bold=True)} · Configuration Vulnerability Meter (CVM) reference implementation")
     click.echo()
     click.echo(click.style("  Scan_Summary" + "‗" * 54, dim=True))
     click.echo()
