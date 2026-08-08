@@ -19,7 +19,10 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi.testclient import TestClient
+pytest.importorskip("fastapi", reason="API tests need the [api] extra "
+                    "(pip install -e '.[dev]')")
+
+from fastapi.testclient import TestClient  # noqa: E402
 
 from config_assessment.api import watch_runner
 from config_assessment.core import runtime

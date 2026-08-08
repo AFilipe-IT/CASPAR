@@ -236,12 +236,15 @@ pip install -e ".[dev]"
 python3 -m pytest tests/ -q
 ```
 
-**Esperado:** `774 passed`.
+**Esperado:** `777 passed`.
+
+Se instalaste só `pytest` (sem o extra `[dev]`), o resultado é
+`692 passed, 4 skipped` — os 85 testes em falta são os da API REST, que
+precisam do FastAPI. É um resultado válido: a suite não falha por causa de
+uma dependência opcional, apenas assinala o que não pôde exercitar.
 
 Se isto falhar com `ResolutionTooDeep`, o pip está desactualizado — corre
-`pip install --upgrade pip` e repete (ver secção 2). Em alternativa,
-`pip install pytest pytest-cov` instala o mesmo sem passar pelo resolvedor
-do extra.
+`pip install --upgrade pip` e repete (ver secção 2).
 
 ---
 

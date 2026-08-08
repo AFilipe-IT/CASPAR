@@ -22,6 +22,12 @@ dependencies = [
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
+    # The API test modules import fastapi.testclient at module level, so the
+    # suite cannot even be collected without these. Keeping them out of [dev]
+    # made `pip install -e ".[dev]" && pytest` fail on a clean machine.
+    "fastapi>=0.110",
+    "httpx>=0.27",              # required by fastapi.testclient
+    "python-multipart>=0.0.9",  # UploadFile/Form support (POST /scans/upload)
 ]
 publish = [
     "requests>=2.31",
