@@ -14,6 +14,7 @@ a vulnerabilidade introduzida pela configuração de um sistema.
 > | # | Documento | Papel | Lê-o quando… |
 > |---|---|---|---|
 > | 01 | **README.md** (este) | Vitrine + referência de comandos | queres saber o que é e como usar |
+> | — | [INSTALL.md](INSTALL.md) | Instalação validada: clone → instalar → semear → primeiro scan, com resultados esperados e troubleshooting | vais instalar numa máquina limpa |
 > | 02 | [docs/02_GUIA_CASPAR.md](docs/02_GUIA_CASPAR.md) | Guia de utilizador + demonstração | queres perceber e demonstrar, do zero |
 > | 03 | [docs/03_GUIA_VM_UBUNTU22.md](docs/03_GUIA_VM_UBUNTU22.md) | VM Ubuntu 22.04 limpa até à comparação final: instalar, inserir vulnerabilidade, scan+relatório, **todos os comandos do CLI**, Trivy/OpenSCAP | vais testar a ferramenta numa máquina — é o guia principal, ponta a ponta |
 > | 04 | [docs/04_AVALIACAO_FUNCIONAL.md](docs/04_AVALIACAO_FUNCIONAL.md) | Roteiro de recolha de evidência para a tese (detect→fix→re-scan, checklist de artefactos) | já testaste (03) e vais recolher resultados para a dissertação |
@@ -105,27 +106,38 @@ A decisão de design central é a separação entre **build time** (LLM + CVE lo
 | Relatório terminal compacto | ✅ |
 | Relatório HTML com narrativas completas | ✅ |
 | Relatório SARIF / JSON | ✅ |
-| 647 testes automatizados | ✅ |
+| 777 testes automatizados | ✅ |
 
 ---
 
 ## Instalação
 
+> **O percurso completo e validado está em [INSTALL.md](INSTALL.md)** — do clone
+> ao primeiro scan, com os resultados esperados transcritos de execuções reais e
+> uma secção de resolução de problemas. O resumo abaixo é para quem já conhece o
+> ecossistema Python.
+
 ```bash
-git clone <repo>
-cd ccss_scan
+git clone https://github.com/AFilipe-IT/CASPAR.git caspar
+cd caspar
 
 python3 -m venv .venv
 source .venv/bin/activate       # Linux / macOS / WSL2
 # .venv\Scripts\activate        # Windows
 
-pip install pydantic>=2.0 click pytest openpyxl
+pip install --upgrade pip       # o pip de origem do Ubuntu 22.04 não resolve [dev]
 pip install -e .
+
+sqlite3 ccss.db < data/ccss_canonical.sql   # base de conhecimento — passo obrigatório
 
 caspar --help
 ```
 
-Requisitos: Python 3.11+, `pdftotext` (poppler-utils) para ler o PDF do benchmark, Docker (opcional, só para `caspar scan docker://...`).
+⚠️ Sem o passo do `sqlite3`, qualquer scan falha com `DB 'ccss.db' not found` e
+sugere `caspar build`, que reconstrói a base com um LLM local e demora ~1h46min.
+A base canónica já vem no repositório e aplica-se em menos de um segundo.
+
+Requisitos: Python ≥3.10, `sqlite3`, `pdftotext` (poppler-utils) só para ler o PDF do benchmark, Docker (opcional, só para `caspar scan docker://...`).
 
 ```bash
 sudo apt-get install poppler-utils   # Ubuntu / Debian / WSL2
@@ -517,7 +529,7 @@ ccss_scan/
 ├── cli/
 │   └── main.py                   # scan, build, targets, refresh, plugin add/fetch
 │
-├── tests/                         # 40 ficheiros, 647 testes — fórmulas CCSS,
+├── tests/                         # 777 testes — fórmulas CCSS,
 │   ├── test_ccss.py               #   parsers/regras por plugin, pipeline LLM
 │   ├── test_runtime.py            #   (Stage 1/2/3), chains, enrichment CVE/TTP,
 │   ├── test_apache.py             #   IaC (azure/k8s/dockerfile), CLI, RAG,
@@ -748,7 +760,7 @@ O mesmo input produz o mesmo score em qualquer número de runs.
 
 | Camada | Tecnologia |
 |---|---|
-| Linguagem | Python 3.11+ |
+| Linguagem | Python ≥3.10 |
 | Interface plugin | `abc.ABC` |
 | Data models | `dataclasses` stdlib |
 | Base de dados | SQLite |
