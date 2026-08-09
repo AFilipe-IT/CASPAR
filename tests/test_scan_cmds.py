@@ -188,6 +188,41 @@ class TestReportOutputDirErrors:
         finally:
             ro.chmod(0o700)  # so tmp_path cleanup can remove it
 
+    def test_container_path_outside_the_mounts_is_flagged(self, tmp_path, monkeypatch):
+        """Writing outside the bound dirs succeeds, then vanishes with --rm."""
+        db_path = _seed(tmp_path)
+        f = tmp_path / "sysctl.conf"
+        f.write_text(_SYSCTL_BAD)
+
+        # Stand in for the image: CASPAR_REPORTS_DIR is set only there.
+        reports = tmp_path / "reports"
+        monkeypatch.setenv("CASPAR_REPORTS_DIR", str(reports))
+        stray = tmp_path / "stray"
+
+        res = CliRunner().invoke(
+            m.cli,
+            ["--db", str(db_path), "scan", str(f),
+             "--report", "-f", "json", "-o", str(stray)],
+        )
+        assert res.exit_code == 0, res.output
+        assert "is inside the container" in res.output
+        assert list(stray.glob("*.json")), "report should still be written"
+
+    def test_no_container_warning_on_a_native_install(self, tmp_path, monkeypatch):
+        """Without CASPAR_REPORTS_DIR there is no container to warn about."""
+        db_path = _seed(tmp_path)
+        f = tmp_path / "sysctl.conf"
+        f.write_text(_SYSCTL_BAD)
+        monkeypatch.delenv("CASPAR_REPORTS_DIR", raising=False)
+
+        res = CliRunner().invoke(
+            m.cli,
+            ["--db", str(db_path), "scan", str(f),
+             "--report", "-f", "json", "-o", str(tmp_path / "out")],
+        )
+        assert res.exit_code == 0, res.output
+        assert "is inside the container" not in res.output
+
     def test_writable_output_dir_still_works(self, tmp_path):
         db_path = _seed(tmp_path)
         f = tmp_path / "sysctl.conf"

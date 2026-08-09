@@ -220,6 +220,21 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
             raise click.ClickException(
                 f"cannot create report directory '{od}': {exc.strerror}{hint}"
             ) from exc
+
+        # Inside the container, only /workspace and /reports are bound to the
+        # host. Anywhere else the write succeeds, prints a path, and vanishes
+        # with --rm — a silent loss worse than the read-only error above,
+        # because nothing signals it. CASPAR_REPORTS_DIR is set only by the
+        # image, so this warning cannot fire on a native install.
+        if output and os.environ.get("CASPAR_REPORTS_DIR"):
+            resolved_out = od.resolve()
+            bound = (Path("/workspace"), Path(os.environ["CASPAR_REPORTS_DIR"]).resolve())
+            if not any(resolved_out == b or b in resolved_out.parents for b in bound):
+                click.echo(click.style(
+                    f"  Warning: '{resolved_out}' is inside the container, not on "
+                    f"your machine — the report will be lost when it exits.\n"
+                    f"  Use a path under the directory you ran caspar from.",
+                    fg="yellow"), err=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         stem = (
             input_path
