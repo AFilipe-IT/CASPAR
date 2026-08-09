@@ -129,25 +129,29 @@ sudo oscap xccdf eval \
 Mostra o ciclo detect → remediar → re-scan (bom para narrativa na tese). O
 `fix` reescreve os valores inseguros para os do CIS (ASLR, syncookies, redirects…).
 
+> Caminhos **relativos ao diretório onde corres o `caspar`**, de propósito: na
+> instalação por Docker só esse diretório está ligado à tua máquina, e um
+> caminho absoluto como `/tmp/r/` escreveria dentro do container (o CASPAR
+> avisa quando isso acontece). Nativo funciona de qualquer forma.
+
 ```bash
 # usar uma cópia com o NOME CANÓNICO (o target 'ubuntu' deteta 'sysctl.conf')
-mkdir -p /tmp/case && cp test_target/ubuntu_demo/sysctl.conf /tmp/case/sysctl.conf
+mkdir -p case && cp test_target/ubuntu_demo/sysctl.conf case/sysctl.conf
 
 # 1. scan da config insegura → score alto
-caspar scan /tmp/case/sysctl.conf --report -f json -o /tmp/r/
+caspar scan case/sysctl.conf --report -f json -o r
 
 # 2. remediação assistida (gera .fixed, não toca no original)
-caspar fix /tmp/case/sysctl.conf --dry-run    # ver o diff proposto
-caspar fix /tmp/case/sysctl.conf              # escreve /tmp/case/sysctl.conf.fixed
+caspar fix case/sysctl.conf --dry-run    # ver o diff proposto
+caspar fix case/sysctl.conf              # escreve case/sysctl.conf.fixed
 
 # 3. re-scan da versão corrigida → score baixo/zero
 #    (renomear p/ o nome canónico para o scan detetar de novo)
-cp /tmp/case/sysctl.conf.fixed /tmp/fixed/sysctl.conf 2>/dev/null || \
-  (mkdir -p /tmp/fixed && cp /tmp/case/sysctl.conf.fixed /tmp/fixed/sysctl.conf)
-caspar scan /tmp/fixed/sysctl.conf --report -f json -o /tmp/r2/
+mkdir -p fixed && cp case/sysctl.conf.fixed fixed/sysctl.conf
+caspar scan fixed/sysctl.conf --report -f json -o r2
 
 # 4. diff entre os dois scans (delta quantificado)
-caspar diff /tmp/r/ccss_*.json /tmp/r2/ccss_*.json
+caspar diff r/ccss_*.json r2/ccss_*.json
 ```
 
 ✓ **Capturar:** o antes/depois (score alto → baixo) e o `diff` — evidência de

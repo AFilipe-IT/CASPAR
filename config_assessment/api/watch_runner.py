@@ -163,10 +163,27 @@ def runner_state(session_id: str) -> str | None:
     return "running" if session.resumed.is_set() else "paused"
 
 
-def clear_registry() -> None:
-    """Stop and forget every session — for tests and interpreter shutdown."""
+def clear_registry(timeout: float = 5.0) -> None:
+    """Stop every session and wait for its thread, then forget them all.
+
+    Signalling alone returns while the threads are still mid-tick. A tick that
+    outlives its caller keeps scanning and writing to a database the caller
+    believes it is done with — under test that surfaced as a session running
+    on after its fixtures had torn the plugin registry down, failing an
+    unrelated test; at shutdown it is a scan racing the interpreter.
+
+    The join is bounded because these are daemon threads: a stuck one must not
+    hang the process, and the sleep between ticks is interruptible, so a
+    healthy thread returns well inside the timeout.
+    """
     with _LOCK:
-        for session in list(_SESSIONS.values()):
+        sessions = list(_SESSIONS.values())
+        for session in sessions:
             session.stop.set()
-            session.resumed.set()
+            session.resumed.set()   # release a paused thread so it sees stop
         _SESSIONS.clear()
+
+    # Outside the lock: a thread finishing its tick may still need it.
+    for session in sessions:
+        if session.thread is not None:
+            session.thread.join(timeout=timeout)

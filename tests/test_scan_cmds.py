@@ -158,6 +158,27 @@ class TestAbout:
         assert self.WORDMARK_GLYPH not in res.output
 
 
+class TestContainerPathWarning:
+    """The shared helper behind the scan and plugin-fetch warnings."""
+
+    def test_silent_without_the_container_marker(self, tmp_path, monkeypatch):
+        from cli._output import warn_if_inside_container
+        monkeypatch.delenv("CASPAR_REPORTS_DIR", raising=False)
+        assert warn_if_inside_container(tmp_path) is False
+
+    def test_fires_for_a_path_outside_the_bound_dirs(self, tmp_path, monkeypatch):
+        from cli._output import warn_if_inside_container
+        monkeypatch.setenv("CASPAR_REPORTS_DIR", str(tmp_path / "reports"))
+        assert warn_if_inside_container(tmp_path / "stray") is True
+
+    def test_silent_inside_the_reports_volume(self, tmp_path, monkeypatch):
+        from cli._output import warn_if_inside_container
+        reports = tmp_path / "reports"
+        reports.mkdir()
+        monkeypatch.setenv("CASPAR_REPORTS_DIR", str(reports))
+        assert warn_if_inside_container(reports / "sub") is False
+
+
 class TestReportOutputDirErrors:
     """An unwritable -o reports an error, never a traceback.
 

@@ -205,17 +205,17 @@ vetor CCSS e a linha `reproducible: caspar … · kb sha256:… · N rules (ngin
 ## 4. Relatório — ver o resultado num browser
 
 ```bash
-caspar scan /etc/nginx/nginx.conf --report -f html -o ~/relatorios
-ls ~/relatorios/
+caspar scan /etc/nginx/nginx.conf --report -f html -o relatorios
+ls relatorios/
 ```
 
 Abre o HTML gerado (`ccss_nginx.conf_<timestamp>.html`):
 
 ```bash
 # se tiveres ambiente gráfico na VM:
-xdg-open ~/relatorios/ccss_nginx.conf_*.html
+xdg-open relatorios/ccss_nginx.conf_*.html
 # se a VM for headless, copia para a máquina anfitriã:
-python3 -m http.server 8000 --directory ~/relatorios   # depois abre http://<IP-da-VM>:8000 no browser do host
+python3 -m http.server 8000 --directory relatorios   # depois abre http://<IP-da-VM>:8000 no browser do host
 ```
 
 ✓ **Esperado:** dashboard com score global, gráfico por submétrica (AV/AC/Au/C/I/A/GEL/GRL), lista
@@ -225,8 +225,8 @@ Também vale a pena gerar em `dashboard` (gráficos interativos) e `sarif` (form
 integração CI/GitHub Code Scanning):
 
 ```bash
-caspar scan /etc/nginx/nginx.conf --report -f dashboard -o ~/relatorios
-caspar scan /etc/nginx/nginx.conf --report -f sarif -o ~/relatorios
+caspar scan /etc/nginx/nginx.conf --report -f dashboard -o relatorios
+caspar scan /etc/nginx/nginx.conf --report -f sarif -o relatorios
 ```
 
 ---
@@ -302,19 +302,19 @@ caspar trend
 ```bash
 # gera dois JSONs para o diff: um antes, um depois da vulnerabilidade
 # (se ainda tiveres o git stash/backup da config original, ou usa dois fixtures diferentes)
-caspar scan test_target/nginx_hardened.conf -f json --report -o /tmp/reports
-caspar scan /etc/nginx/nginx.conf -f json --report -o /tmp/reports
-caspar diff /tmp/reports/ccss_nginx_hardened.conf_*.json /tmp/reports/ccss_nginx.conf_*.json
+caspar scan test_target/nginx_hardened.conf -f json --report -o relatorios
+caspar scan /etc/nginx/nginx.conf -f json --report -o relatorios
+caspar diff relatorios/ccss_nginx_hardened.conf_*.json relatorios/ccss_nginx.conf_*.json
 ```
 ✓ **Esperado:** `Resolved: N   New: M   Unchanged: K` e o delta de score entre os dois JSONs.
 
 ```bash
-caspar report /tmp/reports/*.json
+caspar report relatorios/*.json
 ```
 ✓ **Esperado:** resumo executivo combinado — score médio, pior alvo, totais de issues/chains.
 
 ```bash
-caspar badge /tmp/reports/ccss_nginx.conf_*.json
+caspar badge relatorios/ccss_nginx.conf_*.json
 ```
 ✓ **Esperado:** markdown pronto para README, ex.
 `![CASPAR Score](https://img.shields.io/badge/CASPAR-...)`.
@@ -449,7 +449,7 @@ reportados (mesma metodologia, N=10, 1 warm-up descartado).
 | 2 | CASPAR instalado | `caspar doctor` | ✓ healthy |
 | 3 | Plugins | `caspar targets` | 13 |
 | 4 | Vulnerabilidade inserida | `caspar scan /etc/nginx/nginx.conf` | score mais alto que o baseline de §3.2, 4 findings novos |
-| 5 | Relatório HTML | `~/relatorios/ccss_nginx.conf_*.html` abre num browser | dashboard com score, submétricas, findings |
+| 5 | Relatório HTML | `relatorios/ccss_nginx.conf_*.html` abre num browser | dashboard com score, submétricas, findings |
 | 6 | Todos os comandos do CLI | secção 5 completa, sem traceback | cada comando devolve o esperado |
 | 7 | Reprodutibilidade | rodapé `reproducible:` com o MESMO `kb sha256` entre execuções sucessivas | manifesto igual ⇒ scores iguais |
 | 8 | Persistência Docker | `docker volume ls` | `caspar_data`, `caspar_ollama_models` existem |

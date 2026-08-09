@@ -43,7 +43,7 @@ Para descobrir e descarregar o benchmark automaticamente (sem procurar o ficheir
 ```bash
 caspar plugin fetch --list                     # serviços disponíveis
 caspar plugin fetch nginx --then-install       # descarrega + instala
-caspar plugin fetch mysql -o ~/benchmarks/     # só descarrega
+caspar plugin fetch mysql -o .                 # só descarrega (para o dir atual)
 ```
 
 #### Base de conhecimento do serviço (RAG build-time)

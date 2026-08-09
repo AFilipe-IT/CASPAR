@@ -170,13 +170,25 @@ class TestWatchStart:
         assert body["interval"] == INTERVAL
 
     def test_start_creates_a_live_session_immediately(self, client, config_file):
-        """Live from the moment it starts, not only after the first tick."""
+        """Live from the moment it starts, not only after the first tick.
+
+        Both facts are read from a single response on purpose. Waiting for the
+        event and then re-fetching to check liveness splits the assertion
+        across two requests, and the heartbeat can age past its 2x window in
+        between — the test then failed intermittently on a loaded machine
+        while the runner was behaving correctly.
+        """
         session_id = client.post(
             "/api/v1/watch", json={"path": config_file, "interval": INTERVAL},
         ).json()["watch_session"]
 
-        _wait_for_events(client, session_id, 1)
-        latest = client.get(f"/api/v1/watch/{session_id}").json()["latest"]
+        # Before the first event the session is a 404, whose body has no
+        # "events" key at all — hence .get() rather than indexing.
+        body = _wait_until(
+            lambda: client.get(f"/api/v1/watch/{session_id}").json(),
+            lambda b: b.get("events") and b["latest"]["live"],
+        )
+        latest = body["latest"]
         assert latest["live"] is True
         assert latest["runner_state"] == "running"
 

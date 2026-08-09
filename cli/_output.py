@@ -35,6 +35,38 @@ def _elide_left(text: str, width: int) -> str:
         return text
     return "..." + text[-(width - 3):]
 
+
+def warn_if_inside_container(path, what: str = "file") -> bool:
+    """Warn when `path` would be written inside the container, and say so.
+
+    Only /workspace (the directory caspar was run from) and the reports volume
+    are bound to the host. Anywhere else the write succeeds, prints a path, and
+    vanishes with --rm — a silent loss, with nothing to signal it. Returns
+    True when the warning fired, so callers can adjust what they print next.
+
+    Gated on CASPAR_REPORTS_DIR, which only the image sets: on a native install
+    there is no container and every path is real, so this never fires.
+    """
+    import os
+    from pathlib import Path
+
+    reports_dir = os.environ.get("CASPAR_REPORTS_DIR")
+    if not reports_dir:
+        return False
+
+    resolved = Path(path).resolve()
+    bound = (Path("/workspace"), Path(reports_dir).resolve())
+    if any(resolved == b or b in resolved.parents for b in bound):
+        return False
+
+    click.echo(click.style(
+        f"  Warning: '{resolved}' is inside the container, not on your "
+        f"machine — the {what} will be lost when it exits.\n"
+        f"  Use a path under the directory you ran caspar from.",
+        fg="yellow"), err=True)
+    return True
+
+
 _BANNER = [
     r" ██████╗ █████╗ ███████╗██████╗  █████╗ ██████╗ ",
     r"██╔════╝██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔══██╗",

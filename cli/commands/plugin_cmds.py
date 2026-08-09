@@ -332,8 +332,10 @@ def plugin_manual(target, manual) -> None:
 @click.option("--search", "search_term", default=None,
               help="Fuzzy-search the catalog (e.g. --search postgres).")
 @click.option("--output", "-o", default="/tmp", show_default=True,
-              help="Destination directory for the downloaded benchmark "
-                   "(default /tmp: the container mounts /workspace read-only).")
+              help="Destination directory for the downloaded benchmark. The "
+                   "default /tmp is inside the container, so a plain download "
+                   "is lost on exit — pass -o . to keep it (--then-install "
+                   "does not care: the plugin is persisted either way).")
 @click.option("--then-install", is_flag=True,
               help="Run 'plugin add' on the downloaded benchmark afterwards.")
 @click.option("--manual", "manual", default=None,
@@ -357,7 +359,7 @@ def plugin_fetch(ctx, service, list_only, search_term, output, then_install,
     \b
     See what's available:   caspar plugin fetch --list
     Download + install:     caspar plugin fetch nginx --then-install
-    Download only:          caspar plugin fetch nginx -o ~/benchmarks/
+    Download only:          caspar plugin fetch nginx -o .
     """
     from config_assessment.fetch.benchmark_fetcher import BenchmarkFetcher, FetchError
     from config_assessment.reports.scan_features import search_catalog
@@ -409,6 +411,12 @@ def plugin_fetch(ctx, service, list_only, search_term, output, then_install,
     click.echo(click.style(f"  ✓ Downloaded: {path}", fg="green"))
 
     if not then_install:
+        # Only worth warning about for a plain download: --then-install
+        # consumes the file below and the resulting plugin lands in the
+        # persistent volume, so where the benchmark sat does not matter.
+        from cli._output import warn_if_inside_container
+        warn_if_inside_container(Path(path).parent, what="benchmark")
+
         hint = f"caspar plugin add --source {path}"
         if manual:
             # --manual only takes effect during install; without --then-install

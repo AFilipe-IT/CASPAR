@@ -398,11 +398,11 @@ porque persiste no volume `caspar_data`. (Sem `--then-install`, o fetch só desc
 
 ```bash
 caspar explain keepalive_timeout --target nginx    # origem da regra, sem scan
-caspar scan nginx.conf --report -f json -o /tmp/a
+caspar scan nginx.conf --report -f json -o antes
 # … edita o nginx.conf …
-caspar scan nginx.conf --report -f json -o /tmp/b
-caspar diff /tmp/a/ccss_*.json /tmp/b/ccss_*.json  # o que mudou + delta
-caspar badge /tmp/b/ccss_*.json                    # markdown para README
+caspar scan nginx.conf --report -f json -o depois
+caspar diff antes/ccss_*.json depois/ccss_*.json  # o que mudou + delta
+caspar badge depois/ccss_*.json                    # markdown para README
 caspar history                                     # scores ao longo do tempo
 ```
 ✓ *Sucesso:* `explain` mostra CCSS/CVEs/narrativa; `diff` mostra resolvidas/novas/delta;
@@ -961,7 +961,8 @@ key-value — na maioria dos casos é só delegar. O `rules.py` define como o se
 | `Ollama not reachable at http://localhost:11434 — falling back to stub client` e **0 controls** extraídos | O comando correu sem Ollama disponível (ou na imagem `:latest` em vez da `:full`) | Usa a imagem `:full` (tem Ollama embutido) ou arranca o Ollama; o wrapper encaminha `plugin add`/`fetch --then-install` para `:full` automaticamente. |
 | `model 'X' not found` no Ollama | O modelo pedido não está descarregado | `ollama pull <modelo>`, ou passa `CASPAR_MODEL=<modelo já instalado>`. Na imagem `:full` o entrypoint faz o pull automaticamente. |
 | `plugin fetch` falha com erro de rede / HTTP | stigviewer.com inacessível | Descarrega o STIG à mão e usa `caspar plugin add --source ficheiro.xml`. Alguns alvos têm fonte de fallback automática (apache, mongodb, postgresql, rhel9, sqlserver, windows-server-2022). |
-| `OSError: [Errno 30] Read-only file system` no fetch | Output apontado para um caminho read-only (ex. `/workspace` no container) | Usa `-o /tmp` (já é o default na imagem) ou outro dir com escrita. |
+| `Error: cannot create report directory … Read-only file system` | `-o` a apontar para um caminho sem escrita | Usa um caminho **relativo** ao diretório de onde corres o `caspar` (ex. `-o relatorios`), ou omite o `-o`. |
+| `Warning: '…' is inside the container` | `-o` absoluto (ex. `/tmp/x`): via Docker só o diretório de trabalho está ligado à tua máquina, o resto perde-se no `--rm` | Caminho relativo ao diretório de onde corres o `caspar`. |
 | `attempt to write a readonly database` / `permission denied` no `caspar_data` | Volume stale, criado por uma imagem antiga com outro dono (root) | O CASPAR já **cai automaticamente** para `/tmp` (não-persistente) e avisa. Para restaurar a persistência: `docker volume rm caspar_data` e deixa o entrypoint recriá-lo. |
 | Relatório (`--report`) não aparece na máquina host | Versão antiga escrevia dentro do container (efémero) | Corrigido: os relatórios vão para o volume `caspar_reports` (`CASPAR_REPORTS_DIR=/reports`). Faz `docker pull` da imagem mais recente. Vê o ficheiro com `docker run --rm -v caspar_reports:/r --entrypoint ls alfilipe/caspar:latest /r`. |
 | Plugin instalado mas `caspar targets` **não o mostra** | A DB de scan está fora de sync, ou o plugin foi escrito para dentro do container sem volume | Confirma que corres com `-v caspar_data:/home/caspar/data`; um `plugin add`/`fetch` sem esse volume perde-se no `--rm`. Verifica a DB: `sqlite3 ccss.db "SELECT target_name FROM misconfigurations GROUP BY target_name"`. |
