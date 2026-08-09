@@ -1,6 +1,13 @@
 node_modules
-dist
 *.local
+
+# dist/ is deliberately NOT ignored: it is committed so that a clone plus
+# install-native.sh gives a working web console with no Node toolchain
+# installed. Rebuild it (npm run build) whenever the React source changes,
+# or the committed console goes stale against the code.
+#
+# The Docker image does not use this copy — it builds the console in its own
+# stage, and .dockerignore excludes dist/ so a local build never leaks in.
 
 # TypeScript incremental build cache
 *.tsbuildinfo

@@ -26,7 +26,7 @@ def serve(ctx: click.Context, host: str, port: int, reload: bool) -> None:
 
     \b
     Swagger UI:   http://127.0.0.1:8000/docs
-    CVM Console:  http://127.0.0.1:8000/app (requires `npm run build` in frontend/)
+    CVM Console:  http://127.0.0.1:8000/app
     """
     import uvicorn
 
@@ -41,7 +41,16 @@ def serve(ctx: click.Context, host: str, port: int, reload: bool) -> None:
 
     click.echo(click.style(f"  DB: {db_path}", dim=True))
     click.echo(click.style(f"  Swagger UI:  http://{host}:{port}/docs", fg="cyan"))
-    click.echo(click.style(f"  CVM Console: http://{host}:{port}/app", fg="cyan"))
+    # Announcing the console unconditionally sent people to a URL that 404s
+    # when the bundle isn't there. The mount is soft-failing by design, so the
+    # startup line is the only place the absence can be reported.
+    if _console_dist().is_dir():
+        click.echo(click.style(f"  CVM Console: http://{host}:{port}/app", fg="cyan"))
+    else:
+        click.echo(click.style(
+            "  CVM Console: unavailable — the frontend bundle is missing.\n"
+            "               Reinstall (./install-native.sh) or use the Docker "
+            "image, which ships it.", fg="yellow"))
     click.echo()
 
     if reload:
@@ -57,13 +66,22 @@ def serve(ctx: click.Context, host: str, port: int, reload: bool) -> None:
         uvicorn.run(app, host=host, port=port)
 
 
-def _mount_frontend(app) -> None:
-    """Mount the built CVM React console (frontend/dist) at /app, if built.
+def _console_dist() -> Path:
+    """Where the built console lives, for both the mount and the startup line.
 
-    Soft-fails when the directory doesn't exist, so `caspar serve` keeps
-    working for users who haven't run `npm run build` yet — the REST API is
-    useful on its own."""
-    dist_dir = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    One function so `serve` cannot advertise a console the mount then declines
+    to serve — the two used to derive the path independently."""
+    return Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+
+def _mount_frontend(app) -> None:
+    """Mount the built CVM React console (frontend/dist) at /app, if present.
+
+    The bundle is committed to the repository and the Docker image builds its
+    own, so in both supported installations it is there. Soft-failing covers
+    the remaining case — a source tree whose dist was cleaned — where the REST
+    API is still useful on its own; `serve` reports the absence on startup."""
+    dist_dir = _console_dist()
     if not dist_dir.is_dir():
         return
 

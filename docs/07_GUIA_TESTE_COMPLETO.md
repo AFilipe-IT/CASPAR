@@ -419,35 +419,27 @@ caspar scan caspar-demo/apache-vulnerable.conf --report -f json -o via-cli
 
 ## Parte 6 — Consola de gestão Web
 
-### 6.1 Construir a consola primeiro
+### 6.1 Arrancar a consola
 
-**A consola não vem construída num clone.** `frontend/dist` está em
-`frontend/.gitignore`, portanto o `/app` devolve 404 até correres o build. É a
-diferença mais provável entre a tua máquina e a de desenvolvimento.
+**Não há nada a instalar nem a construir.** A consola vem pronta nas duas formas
+de instalação, e nenhuma delas precisa de Node na tua máquina:
 
-```bash
-node --version      # precisa de Node 18+
-cd frontend
-npm install
-npm run build       # produz frontend/dist
-cd ..
-```
-
-Se não tiveres Node instalado:
-
-```bash
-sudo apt-get install -y nodejs npm
-```
-
-Depois:
+- **Docker** — a imagem constrói a consola durante a build, numa etapa própria;
+- **Nativa** (`install-native.sh`) — `frontend/dist` está versionado no
+  repositório, portanto um `git clone` já o traz construído.
 
 ```bash
 caspar serve
 ```
 
-O arranque imprime três URLs — API (`/docs`), dashboard Jinja2 (`/dashboard`) e
-consola CVM (`/app`). Se a linha do `/app` aparecer mas a página der 404, o
-build não correu.
+O arranque imprime os URLs da API (`/docs`) e da consola CVM (`/app`). Se a
+consola faltar — só acontece num source tree a que alguém apagou o `dist` — a
+linha do `/app` é substituída por um aviso explícito, em vez de te dar um
+endereço que responde 404. Nesse caso: `git checkout frontend/dist`.
+
+> Só precisas de Node se fores **editar** o código React (`frontend/src`). Aí
+> corres `npm install && npm run build` para regenerar o `dist` — que deve ser
+> commitado, senão a consola versionada fica desactualizada face ao código.
 
 ### 6.2 Percorrer as oito páginas
 

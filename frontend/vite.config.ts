@@ -22,7 +22,11 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    sourcemap: true,
+    // Off because dist/ is committed: the console must work straight from a
+    // clone, with no Node toolchain, and sourcemaps are 2.9 MB of the 3.6 MB
+    // build while being useful only to someone editing the React source —
+    // who can rebuild locally with `npm run build -- --sourcemap`.
+    sourcemap: false,
     rollupOptions: {
       output: {
         // Split the heavy, rarely-changing vendors out of the app bundle.

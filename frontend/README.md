@@ -24,9 +24,21 @@ Runs on `http://127.0.0.1:5173` and proxies `/api/*` to `http://127.0.0.1:8000`
 npm run build
 ```
 
-Produces `dist/`. When present, `caspar serve` mounts it at `/app`
-(`_mount_frontend` in `cli/commands/serve_cmds.py`) — soft-fails if `dist/`
-doesn't exist yet, same pattern as the Jinja2 dashboard's own mount guard.
+Produces `dist/`, which `caspar serve` mounts at `/app` (`_mount_frontend` in
+`cli/commands/serve_cmds.py`).
+
+**`dist/` is committed to the repository**, so neither supported installation
+needs Node: a native install serves the versioned bundle straight from the
+clone, and Docker builds its own copy in a Node stage. The consequence is that
+**editing `src/` obliges you to rebuild and commit `dist/`** — otherwise the
+console users get silently lags behind the source.
+
+Sourcemaps are off (`vite.config.ts`) because they were 2.9 MB of a 3.6 MB
+build and only help someone editing this source, who can get them back with
+`npm run build -- --sourcemap`. Without them the committed bundle is 752 kB.
+
+The mount still soft-fails when `dist/` is absent — a cleaned source tree —
+and `serve` reports that on startup rather than printing a URL that 404s.
 
 Output is split into vendor chunks (`charts`, `react`, `query`) so the app
 bundle stays ~83 kB and a code change doesn't invalidate the 410 kB Recharts
