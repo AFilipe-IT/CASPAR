@@ -104,8 +104,11 @@ O **Temporal Score** ajusta o base com dois fatores de maturidade:
 Exemplo real (do scan mais abaixo): `keepalive_timeout 65` → Base 5.0, GEL:M GRL:H → Temporal 5.0.
 Directivas com CVE em KEV sobem; directivas com remediação oficial descem ligeiramente.
 
-O score global do serviço agrega os individuais, e **attack chains** amplificam quando várias
-misconfigs se combinam (ex.: TLS fraco + sem verificação de certificado = MITM viável).
+O score global do serviço é o pior dos individuais — mantém-se sempre rastreável a uma directiva
+concreta. As **attack chains** identificam combinações perigosas (ex.: TLS fraco + sem verificação
+de certificado = MITM viável) e têm score próprio, frequentemente acima de qualquer finding
+isolado, mas **não entram no score global**: são reportadas como aviso explícito, para que o
+número continue accionável e a composição continue visível.
 
 ---
 

@@ -673,7 +673,7 @@ def generate_dashboard(result, resolved=None):
     <div class="hero-grid">
       <div class="info-cell"><div class="k">Highest Issue</div><div class="v t-{_sev_class(result.highest_issue_score)}">{result.highest_issue_score:.1f}</div></div>
       <div class="info-cell"><div class="k">Highest Chain</div><div class="v t-{_sev_class(result.highest_chain_score)}">{result.highest_chain_score:.1f}</div></div>
-      <div class="info-cell"><div class="k">Overall (from {result.overall_driver})</div><div class="v t-{scls}">{score:.1f}</div></div>
+      <div class="info-cell"><div class="k">Overall (findings only)</div><div class="v t-{scls}">{score:.1f}</div></div>
       <div class="info-cell"><div class="k">Mode</div><div class="v">{mode_label}</div></div>
       <div class="info-cell"><div class="k">Access Vector</div><div class="v">{_AV_DESC.get(result.profile.av, "?")}</div></div>
       <div class="info-cell"><div class="k">Auth</div><div class="v">{_AU_DESC.get(result.profile.au, "?")}</div></div>

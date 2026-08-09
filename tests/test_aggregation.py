@@ -18,6 +18,7 @@ from config_assessment.core.engines.aggregation import (
     aggregate_by_file,
     aggregate_categories,
     aggregate_chain_category,
+    aggregate_scan,
 )
 from config_assessment.core.engines.categorization import (
     ATTACK_CHAINS,
@@ -48,6 +49,41 @@ def _chain(**kwargs) -> AttackChain:
     )
     defaults.update(kwargs)
     return AttackChain(**defaults)
+
+
+# ------------------------------------------------------------------ #
+# aggregate_scan — the headline number                                #
+# ------------------------------------------------------------------ #
+
+class TestAggregateScan:
+    """The global score comes from findings alone; chains never raise it.
+
+    This function had no direct coverage, so the change that removed chains
+    from the score passed the whole suite untouched. These tests exist so the
+    inverse change cannot happen silently either.
+    """
+
+    def test_worst_finding_drives_the_score(self):
+        base, temporal = aggregate_scan(
+            [_issue(base_score=3.0, temporal_score=4.0),
+             _issue(base_score=6.0, temporal_score=7.1)], [])
+        assert temporal == 7.1
+        assert base == 6.0
+
+    def test_active_chain_above_every_finding_does_not_raise_the_score(self):
+        """The Ubuntu-default Apache case: worst directive 7.1, chain 8.9."""
+        _, temporal = aggregate_scan(
+            [_issue(temporal_score=7.1)],
+            [_chain(amplified_score=8.9, active=True)])
+        assert temporal == 7.1
+
+    def test_chain_alone_scores_zero(self):
+        """No findings means no score, however severe the composition."""
+        _, temporal = aggregate_scan([], [_chain(amplified_score=10.0)])
+        assert temporal == 0.0
+
+    def test_no_issues_and_no_chains(self):
+        assert aggregate_scan([], []) == (0.0, 0.0)
 
 
 # ------------------------------------------------------------------ #

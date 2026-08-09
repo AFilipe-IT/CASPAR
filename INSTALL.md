@@ -145,8 +145,8 @@ caspar scan apache.conf
 >
 > ```bash
 > caspar demo
-> caspar scan caspar-demo/apache-vulnerable.conf   # 10.0 CRITICAL, 4 cadeias
-> caspar scan caspar-demo/apache-hardened.conf     #  4.7 MEDIUM,   0 cadeias
+> caspar scan caspar-demo/apache-vulnerable.conf   # 9.4 CRITICAL, 4 cadeias
+> caspar scan caspar-demo/apache-hardened.conf     # 4.4 MEDIUM,   0 cadeias
 > ```
 >
 > O par vulnerável/endurecido mostra o score a mover-se por uma razão
@@ -154,41 +154,71 @@ caspar scan apache.conf
 > acima servem para o percurso mínimo; o `demo` serve para perceber o que a
 > ferramenta faz.
 
-**Esperado** — o cabeçalho CASPAR, seguido de:
+**Esperado** — a identidade CASPAR, o painel de score, e depois:
 
 ```
-  Total Score (worst-case): 6.1/10 (MEDIUM)   Total Findings: 4
-  Highest issue 6.0   Highest chain 6.1   (overall driven by attack chain)
-  Attack Chains Triggered: 1   Directives Scanned: 3
+  Highest finding 7.5   Highest chain 8.9   Chains triggered 1   → score from findings; chains not scored
 
-  [MEDIUM]   5.16   Header               : sem Content-Security-Policy…      6.0
-  [MEDIUM]   8.1    ServerTokens         : ServerTokens Full expõe a versão…  4.7
-  [MEDIUM]   8.2    ServerSignature      : ServerSignature On revela a versão… 4.7
-  [MEDIUM]   5.8    TraceEnable          : HTTP TRACE permite Cross-Site…     4.0
+  TOP FINDINGS
 
-  [MEDIUM] info-disclosure-chain: ServerTokens -> ServerSignature   Score: 6.1
+  #  Severity  Directive      Score  CCSS Vector                   File / Location
+  ──────────────────────────────────────────────────────────────────────────────────
+  1  HIGH      ServerTokens     7.5  AV:N AC:L Au:N C:P I:N A:N    ...apache.conf:1
+  2  MEDIUM    Header           5.7  AV:N AC:L Au:N C:P I:P A:N    -
+  3  MEDIUM    ServerSign...    5.0  AV:N AC:L Au:N C:P I:N A:N    ...apache.conf:2
+  4  MEDIUM    TraceEnable      4.3  AV:N AC:M Au:N C:P I:N A:N    ...apache.conf:3
 
-  reproducible: caspar 0.1.0 · kb sha256:37087229989b · 35 rules (apache-httpd)
+  ATTACK CHAINS TRIGGERED
+
+  [HIGH] info-disclosure-chain: ServerTokens -> ServerSignature   Score: 8.9
+
+  RECOMMENDATION
+
+  !  This configuration scores 7.5 — HIGH overall vulnerability.
+     Highest-value fix: ServerTokens (7.5)
+     → Set 'ServerTokens Prod' to expose only the product name.
+
+     Note: these findings compose into info-disclosure-chain, rated 8.9 —
+     higher than any single finding.
+     Chain: ServerTokens + ServerSignature
+
+  COVERAGE
+
+  3 of 3 directives read from the configuration were matched against the
+  knowledge base
+
+  reproducible: caspar 0.1.0 · kb sha256:… · 35 rules (apache-httpd)
 ```
 
-**O código de saída é 1, e isso está correcto.** Não é um erro: `caspar scan`
-devolve 1 quando encontra problemas, para poder ser usado como gate de CI. Um
-scan de uma configuração limpa devolve 0.
+> Os números exactos dependem dos factores temporais na tua base de
+> conhecimento; o `kb sha256:` no rodapé identifica-a. A saída acima é o resumo
+> operacional — `--verbose` mostra cada finding em detalhe, `--show-chains` a
+> análise completa das cadeias.
 
-Repara no resultado central da metodologia: o score global (6.1) é **superior ao
-pior finding individual** que o compõe (4.7 + 4.7). Isso é a cadeia de ataque —
-`ServerTokens` e `ServerSignature` isoladamente são divulgação de informação;
-combinadas dão ao atacante versão exacta *e* confirmação do software. É
-precisamente o que um scanner de conformidade pass/fail não captura.
+**O código de saída é 0.** Por omissão `caspar scan` não falha por encontrar
+problemas — para o usar como gate de CI, passa `--exit-code` (devolve 2 num
+achado Critical) ou `--threshold N` (devolve 1 acima de N).
 
-> **Porque é que estes valores são MEDIUM e não HIGH.** Todos os findings acima
-> mostram `GEL:L GRL:H` — os factores temporais por omissão da base canónica.
-> Isso é o esperado logo após o seed: os scores ainda não incorporam dados de
-> exploração pública. Depois de correr `caspar refresh` (NVD + CISA KEV) e
-> `caspar fetch-exploits`, os mesmos findings sobem — `ServerTokens` passa a
-> 8.1 e a cadeia a 8.9 (HIGH). **Não corras esses comandos agora**: precisam de
-> rede e mudam os valores, o que impede a comparação com o output acima. O
-> percurso base é deliberadamente offline e determinístico.
+Repara no resultado central da metodologia. O score global (7.5) vem do **pior
+finding individual**, e continua a ser sempre atribuível a uma directiva
+concreta que podes corrigir. Mas a cadeia `info-disclosure-chain` está cotada a
+**8.9** — acima de qualquer finding isolado. `ServerTokens` e `ServerSignature`
+isoladamente são divulgação de informação; combinadas dão ao atacante versão
+exacta *e* confirmação do software.
+
+Essa composição é o que um scanner de conformidade pass/fail não captura, e é a
+contribuição central do CVM. As cadeias são **reportadas mas não somadas ao
+score**: um número que não se consegue rastrear até uma directiva corrigível é
+um número sobre o qual não se consegue agir. A cadeia aparece como aviso
+explícito na recomendação, precisamente para que quem corrige apenas a primeira
+linha da tabela saiba que fica com o problema maior por resolver.
+
+> **Os scores dependem dos factores temporais** (`GEL`/`GRL`, visíveis com
+> `--verbose`). Logo após o seed reflectem a base canónica; `caspar refresh`
+> (NVD + CISA KEV) e `caspar fetch-exploits` incorporam dados de exploração
+> pública e fazem os mesmos findings subir. **Não corras esses comandos se
+> quiseres comparar com o output acima**: precisam de rede e mudam os valores.
+> O percurso base é deliberadamente offline e determinístico.
 
 ### Verificar a reprodutibilidade
 

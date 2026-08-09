@@ -118,6 +118,26 @@ class TestScanOutputVerbosity:
         assert "ALL FINDINGS" not in out
 
 
+class TestChainsAreReportedButNotScored:
+    """Chains inform; they do not move the number.
+
+    The scan output must still make the composition visible — that is the
+    CVM's contribution — while the headline score stays traceable to one
+    fixable directive.
+    """
+
+    def test_output_states_that_chains_are_not_scored(self, tmp_path):
+        db_path = _seed(tmp_path)
+        f = tmp_path / "sysctl.conf"
+        f.write_text(_SYSCTL_BAD)
+        res = CliRunner().invoke(m.cli, ["--db", str(db_path), "scan", str(f)])
+        assert res.exit_code == 0, res.output
+        assert "chains not scored" in res.output
+
+    # The score-vs-chain assertion itself lives in test_apache.py, next to the
+    # fixture that actually fires chains (sysctl fires none).
+
+
 class TestAbout:
     # A box-drawing run alone is not enough to identify the wordmark — the
     # score meter is drawn with the same block character.

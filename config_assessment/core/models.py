@@ -190,7 +190,23 @@ class ScanResult(BaseModel):
 
     @property
     def overall_driver(self) -> str:
-        """Whether the global score is driven by an 'issue' or a 'chain' — lets
-        the report say *what* produced the headline number, so a 9.9 overall
-        with a 7.1 top issue is explained (it came from a chain), not confusing."""
-        return "chain" if self.highest_chain_score > self.highest_issue_score else "issue"
+        """What produced the headline number. Always 'issue'.
+
+        Chains no longer contribute to the global score (see
+        engines.aggregation.aggregate_scan), so the driver is always the worst
+        individual finding. Kept as a property because reports and the CLI ask
+        the result rather than assuming — and because `chain_exceeds_score`
+        below is now the interesting question.
+        """
+        return "issue"
+
+    @property
+    def chain_exceeds_score(self) -> bool:
+        """True when a chain is scored above the headline number.
+
+        The score is attributable to a single finding, but a chain composing
+        two mid-severity directives can still be the more urgent problem. This
+        is what the report highlights instead of silently folding it into the
+        total.
+        """
+        return self.highest_chain_score > self.global_temporal_score

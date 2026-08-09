@@ -459,6 +459,29 @@ class TestApacheEndToEnd:
             )
             assert chain.amplified_score >= max_individual
 
+    def test_chain_above_every_finding_does_not_raise_the_global_score(
+            self, populated_db):
+        """Chains inform the reader; they do not move the number.
+
+        ServerTokens Full + ServerSignature On is the Ubuntu-default case: two
+        mid-severity directives composing into info-disclosure-chain, rated
+        above either of them. The headline score must stay at the worst
+        individual finding so it remains traceable to something fixable.
+        """
+        from config_assessment.plugins.apache_httpd import ApachePlugin
+        runtime.register_plugin(ApachePlugin())
+
+        config = write_conf("ServerTokens Full\nServerSignature On\n")
+
+        with Database(populated_db) as db:
+            result = runtime.scan(config, db)
+
+        assert result.highest_chain_score > result.highest_issue_score, (
+            "fixture must fire a chain rated above every finding")
+        assert result.global_temporal_score == result.highest_issue_score
+        # …and the chain is still reported, not discarded.
+        assert [c for c in result.chains if c.active]
+
 
 def test_apache_chains_do_not_overreach():
     """Regression: the curated apache chains.json must not claim impacts that

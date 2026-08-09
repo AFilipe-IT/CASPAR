@@ -324,24 +324,40 @@ python -m scripts.baseline_compare --oscap  # CASPAR vs Trivy (IaC/Docker) e Ope
 
 ### Terminal
 
-Compacto, deduplicado, organizado por severidade (Critical → High → Medium → Low). Cada issue mostra score, barra visual, CIA num só linha, base→temporal com GEL/GRL, CVEs se existirem, localização (agrupada se a mesma directiva aparece em múltiplos contextos), problema resumido, e recomendação.
+Por omissão, um **resumo operacional**: painel de score, contagens por severidade, os piores findings, as cadeias disparadas, a recomendação e a cobertura da base de conhecimento. O detalhe completo fica atrás de `--verbose` (cada finding com base→temporal, GEL/GRL, CVEs, localização e recomendação) e `--show-chains`.
 
 ```
-  10.0/10  [Critical]  [Docker]  ccss-test-apache:vulnerable
-  ██████████████████████████████
+  CASPAR 0.1.0
+  Configuration Vulnerability Meter · Reference Implementation
 
-  AV:N=Network  Au:N=None  ·  34 directivas  ·  2026-06-16 02:15
+  ASSESSMENT SUMMARY                        ┌──────────────────────────────┐
+  Service       : apache2 2.4.52            │ CONFIGURATION VULNERABILITY  │
+  Plugin        : apache-httpd              │           SCORE              │
+  Configuration : /etc/apache2/apache2.conf │          8.7 / 10            │
+  Mode          : installed service         │  ████████████████████░░░░░   │
+                                            │           HIGH               │
+                                            └──────────────────────────────┘
 
-  ISSUES  2 High · 15 Medium
+  Highest finding 8.7   Highest chain 10.0   Chains triggered 9   → score from findings; chains not scored
 
-  ── Critical (2)
+  TOP FINDINGS
 
-  8.7  User = root   C:C I:C A:N  AC:L
-       ██████████████░░  Base 9.4 → Temporal 8.7  GEL:L GRL:H
-       /tmp/.../httpd.conf:19
-       Running Apache as the root user allows any web vulnerability to...
-       → Set 'User apache' and 'Group apache' in httpd.conf...
+  #  Severity  Directive      Score  CCSS Vector                   File / Location
+  ──────────────────────────────────────────────────────────────────────────────────
+  1  HIGH      User             8.7  AV:N AC:L Au:N C:C I:C A:N    ...httpd.conf:19
+  2  HIGH      Group            7.9  AV:N AC:L Au:N C:P I:C A:N    ...httpd.conf:20
+
+  RECOMMENDATION
+
+  !  This configuration scores 8.7 — HIGH overall vulnerability.
+     Highest-value fix: User (8.7)
+     → Set 'User apache' and 'Group apache' to run Apache unprivileged.
+
+     Note: these findings compose into privilege-escalation, rated 10.0 —
+     higher than any single finding.
 ```
+
+O score vem sempre do pior finding individual, pelo que é rastreável a uma directiva corrigível. As cadeias têm score próprio e são reportadas como aviso — ver [Attack chains](#attack-chains-geradas-por-llm-stage-2).
 
 ### HTML (relatório completo)
 
@@ -739,7 +755,7 @@ O mesmo input produz o mesmo score em qualquer número de runs.
 
 ### 4 — Validação end-to-end com imagem Docker vulnerável
 
-`tests/docker_fixtures/` contém uma imagem Apache deliberadamente insegura (`ServerTokens Full`, `User root`, `AllowOverride All`, SSL fraco, etc.) usada para validar os 4 modos de scan e o relatório completo end-to-end. Score obtido: 10.0 Critical, 17 issues, 9 chains — confirma detecção correcta de todas as misconfigurations introduzidas deliberadamente.
+`tests/docker_fixtures/` contém uma imagem Apache deliberadamente insegura (`ServerTokens Full`, `User root`, `AllowOverride All`, SSL fraco, etc.) usada para validar os 4 modos de scan e o relatório completo end-to-end. Score obtido: 8.7 High (o pior finding, `User root`), 27 issues, 10 chains activas — a pior cadeia é cotada a 10.0 mas não entra no score. Confirma detecção correcta de todas as misconfigurations introduzidas deliberadamente.
 
 ---
 

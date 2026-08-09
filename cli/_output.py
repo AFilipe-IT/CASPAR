@@ -159,7 +159,13 @@ def _boxed_center(plain: str, inner_w: int, **style_kw) -> str:
 def _meter_line(score: float, width: int) -> str:
     """Segmented score meter: each segment carries the colour of the band it
     sits in, so the scale itself shows where Medium becomes High becomes
-    Critical. Segments past the score are dim placeholders."""
+    Critical.
+
+    The empty track uses a lighter glyph rather than a dimmed full block. With
+    the same block on both sides the meter read as full at every score, and
+    anywhere colour is lost — a redirected file, a report pasted into the
+    dissertation, a monochrome terminal — the bar carried no information at all.
+    """
     filled = round(score / 10 * width)
     out = []
     for i in range(width):
@@ -169,7 +175,7 @@ def _meter_line(score: float, width: int) -> str:
         if i < filled:
             out.append(click.style("█", fg=_sev_color(seg_value)))
         else:
-            out.append(click.style("█", fg="white", dim=True))
+            out.append(click.style("░", fg="white", dim=True))
     return "".join(out)
 
 
@@ -424,17 +430,18 @@ def _print_result(result, resolved=None, show_uncovered=False,
 
     _print_header(result, resolved, score)
 
-    # Score attribution. The header already carries the number; what it cannot
-    # show is *where the number came from* — a score driven by a chain means no
-    # single directive explains it, which is the CVM's central claim.
+    # Score attribution. The score is the worst individual finding; the chain
+    # figure sits beside it precisely because it is *not* in the number, and a
+    # reader comparing the two would otherwise assume it was.
     hi, hc = result.highest_issue_score, result.highest_chain_score
     if hi or hc:
-        driver = "attack chain" if result.overall_driver == "chain" else "worst finding"
+        note = ("→ chains not scored" if not active_chains
+                else "→ score from findings; chains not scored")
         click.echo(
             f"  {click.style('Highest finding', dim=True)} {hi:.1f}   "
             f"{click.style('Highest chain', dim=True)} {hc:.1f}   "
             f"{click.style('Chains triggered', dim=True)} {len(active_chains)}   "
-            f"{click.style(f'→ score driven by {driver}', fg='bright_cyan')}"
+            f"{click.style(note, fg='bright_cyan')}"
         )
         click.echo()
 
@@ -592,9 +599,11 @@ def _print_more_hints(verbose: bool, show_chains: bool,
 def _print_recommendation(result, top_sorted: list, active_chains: list) -> None:
     """The verdict in prose, then the single highest-value action.
 
-    When the score is driven by a chain, the headline says so: remediating the
-    worst individual finding would not move a chain-driven score, and a reader
-    who acts only on the table's first row would be surprised by that.
+    The score always traces to one finding, so the highest-value fix is always
+    nameable. What the score cannot express is composition: when a chain is
+    scored above the headline, this says so explicitly, because a reader who
+    fixes only the table's first row would leave the more urgent problem in
+    place. That warning is the reason chains are computed at all.
     """
     score = result.global_temporal_score
     color = _sev_color(score)
@@ -606,18 +615,23 @@ def _print_recommendation(result, top_sorted: list, active_chains: list) -> None
                f"This configuration scores {click.style(f'{score:.1f}', fg=color, bold=True)}"
                f" — {click.style(sev, fg=color, bold=True)} overall vulnerability.")
 
-    if result.overall_driver == "chain" and active_chains:
-        top_chain = active_chains[0]
-        click.echo(f"     Driven by an attack chain "
-                   f"({click.style(top_chain.chain_id, bold=True)}), not by any single directive.")
-        click.echo("     Breaking the chain matters more than fixing the worst finding.")
-        click.echo(f"     Chain: {click.style(' + '.join(top_chain.triggered_by), bold=True)}")
-    elif top_sorted:
+    if top_sorted:
         issue = top_sorted[0]["issue"]
         click.echo(f"     Highest-value fix: {click.style(issue.directive, bold=True)}"
                    f" ({issue.temporal_score:.1f})")
         if issue.recommendation:
             click.echo(f"     → {issue.recommendation}")
+
+    if result.chain_exceeds_score and active_chains:
+        top_chain = active_chains[0]
+        click.echo()
+        click.echo(f"     {click.style('Note:', fg='bright_cyan', bold=True)} these findings "
+                   f"compose into {click.style(top_chain.chain_id, bold=True)}, rated "
+                   f"{click.style(f'{top_chain.amplified_score:.1f}', bold=True, fg=_sev_color(top_chain.amplified_score))}"
+                   f" — higher than any single finding.")
+        click.echo(f"     Chain: {click.style(' + '.join(top_chain.triggered_by), bold=True)}")
+        click.echo("     The score reflects individual findings; breaking this chain")
+        click.echo("     removes more risk than its component scores suggest.")
     click.echo()
 
 

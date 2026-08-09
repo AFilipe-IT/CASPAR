@@ -197,16 +197,16 @@ relatório visual de infraestrutura.
 
 ```bash
 caspar scan caspar-demo/apache-hardened.conf --threshold 1.0 >/dev/null 2>&1
-echo "saída: $?"     # 1 — 4.7 excede o limite de 1.0
+echo "saída: $?"     # 1 — 4.4 excede o limite de 1.0
 
 caspar scan caspar-demo/apache-hardened.conf --threshold 5.0 >/dev/null 2>&1
-echo "saída: $?"     # 0 — 4.7 está abaixo de 5.0
+echo "saída: $?"     # 0 — 4.4 está abaixo de 5.0
 
 caspar scan caspar-demo/apache-vulnerable.conf --exit-code >/dev/null 2>&1
-echo "saída: $?"     # 2 — resultado CRITICAL
+echo "saída: $?"     # 2 — 9.4 CRITICAL (finding 'User')
 
 caspar scan caspar-demo/nginx-vulnerable.conf --exit-code >/dev/null 2>&1
-echo "saída: $?"     # 0 — 8.9 é HIGH, não CRITICAL
+echo "saída: $?"     # 0 — 7.5 é HIGH, não CRITICAL
 ```
 
 > **Não uses `| tail` nem `| grep` para ler o código de saída.** Num pipe, `$?`
@@ -214,12 +214,14 @@ echo "saída: $?"     # 0 — 8.9 é HIGH, não CRITICAL
 > 0. Redirecciona para `/dev/null` como acima.
 
 `--threshold` devolve 1 se o score global exceder o limite. `--exit-code`
-acrescenta um patamar: devolve 2 quando o resultado é CRITICAL, seja por um
-finding individual seja pelo score global. Esta segunda hipótese importa: a
-configuração Apache vulnerável marca 10.0 CRITICAL enquanto o seu pior finding
-isolado é 8.7 (High) — o CRITICAL vem da cadeia de escalonamento de
-privilégios que compõe `User` e `Group`. É o caso que a análise de cadeias
-existe para apanhar, e por isso o portão de CI tem de o reprovar.
+acrescenta um patamar: devolve 2 quando o resultado é CRITICAL.
+
+Repara que o portão de CI reprova por um **finding individual**, nunca por uma
+cadeia: o score global vem sempre do pior finding, e as cadeias não entram nele.
+A configuração Apache vulnerável dispara 4 cadeias, uma delas cotada em 10.0,
+mas o que a faz devolver 2 é `User root` a 9.4. Se preferires um portão sensível
+à composição, usa `--threshold` com um valor abaixo da cadeia que te preocupa e
+lê a secção `ATTACK CHAINS TRIGGERED` do output.
 
 ### 2.4 Versão do serviço e exploits
 

@@ -118,12 +118,10 @@ def classify_exit(result_severities: list[str], global_score: float,
     - Else 0.
 
     "Critical outcome" means either an individual Critical finding or a
-    Critical *global* score. The global score can be driven by an attack chain
-    rather than by any single finding — a config whose worst directive scores
-    8.7 (High) still reports 10.0 CRITICAL when two of its findings compose
-    into a privilege-escalation chain. Judging only on individual severities
-    made `--exit-code` pass such a config, which is precisely the case the
-    chain analysis exists to catch.
+    Critical *global* score. Chains no longer feed the global score, so these
+    two now coincide in practice; the global-score check is kept because the
+    aggregation is the authority on the headline number and this function
+    should not re-derive it from the severity list.
     """
     if "Critical" in result_severities or severity_label(global_score) == "Critical":
         return EXIT_CRITICAL

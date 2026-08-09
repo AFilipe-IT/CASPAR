@@ -32,14 +32,24 @@ def aggregate_scan(
     issues: list[Misconfiguration],
     chains: list[AttackChain],
 ) -> tuple[float, float]:
-    """Aggregate one scan's issues + active chains into (base, temporal).
+    """Aggregate one scan's issues into (base, temporal).
 
-    Moved verbatim from runtime.scan() step 7: worst-case across issue
-    temporal scores and active chains' amplified scores.
+    Worst-case across issue temporal scores, per engines.scoring.aggregate.
+
+    Attack chains do NOT contribute to the score. They amplify risk in
+    reality, but a score a reader cannot trace back to a directive they can
+    fix is a score they cannot act on: an Apache whose worst directive is 7.1
+    reporting 8.9 overall sends the operator looking for a High finding that
+    does not exist. The chains stay in the result — scored, ranked, and
+    reported — as the qualitative explanation of *why* those directives
+    matter together, which is precisely the CVM's contribution. What changed
+    is only that the headline number stays attributable to a single fixable
+    finding.
+
+    `chains` is kept in the signature: the parameter documents that chains
+    were considered and deliberately excluded, and callers already pass it.
     """
-    all_temporal_scores = [m.temporal_score for m in issues]
-    all_temporal_scores += [c.amplified_score for c in chains if c.active]
-    global_temporal = scoring.aggregate(all_temporal_scores)
+    global_temporal = scoring.aggregate([m.temporal_score for m in issues])
     global_base = scoring.aggregate([m.base_score for m in issues])
     return global_base, global_temporal
 
