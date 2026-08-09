@@ -197,16 +197,16 @@ relatório visual de infraestrutura.
 
 ```bash
 caspar scan caspar-demo/apache-hardened.conf --threshold 1.0 >/dev/null 2>&1
-echo "saída: $?"     # 1 — 4.4 excede o limite de 1.0
+echo "saída: $?"     # 1 — 4.7 excede o limite de 1.0
 
 caspar scan caspar-demo/apache-hardened.conf --threshold 5.0 >/dev/null 2>&1
-echo "saída: $?"     # 0 — 4.4 está abaixo de 5.0
+echo "saída: $?"     # 0 — 4.7 está abaixo de 5.0
+
+caspar scan caspar-demo/apache-vulnerable.conf --threshold 8.0 >/dev/null 2>&1
+echo "saída: $?"     # 1 — 8.7 excede o limite de 8.0
 
 caspar scan caspar-demo/apache-vulnerable.conf --exit-code >/dev/null 2>&1
-echo "saída: $?"     # 2 — 9.4 CRITICAL (finding 'User')
-
-caspar scan caspar-demo/nginx-vulnerable.conf --exit-code >/dev/null 2>&1
-echo "saída: $?"     # 0 — 7.5 é HIGH, não CRITICAL
+echo "saída: $?"     # 0 — 8.7 é HIGH, não CRITICAL
 ```
 
 > **Não uses `| tail` nem `| grep` para ler o código de saída.** Num pipe, `$?`
@@ -216,12 +216,17 @@ echo "saída: $?"     # 0 — 7.5 é HIGH, não CRITICAL
 `--threshold` devolve 1 se o score global exceder o limite. `--exit-code`
 acrescenta um patamar: devolve 2 quando o resultado é CRITICAL.
 
-Repara que o portão de CI reprova por um **finding individual**, nunca por uma
-cadeia: o score global vem sempre do pior finding, e as cadeias não entram nele.
+Com a base de conhecimento canónica (logo após o seed, sem `refresh` nem
+`fetch-exploits`) nenhuma das configurações de demonstração chega a CRITICAL,
+pelo que `--exit-code` devolve 0 em todas — usa `--threshold` para ver o portão
+a reprovar. Depois de enriquecer a base com dados de exploração pública os
+scores sobem e `--exit-code` passa a disparar.
+
+Repara também que o portão reprova por um **finding individual**, nunca por uma
+cadeia: o score global vem sempre do pior finding e as cadeias não entram nele.
 A configuração Apache vulnerável dispara 4 cadeias, uma delas cotada em 10.0,
-mas o que a faz devolver 2 é `User root` a 9.4. Se preferires um portão sensível
-à composição, usa `--threshold` com um valor abaixo da cadeia que te preocupa e
-lê a secção `ATTACK CHAINS TRIGGERED` do output.
+sem que isso mexa no score. Se quiseres um portão sensível à composição, lê a
+secção `ATTACK CHAINS TRIGGERED` do output em vez do código de saída.
 
 ### 2.4 Versão do serviço e exploits
 

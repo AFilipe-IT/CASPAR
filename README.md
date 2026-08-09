@@ -755,7 +755,7 @@ O mesmo input produz o mesmo score em qualquer número de runs.
 
 ### 4 — Validação end-to-end com imagem Docker vulnerável
 
-`tests/docker_fixtures/` contém uma imagem Apache deliberadamente insegura (`ServerTokens Full`, `User root`, `AllowOverride All`, SSL fraco, etc.) usada para validar os 4 modos de scan e o relatório completo end-to-end. Score obtido: 8.7 High (o pior finding, `User root`), 27 issues, 10 chains activas — a pior cadeia é cotada a 10.0 mas não entra no score. Confirma detecção correcta de todas as misconfigurations introduzidas deliberadamente.
+`tests/docker_fixtures/` contém uma imagem Apache deliberadamente insegura (`ServerTokens Full`, `User root`, `AllowOverride All`, SSL fraco, etc.) usada para validar os 4 modos de scan e o relatório completo end-to-end. Score obtido: 8.7 High (o pior finding, `User root`), 17 issues, 9 chains — a pior cadeia é cotada a 10.0 mas não entra no score. Confirma detecção correcta de todas as misconfigurations introduzidas deliberadamente.
 
 ---
 

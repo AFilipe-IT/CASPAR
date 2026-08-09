@@ -145,8 +145,8 @@ caspar scan apache.conf
 >
 > ```bash
 > caspar demo
-> caspar scan caspar-demo/apache-vulnerable.conf   # 9.4 CRITICAL, 4 cadeias
-> caspar scan caspar-demo/apache-hardened.conf     # 4.4 MEDIUM,   0 cadeias
+> caspar scan caspar-demo/apache-vulnerable.conf   # 8.7 HIGH,   4 cadeias
+> caspar scan caspar-demo/apache-hardened.conf     # 4.7 MEDIUM, 0 cadeias
 > ```
 >
 > O par vulnerável/endurecido mostra o score a mover-se por uma razão
@@ -157,28 +157,28 @@ caspar scan apache.conf
 **Esperado** — a identidade CASPAR, o painel de score, e depois:
 
 ```
-  Highest finding 7.5   Highest chain 8.9   Chains triggered 1   → score from findings; chains not scored
+  Highest finding 6.0   Highest chain 6.1   Chains triggered 1   → score from findings; chains not scored
 
   TOP FINDINGS
 
   #  Severity  Directive      Score  CCSS Vector                   File / Location
   ──────────────────────────────────────────────────────────────────────────────────
-  1  HIGH      ServerTokens     7.5  AV:N AC:L Au:N C:P I:N A:N    ...apache.conf:1
-  2  MEDIUM    Header           5.7  AV:N AC:L Au:N C:P I:P A:N    -
-  3  MEDIUM    ServerSign...    5.0  AV:N AC:L Au:N C:P I:N A:N    ...apache.conf:2
-  4  MEDIUM    TraceEnable      4.3  AV:N AC:M Au:N C:P I:N A:N    ...apache.conf:3
+  1  MEDIUM    Header           6.0  AV:N AC:L Au:N C:P I:P A:N    -
+  2  MEDIUM    ServerTokens     4.7  AV:N AC:L Au:N C:P I:N A:N    apache.conf:1
+  3  MEDIUM    ServerSign...    4.7  AV:N AC:L Au:N C:P I:N A:N    apache.conf:2
+  4  MEDIUM    TraceEnable      4.0  AV:N AC:M Au:N C:P I:N A:N    apache.conf:3
 
   ATTACK CHAINS TRIGGERED
 
-  [HIGH] info-disclosure-chain: ServerTokens -> ServerSignature   Score: 8.9
+  [MEDIUM] info-disclosure-chain: ServerTokens -> ServerSignature   Score: 6.1
 
   RECOMMENDATION
 
-  !  This configuration scores 7.5 — HIGH overall vulnerability.
-     Highest-value fix: ServerTokens (7.5)
-     → Set 'ServerTokens Prod' to expose only the product name.
+  !  This configuration scores 6.0 — MEDIUM overall vulnerability.
+     Highest-value fix: Header (6.0)
+     → Add 'Header always append Content-Security-Policy …'
 
-     Note: these findings compose into info-disclosure-chain, rated 8.9 —
+     Note: these findings compose into info-disclosure-chain, rated 6.1 —
      higher than any single finding.
      Chain: ServerTokens + ServerSignature
 
@@ -187,7 +187,7 @@ caspar scan apache.conf
   3 of 3 directives read from the configuration were matched against the
   knowledge base
 
-  reproducible: caspar 0.1.0 · kb sha256:… · 35 rules (apache-httpd)
+  reproducible: caspar 0.1.0 · kb sha256:37087229989b · 35 rules (apache-httpd)
 ```
 
 > Os números exactos dependem dos factores temporais na tua base de
@@ -199,12 +199,12 @@ caspar scan apache.conf
 problemas — para o usar como gate de CI, passa `--exit-code` (devolve 2 num
 achado Critical) ou `--threshold N` (devolve 1 acima de N).
 
-Repara no resultado central da metodologia. O score global (7.5) vem do **pior
+Repara no resultado central da metodologia. O score global (6.0) vem do **pior
 finding individual**, e continua a ser sempre atribuível a uma directiva
 concreta que podes corrigir. Mas a cadeia `info-disclosure-chain` está cotada a
-**8.9** — acima de qualquer finding isolado. `ServerTokens` e `ServerSignature`
-isoladamente são divulgação de informação; combinadas dão ao atacante versão
-exacta *e* confirmação do software.
+**6.1** — acima de qualquer finding que a compõe (4.7 + 4.7). `ServerTokens` e
+`ServerSignature` isoladamente são divulgação de informação; combinadas dão ao
+atacante versão exacta *e* confirmação do software.
 
 Essa composição é o que um scanner de conformidade pass/fail não captura, e é a
 contribuição central do CVM. As cadeias são **reportadas mas não somadas ao
