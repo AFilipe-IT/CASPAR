@@ -139,6 +139,21 @@ EOF
 caspar scan apache.conf
 ```
 
+> **Para um teste mais realista**, `caspar demo` escreve quatro configurações
+> de exemplo — Apache e NGINX, cada uma em versão vulnerável e endurecida — sem
+> precisares de clonar nada:
+>
+> ```bash
+> caspar demo
+> caspar scan caspar-demo/apache-vulnerable.conf   # 10.0 CRITICAL, 4 cadeias
+> caspar scan caspar-demo/apache-hardened.conf     #  4.7 MEDIUM,   0 cadeias
+> ```
+>
+> O par vulnerável/endurecido mostra o score a mover-se por uma razão
+> conhecida, que é mais informativo do que um número isolado. As três linhas
+> acima servem para o percurso mínimo; o `demo` serve para perceber o que a
+> ferramenta faz.
+
 **Esperado** — o cabeçalho CASPAR, seguido de:
 
 ```

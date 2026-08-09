@@ -10,36 +10,36 @@ set -e
 INSTALL_DIR="$HOME/.local/bin"
 WRAPPER="$INSTALL_DIR/caspar"
 
-echo "🔍 A verificar dependências..."
-command -v docker >/dev/null 2>&1 || { echo "❌ Docker não encontrado. Instala em https://docs.docker.com/get-docker/"; exit 1; }
+echo "🔍 Checking dependencies..."
+command -v docker >/dev/null 2>&1 || { echo "❌ Docker not found. Install it from https://docs.docker.com/get-docker/"; exit 1; }
 
 # O Docker pode estar instalado mas inacessível: o utilizador não pertence ao
 # grupo 'docker'. Vale a pena diagnosticar aqui, com a solução, em vez de
 # deixar o 'docker pull' falhar com uma mensagem sobre sockets.
 if ! docker info >/dev/null 2>&1; then
-    echo "❌ O Docker está instalado mas não está acessível a este utilizador."
+    echo "❌ Docker is installed but this user cannot reach it."
     echo
-    echo "   Causa habitual: '$USER' não pertence ao grupo 'docker'. Resolve com:"
+    echo "   Usual cause: '$USER' is not in the 'docker' group. Fix it with:"
     echo
     echo "     sudo usermod -aG docker \$USER"
-    echo "     getent group docker  # confirma que ficaste na lista"
+    echo "     getent group docker  # confirm you are listed"
     echo "     sudo reboot"
     echo
-    echo "   Reiniciar não é exagero: os grupos são fixados no arranque da"
-    echo "   sessão, e num ambiente gráfico um terminal novo herda os da"
-    echo "   sessão que o lançou. Ao voltar, 'id -nG' deve mostrar 'docker'."
-    echo "   Depois repete este comando de instalação."
+    echo "   Rebooting is not overkill: groups are fixed when a session starts,"
+    echo "   and on a desktop a new terminal inherits them from the session"
+    echo "   that launched it. After rebooting, 'id -nG' must show 'docker'."
+    echo "   Then run this installer again."
     echo
-    echo "   Nota: 'sudo curl … | sh' NÃO resolve — o sudo aplica-se ao curl,"
-    echo "   não ao shell que executa o script."
+    echo "   Note: 'sudo curl … | sh' does NOT help — sudo applies to curl,"
+    echo "   not to the shell running the script."
     exit 1
 fi
 
-echo "📦 A descarregar imagens CASPAR..."
-docker pull alfilipe/caspar:latest || { echo "❌ Falhou o download de alfilipe/caspar:latest."; exit 1; }
-docker pull alfilipe/caspar:full   || { echo "❌ Falhou o download de alfilipe/caspar:full."; exit 1; }
+echo "📦 Pulling CASPAR images..."
+docker pull alfilipe/caspar:latest || { echo "❌ Failed to pull alfilipe/caspar:latest."; exit 1; }
+docker pull alfilipe/caspar:full   || { echo "❌ Failed to pull alfilipe/caspar:full."; exit 1; }
 
-echo "📝 A instalar wrapper..."
+echo "📝 Installing wrapper..."
 mkdir -p "$INSTALL_DIR"
 
 cat > "$WRAPPER" << 'WRAPPER_EOF'
@@ -225,13 +225,17 @@ if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
 fi
 
 echo ""
-echo "✅ CASPAR instalado com sucesso!"
+echo "✅ CASPAR installed."
 echo ""
-echo "Exemplos de utilização:"
-echo "  caspar targets"
-echo "  caspar scan /etc/apache2/apache2.conf"
-echo "  caspar scan --live apache2"
-echo "  caspar plugin add --source CIS_PostgreSQL.pdf"
+echo "Usage examples:"
+echo "  caspar targets                              # supported technologies"
+echo "  caspar scan ./apache.conf                   # a file in the current directory"
+echo "  caspar scan /etc/apache2/apache2.conf       # an installed service's config"
+echo "  caspar scan --live apache2                  # a running service"
+echo "  caspar scan docker://httpd:2.4              # a container image"
 echo ""
-echo "Para usar um modelo diferente:"
+echo "Paths are resolved inside the container: the file must exist on the host,"
+echo "and relative paths are taken from the directory you run the command in."
+echo ""
+echo "To use a different model for knowledge building:"
 echo "  CASPAR_MODEL=qwen2.5:14b caspar plugin add --source benchmark.pdf"

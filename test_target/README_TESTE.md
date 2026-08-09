@@ -6,28 +6,22 @@ Contém as **30 misconfigurations** do banco, para validar a deteção completa.
 
 - `httpd.conf` — config Apache realística (com caminhos `.so` reais nos LoadModule)
 - `Dockerfile` — empacota a config numa imagem para testar o modo `docker://`
-- `gen_target.py` — script que gerou a config (regenerável)
 
-## Pré-requisito
-
-Aplicar o fix do LoadModule **antes** de testar (senão faltam 5 deteções):
-
-```bash
-python3 fix_loadmodule_parse.py    # na raiz ~/ccss_scan
-```
+> Sem clone do repositório? `caspar demo` escreve configurações de exemplo
+> (Apache e NGINX, vulnerável + endurecida) em qualquer instalação, incluindo
+> a via Docker.
 
 ## Teste 1 — modo ficheiro
 
 ```bash
-ccss scan ~/ccss_scan/test_target/httpd.conf --report --format dashboard --output ~/relatorios/
+caspar scan test_target/httpd.conf --report --format dashboard -o relatorios/
 ```
 
 ## Teste 2 — modo Docker
 
 ```bash
-cd ~/ccss_scan/test_target
-docker build -t ccss-worstcase:latest .
-ccss scan docker://ccss-worstcase:latest --report --format dashboard --output ~/relatorios/
+docker build -t caspar-worstcase:latest test_target/
+caspar scan docker://caspar-worstcase:latest --report --format dashboard -o relatorios/
 ```
 
 ## O que esperar

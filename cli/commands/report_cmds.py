@@ -22,7 +22,10 @@ def targets() -> None:
     """List available plugins."""
     _discover_plugins()
     from config_assessment.core.runtime import registered_plugins
-    plugins = registered_plugins()
+    # 'dummy' is a test fixture, not a technology anyone scans. It has to stay
+    # registered (the suite builds scans on it), but listing it among the
+    # supported targets misrepresents what CASPAR covers.
+    plugins = [p for p in registered_plugins() if p.metadata().name != "dummy"]
     if not plugins:
         click.echo("No plugins registered.")
         return

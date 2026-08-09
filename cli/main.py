@@ -68,6 +68,7 @@ from cli.commands.report_cmds import (                                # noqa: E4
 )
 from cli.commands.manage_cmds import suppress, doctor, fix, promote   # noqa: E402,F401
 from cli.commands.serve_cmds import serve                              # noqa: E402,F401
+from cli.commands.demo_cmds import demo                                # noqa: E402,F401
 
 
 # ── CLI ────────────────────────────────────────────────────────────
@@ -96,6 +97,7 @@ for _cmd in (
     targets, diff, badge, explain, history, report, trend,  # reporting
     suppress, doctor, fix, promote,                # state management
     serve,                                          # REST API + CVM Console
+    demo,                                           # example configurations
 ):
     cli.add_command(_cmd)
 
