@@ -7,10 +7,33 @@ Split out of cli/main.py (which re-exports these names for compatibility).
 
 from __future__ import annotations
 
+import re
 import shutil
 from itertools import zip_longest
 
 import click
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(s: str) -> str:
+    """Visible width of a styled string: padding math must ignore colour codes,
+    which occupy no columns but plenty of characters."""
+    return _ANSI_RE.sub("", s)
+
+
+def _elide_left(text: str, width: int) -> str:
+    """Trim from the left, keeping the tail. For a path the filename and line
+    number carry the information; the leading directories rarely do.
+
+    The marker is ASCII "..." rather than "…": U+2026 has East-Asian width
+    "Ambiguous", so terminals disagree on whether it occupies one column or
+    two, and a box aligned beside it bows by a column on exactly the rows that
+    were truncated.
+    """
+    if len(text) <= width:
+        return text
+    return "..." + text[-(width - 3):]
 
 _BANNER = [
     r" ██████╗ █████╗ ███████╗██████╗  █████╗ ██████╗ ",
@@ -20,7 +43,14 @@ _BANNER = [
     r"╚██████╗██║  ██║███████║██║     ██║  ██║██║  ██║",
     r" ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝",
 ]
-_RISK_BOX_W = 28
+_RISK_BOX_W = 44
+
+# The score meter is a segmented scale with a numbered axis rather than a solid
+# bar: a reader can place 7.8 against the 7.5 tick without re-reading the digits,
+# and the segment colours make the band boundaries (4.0 / 7.0 / 9.0) visible as
+# positions rather than as a single colour that only makes sense once you know
+# the number.
+_METER_SEGMENTS = 24
 
 _AV_DESC  = {"L": "Local", "A": "Adjacent", "N": "Network"}
 _AU_DESC  = {"M": "Multiple", "S": "Single", "N": "None"}
@@ -83,29 +113,84 @@ def _boxed_center(plain: str, inner_w: int, **style_kw) -> str:
     return "│" + " " * left + click.style(plain, **style_kw) + " " * right + "│"
 
 
+def _meter_line(score: float, width: int) -> str:
+    """Segmented score meter: each segment carries the colour of the band it
+    sits in, so the scale itself shows where Medium becomes High becomes
+    Critical. Segments past the score are dim placeholders."""
+    filled = round(score / 10 * width)
+    out = []
+    for i in range(width):
+        # Value at this segment's midpoint, so a segment is coloured by the
+        # band it actually represents rather than by the overall score.
+        seg_value = (i + 0.5) / width * 10
+        if i < filled:
+            out.append(click.style("█", fg=_sev_color(seg_value)))
+        else:
+            out.append(click.style("█", fg="white", dim=True))
+    return "".join(out)
+
+
+def _meter_axis(width: int) -> str:
+    """The 0 / 2.5 / 5 / 7.5 / 10 tick row beneath the meter.
+
+    The end labels are anchored flush to the meter's edges rather than centred
+    on their tick: a centred "10" would sit a column short of the scale's end
+    and read as if the meter stopped before it does.
+    """
+    axis = [" "] * width
+    ticks = ((0, "0"), (2.5, "2.5"), (5, "5"), (7.5, "7.5"), (10, "10"))
+    for value, label in ticks:
+        if value == 0:
+            start = 0
+        elif value == 10:
+            start = width - len(label)
+        else:
+            start = round(value / 10 * (width - 1)) - (len(label) - 1) // 2
+            start = min(max(start, 0), width - len(label))
+        for j, ch in enumerate(label):
+            axis[start + j] = ch
+    return "".join(axis)
+
+
 def _risk_box_lines(score: float, severity: str) -> list[str]:
-    """Right-hand 'Risk Score' panel: bordered box with a block-bar meter."""
+    """Right-hand score panel: title, big score, segmented meter, numbered
+    axis and the severity band."""
     color = _sev_color(score)
-    w = _RISK_BOX_W
-    inner_w = w - 2
-    top = "┌─" + " Risk Score ".center(w - 4, "─") + "─┐"
+    inner_w = _RISK_BOX_W - 2
+    meter_w = inner_w - 4
+
+    top = "┌" + "─" * inner_w + "┐"
     bot = "└" + "─" * inner_w + "┘"
     blank = "│" + " " * inner_w + "│"
 
-    score_line = _boxed_center(f"{score:.1f}/10", inner_w, bold=True, fg=color)
-    sev_line = _boxed_center(severity.upper(), inner_w, bold=True, fg=color)
+    title = _boxed_center("CONFIGURATION VULNERABILITY SCORE", inner_w,
+                          fg="bright_cyan", bold=True)
 
-    filled = round(score / 10 * (w - 4))
-    meter = click.style("█" * filled, fg=color) + click.style("░" * (w - 4 - filled), dim=True)
-    meter_line = "│ " + meter + " │"
+    # The score and the "/ 10" denominator differ in weight, so build this row
+    # by hand instead of via _boxed_center (which styles one run uniformly).
+    score_plain = f"{score:.1f} / 10"
+    pad = inner_w - len(score_plain)
+    left = pad // 2
+    score_line = ("│" + " " * left
+                  + click.style(f"{score:.1f}", fg=color, bold=True)
+                  + click.style(" / ", dim=True)
+                  + click.style("10", bold=True)
+                  + " " * (pad - left) + "│")
+
+    meter_line = "│  " + _meter_line(score, meter_w) + "  │"
+    axis_line = "│  " + click.style(_meter_axis(meter_w), dim=True) + "  │"
+    sev_line = _boxed_center(severity.upper(), inner_w, bold=True, fg=color)
 
     return [
         click.style(top, dim=True),
+        title,
         blank,
         score_line,
-        sev_line,
         blank,
         meter_line,
+        axis_line,
+        blank,
+        sev_line,
         click.style(bot, dim=True),
     ]
 
@@ -131,28 +216,155 @@ def _print_header(result, resolved, score: float) -> None:
             ver = resolved.metadata.get("version", "")
             input_str = f"{svc} {ver}".strip() if ver and ver != "unknown" else svc
 
+    # Identity block sitting to the right of the wordmark.
+    # Same constant the reproducibility footer stamps, so the banner version
+    # and the manifest version can never drift apart.
+    from config_assessment.core.manifest import CASPAR_VERSION as _ver
+    subtitle = [
+        click.style("Configuration Vulnerability Meter", bold=True),
+        click.style("Reference Implementation", dim=True),
+        "",
+        (click.style(f"CASPAR {_ver}", fg="bright_cyan", bold=True)
+         + click.style("  |  ", dim=True)
+         + click.style("CVM Engine 1.0", dim=True)),
+    ]
+
     click.echo()
-    if term_w >= banner_w + _RISK_BOX_W + 6:
-        for b_line, box_line in zip_longest(banner, box, fillvalue=""):
-            pad = " " * (banner_w - len(b_line) + 3)
-            click.echo(f"  {click.style(b_line, fg='bright_red', bold=True)}{pad}{box_line}")
+    for b_line, sub in zip_longest(banner, subtitle, fillvalue=""):
+        pad = " " * (banner_w - len(b_line) + 4)
+        click.echo(f"  {click.style(b_line, fg='bright_blue', bold=True)}{pad}{sub}")
+    click.echo()
+    click.echo(click.style("  " + "─" * min(term_w - 4, 96), dim=True))
+    click.echo()
+
+    rows = [
+        ("Target", result.target_name),
+        ("Configuration", input_str),
+        ("Mode", mode_str),
+        ("Date", result.timestamp.strftime("%Y-%m-%d %H:%M:%S")),
+        ("Profile", f"AV:{result.profile.av} Au:{result.profile.au}"),
+        ("Directives scanned", str(result.total_directives_scanned)),
+        ("Findings", str(len(_dedup_issues(result.issues)))),
+    ]
+    label_w = max(len(r[0]) for r in rows)
+
+    # Side by side when the terminal allows it; stacked otherwise, so a narrow
+    # or redirected terminal never wraps a box mid-row.
+    summary_w = label_w + 3 + 46
+    if term_w >= summary_w + _RISK_BOX_W + 8:
+        value_w = summary_w - label_w - 3
+        summary_lines = [click.style("ASSESSMENT SUMMARY", fg="bright_cyan", bold=True), ""]
+        summary_lines += [
+            f"{click.style(k.ljust(label_w), dim=True)} : {_elide_left(v, value_w)}"
+            for k, v in rows
+        ]
+        # Pad every row to exactly summary_w, then one fixed gutter. Using a
+        # `max(..., n)` floor here would push any row that reached full width
+        # further right than its neighbours and bow the box's left edge.
+        for s_line, box_line in zip_longest(summary_lines, box, fillvalue=""):
+            plain_len = len(_strip_ansi(s_line))
+            click.echo(f"  {s_line}{' ' * (summary_w - plain_len)}   {box_line}")
     else:
-        for line in banner:
-            click.echo(f"  {click.style(line, fg='bright_red', bold=True)}")
+        click.echo(click.style("  ASSESSMENT SUMMARY", fg="bright_cyan", bold=True))
+        click.echo()
+        for k, v in rows:
+            click.echo(f"  {click.style(k.ljust(label_w), dim=True)} : {v}")
         click.echo()
         for line in box:
             click.echo(f"  {line}")
+    click.echo()
 
+
+_SEV_BANDS = [
+    ("CRITICAL", "Critical", "bright_red"),
+    ("HIGH", "High", "red"),
+    ("MEDIUM", "Medium", "yellow"),
+    ("LOW", "Low", "cyan"),
+    ("NONE", "None", "green"),
+]
+
+
+def _print_severity_band(counts: dict[str, int]) -> None:
+    """The five-cell severity tally: the whole distribution at a glance,
+    including the empty bands — 0 Critical is information, not absence."""
+    term_w = shutil.get_terminal_size(fallback=(100, 24)).columns
+    total_w = min(term_w - 4, 96)
+    cell_w = (total_w - 6) // 5
+
+    click.echo(click.style("  FINDINGS BY SEVERITY", fg="bright_cyan", bold=True))
     click.echo()
-    click.echo(f"  {click.style('CASPAR', bold=True)} · Configuration Vulnerability Meter (CVM) reference implementation")
+    click.echo(click.style("  ┌" + "┬".join(["─" * cell_w] * 5) + "┐", dim=True))
+
+    heads, nums = [], []
+    for label, key, color in _SEV_BANDS:
+        n = counts.get(key, 0)
+        # An empty band stays dim so the eye lands on what was actually found.
+        heads.append(_centered(label, cell_w, fg=color, bold=True) if n
+                     else _centered(label, cell_w, dim=True))
+        nums.append(_centered(str(n), cell_w, fg=color, bold=True) if n
+                    else _centered("0", cell_w, dim=True))
+
+    sep = click.style("│", dim=True)
+    click.echo("  " + sep + sep.join(heads) + sep)
+    click.echo("  " + sep + sep.join(nums) + sep)
+    click.echo(click.style("  └" + "┴".join(["─" * cell_w] * 5) + "┘", dim=True))
     click.echo()
-    click.echo(click.style("  Scan_Summary" + "‗" * 54, dim=True))
-    click.echo()
-    click.echo(f"  {click.style('Target:', dim=True)}   {input_str}")
-    click.echo(f"  {click.style('Mode:', dim=True)}     {mode_str}")
-    click.echo(f"  {click.style('Profile:', dim=True)}  AV:{result.profile.av} Au:{result.profile.au}")
-    click.echo(f"  {click.style('Date:', dim=True)}     {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-    click.echo()
+
+
+def _centered(text: str, width: int, **style_kw) -> str:
+    """Center `text` in `width` columns, styling only the text so the padding
+    math stays right in the presence of ANSI codes."""
+    pad = width - len(text)
+    left = pad // 2
+    return " " * left + click.style(text, **style_kw) + " " * (pad - left)
+
+
+def _print_findings_table(groups: list) -> None:
+    """TOP FINDINGS as an aligned table.
+
+    The CCSS vector is shown in full next to each score: it is what makes the
+    number auditable — a reader can see that 8.7 comes from AV:N/C:C and not
+    from an opaque weighting.
+    """
+    from config_assessment.core.ccss import severity_label as sl
+
+    term_w = shutil.get_terminal_size(fallback=(100, 24)).columns
+    # Fixed columns: #(3) sev(10) score(6) vector(30); directive and location
+    # share what is left, with the location favoured since paths are long.
+    fixed = 3 + 10 + 6 + 30 + 5
+    spare = max(term_w - 4 - fixed, 34)
+    dir_w = min(max(spare // 3, 14), 22)
+    loc_w = max(spare - dir_w, 20)
+
+    header = (f"  {'#'.ljust(3)}{'Severity'.ljust(10)}{'Directive'.ljust(dir_w)}"
+              f"{'Score'.rjust(6)}  {'CCSS Vector'.ljust(30)}{'File / Location'}")
+    click.echo(click.style(header, dim=True))
+    click.echo(click.style("  " + "─" * min(term_w - 4, 96), dim=True))
+
+    for n, g in enumerate(groups, 1):
+        issue = g["issue"]
+        color = _sev_color(issue.temporal_score)
+        sev = sl(issue.temporal_score).upper()
+        vector = (f"AV:{issue.av} AC:{issue.ac} Au:{issue.au} "
+                  f"C:{issue.c} I:{issue.i} A:{issue.a}")
+
+        loc = g["locs"][0] if g["locs"] else "-"
+        if len(g["locs"]) > 1:
+            loc += f" (+{len(g['locs']) - 1})"
+        loc = _elide_left(loc, loc_w)
+
+        directive = issue.directive
+        if len(directive) > dir_w - 1:
+            directive = directive[:dir_w - 4] + "..."
+
+        click.echo(
+            f"  {click.style(str(n).ljust(3), dim=True)}"
+            f"{click.style(sev.ljust(10), fg=color, bold=True)}"
+            f"{click.style(directive.ljust(dir_w), bold=True)}"
+            f"{click.style(f'{issue.temporal_score:.1f}'.rjust(6), fg=color, bold=True)}  "
+            f"{click.style(vector.ljust(30), dim=True)}"
+            f"{click.style(loc, dim=True)}"
+        )
 
 
 # ── Relatório terminal ─────────────────────────────────────────────
@@ -169,29 +381,24 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
 
     _print_header(result, resolved, score)
 
+    # Score attribution. The header already carries the number; what it cannot
+    # show is *where the number came from* — a score driven by a chain means no
+    # single directive explains it, which is the CVM's central claim.
     hi, hc = result.highest_issue_score, result.highest_chain_score
-    driver = "attack chain" if result.overall_driver == "chain" else "issue"
-    click.echo(
-        f"  {click.style('Total Score (worst-case):', bold=True)} "
-        f"{click.style(f'{score:.1f}/10', bold=True, fg=_sev_color(score))} "
-        f"({result.severity.upper()})   "
-        f"{click.style('Total Findings:', dim=True)} {len(groups)}"
-    )
     if hi or hc:
+        driver = "attack chain" if result.overall_driver == "chain" else "worst finding"
         click.echo(
-            f"  {click.style('Highest issue', dim=True)} {hi:.1f}   "
+            f"  {click.style('Highest finding', dim=True)} {hi:.1f}   "
             f"{click.style('Highest chain', dim=True)} {hc:.1f}   "
-            f"{click.style(f'(overall driven by {driver})', dim=True)}"
+            f"{click.style('Chains triggered', dim=True)} {len(active_chains)}   "
+            f"{click.style(f'→ score driven by {driver}', fg='bright_cyan')}"
         )
-    click.echo(f"  {click.style('Attack Chains Triggered:', dim=True)} "
-               f"{len(active_chains)}   "
-               f"{click.style('Directives Scanned:', dim=True)} {result.total_directives_scanned}")
-    click.echo()
+        click.echo()
 
     if not result.issues:
         click.echo(click.style("  ✓  No issues detected.", fg="green", bold=True))
         click.echo()
-        click.echo(click.style("  Reproducibility" + "‗" * 51, dim=True))
+        click.echo(click.style("  REPRODUCIBILITY", fg="bright_cyan", bold=True))
         click.echo()
         _print_manifest_line(getattr(result, "manifest", {}))
         return
@@ -202,26 +409,16 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
         sev = sl(g["issue"].temporal_score)
         counts[sev] = counts.get(sev, 0) + 1
 
-    click.echo(click.style("  Top_Findings" + "‗" * 54, dim=True))
+    _print_severity_band(counts)
+
+    click.echo(click.style("  TOP FINDINGS", fg="bright_cyan", bold=True))
     click.echo()
     top_sorted = sorted(groups, key=lambda g: -g["issue"].temporal_score)[:10]
-    for g in top_sorted:
-        issue = g["issue"]
-        sc2 = _sev_color(issue.temporal_score)
-        sev_lbl = f"[{sl(issue.temporal_score).upper()}]"
-        sec = issue.cis_section or "—"
-        detail = issue.justification[:44] if issue.justification else issue.bad_value
-        click.echo(
-            f"  {click.style(sev_lbl.ljust(11), fg=sc2, bold=True)}"
-            f"{click.style(sec.ljust(7), dim=True)}"
-            f"{click.style(issue.directive.ljust(20), bold=True)}"
-            f" : {click.style(detail.ljust(46), dim=True)}"
-            f" {click.style(f'{issue.temporal_score:.1f}', bold=True, fg=sc2)}"
-        )
+    _print_findings_table(top_sorted)
     click.echo()
 
     if active_chains:
-        click.echo(click.style("  Attack_Chains_Triggered" + "‗" * 42, dim=True))
+        click.echo(click.style("  ATTACK CHAINS TRIGGERED", fg="bright_cyan", bold=True))
         click.echo()
         for chain in active_chains:
             sc2 = _sev_color(chain.amplified_score)
@@ -233,18 +430,14 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
             )
         click.echo()
 
-    top_finding = top_sorted[0]["issue"] if top_sorted else None
-    if top_finding and top_finding.recommendation:
-        click.echo(click.style("  Recommendation_(Top_Priority)" + "‗" * 36, dim=True))
-        click.echo()
-        click.echo(f"  1. {top_finding.recommendation}")
-        click.echo()
+    _print_recommendation(result, top_sorted, active_chains)
 
     summary_parts = []
     for sev, color in [("Critical", "bright_red"), ("High", "red"), ("Medium", "yellow"), ("Low", "cyan")]:
         if counts.get(sev, 0):
             summary_parts.append(click.style(f"{counts[sev]} {sev}", fg=color, bold=sev in ("Critical", "High")))
-    click.echo(f"  {click.style('ISSUES (detail)', bold=True)}  {' · '.join(summary_parts)}")
+    click.echo(click.style("  ALL FINDINGS", fg="bright_cyan", bold=True)
+               + f"  {' · '.join(summary_parts)}")
     click.echo()
 
     for sev_name in ["Critical", "High", "Medium", "Low"]:
@@ -266,9 +459,87 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
     _print_unknown_directives(getattr(result, "unknown_directives", []),
                               show_all=show_uncovered)
 
-    click.echo(click.style("  Reproducibility" + "‗" * 51, dim=True))
+    _print_next_steps(result, resolved)
+
+    click.echo(click.style("  REPRODUCIBILITY", fg="bright_cyan", bold=True))
     click.echo()
     _print_manifest_line(getattr(result, "manifest", {}))
+
+
+def _print_recommendation(result, top_sorted: list, active_chains: list) -> None:
+    """The verdict in prose, then the single highest-value action.
+
+    When the score is driven by a chain, the headline says so: remediating the
+    worst individual finding would not move a chain-driven score, and a reader
+    who acts only on the table's first row would be surprised by that.
+    """
+    score = result.global_temporal_score
+    color = _sev_color(score)
+    sev = result.severity.upper()
+
+    click.echo(click.style("  RECOMMENDATION", fg="bright_cyan", bold=True))
+    click.echo()
+    click.echo(f"  {click.style('!', fg=color, bold=True)}  "
+               f"This configuration scores {click.style(f'{score:.1f}', fg=color, bold=True)}"
+               f" — {click.style(sev, fg=color, bold=True)} overall vulnerability.")
+
+    if result.overall_driver == "chain" and active_chains:
+        top_chain = active_chains[0]
+        click.echo(f"     Driven by an attack chain "
+                   f"({click.style(top_chain.chain_id, bold=True)}), not by any single directive.")
+        click.echo("     Breaking the chain matters more than fixing the worst finding.")
+        click.echo(f"     Chain: {click.style(' + '.join(top_chain.triggered_by), bold=True)}")
+    elif top_sorted:
+        issue = top_sorted[0]["issue"]
+        click.echo(f"     Highest-value fix: {click.style(issue.directive, bold=True)}"
+                   f" ({issue.temporal_score:.1f})")
+        if issue.recommendation:
+            click.echo(f"     → {issue.recommendation}")
+    click.echo()
+
+
+def _print_next_steps(result, resolved) -> None:
+    """Three commands that follow naturally from this scan, with the actual
+    target substituted in, so the next step is copy-pasteable rather than a
+    docs lookup."""
+    if resolved and resolved.mode == "live":
+        arg = f"--live {resolved.metadata.get('service', '')}".strip()
+    else:
+        # Relative to the working directory when that is shorter — these lines
+        # are meant to be copied, and an absolute path can be longer than the
+        # terminal is wide.
+        import os
+        arg = result.input_path
+        try:
+            rel = os.path.relpath(arg)
+            if len(rel) < len(arg):
+                arg = rel
+        except ValueError:      # different drive on Windows
+            pass
+
+    steps = [
+        (f"caspar scan {arg} --report -f html -o reports", "Full HTML report"),
+        (f"caspar fix {arg} --dry-run", "Preview remediation"),
+        (f"caspar watch {arg}", "Continuous monitoring"),
+    ]
+
+    # A wrapped command is not copy-pasteable, which defeats the point of this
+    # section. When the target's path is long enough to overflow, drop the
+    # aligned comments and let each command own its line.
+    term_w = shutil.get_terminal_size(fallback=(100, 24)).columns
+    width = max(len(cmd) for cmd, _ in steps)
+    inline_notes = width + 25 <= term_w
+
+    click.echo(click.style("  NEXT STEPS", fg="bright_cyan", bold=True))
+    click.echo()
+    for cmd, note in steps:
+        if inline_notes:
+            click.echo(f"  {click.style(cmd.ljust(width), fg='green')}"
+                       f"   {click.style('# ' + note, dim=True)}")
+        else:
+            click.echo(f"  {click.style('# ' + note, dim=True)}")
+            click.echo(f"  {click.style(cmd, fg='green')}")
+    click.echo()
 
 
 def _print_manifest_line(manifest: dict) -> None:
