@@ -40,12 +40,33 @@ sudo apt-get update
 sudo apt-get install -y apache2 nginx
 ```
 
-Os dois disputam o porto 80. Como só queremos as configurações, pára o NGINX:
+**Os dois disputam a porta 80 e não podem estar activos ao mesmo tempo.** Quem
+arrancar primeiro fica com ela; o outro falha o arranque. Alterna conforme o
+serviço que estás a testar:
 
 ```bash
-sudo systemctl stop nginx
-sudo systemctl status apache2 --no-pager | head -3
+# testes ao Apache
+sudo systemctl stop nginx && sudo systemctl start apache2
+
+# testes ao NGINX
+sudo systemctl stop apache2 && sudo systemctl start nginx
 ```
+
+Se preferires os dois a correr — útil para fazer `--live` a ambos sem andar a
+parar serviços — muda a porta do NGINX para 8080 em
+`/etc/nginx/sites-enabled/default` (`listen 8080;`) e reinicia-o.
+
+**Confirma sempre antes de cada scan `--live`:**
+
+```bash
+systemctl is-active apache2      # tem de dizer "active"
+```
+
+> **Porque é que isto não é um detalhe.** Com o serviço parado, o
+> `caspar scan --live apache2` não falha nem avisa: recai na leitura da
+> configuração em disco e devolve um score plausível. Os números saem
+> comparáveis, mas não medem o que julgas — e a distinção ficheiro-vs-serviço é
+> precisamente uma das propriedades em avaliação. Ver §1.3.
 
 Confirma as versões — são elas que o CASPAR cruza com CVEs:
 
@@ -66,7 +87,39 @@ caspar scan --live apache2
 Anota o score. Uma instalação por omissão do Ubuntu não é uma configuração
 endurecida, mas também não é o pior caso — espera um valor intermédio.
 
-### 1.3 Introduzir vulnerabilidades de forma controlada
+### 1.3 O que o `--live` observa (e o que não observa)
+
+Vale a pena ter isto claro antes de interpretar qualquer resultado, porque
+define o alcance das conclusões que podes tirar.
+
+O `--live` **descobre o serviço instalado**: localiza o binário, pergunta-lhe a
+configuração efectiva (no Apache via `apache2ctl -V`, que devolve o `ServerRoot`
+real mesmo que não seja o do pacote), detecta a versão em execução e cruza-a com
+CVEs e exploits conhecidos. Nada disto é observável a partir de um ficheiro
+solto, e é a diferença que justifica o modo.
+
+O que **não** faz é verificar se o serviço está a correr — `resolve_live_service`
+em `config_assessment/core/input_resolver.py` não consulta o `systemctl`. Um
+scan a um Apache parado corre até ao fim e devolve um score normal, identificando
+o modo como `installed service`, que é literalmente verdade: o serviço está
+instalado. Verificado: com o `apache2` em estado `failed`, o
+`caspar scan --live apache2` devolveu `7.1/10` sem qualquer aviso.
+
+A consequência prática é a da §1.1 — confirma o `systemctl is-active` antes de
+cada scan `--live`, senão arriscas-te a comparar medições que julgas serem de
+serviço em execução e são de configuração em disco.
+
+A consequência conceptual interessa mais: **a configuração ser válida e o
+serviço estar a correr são propriedades independentes**, e o CASPAR avalia a
+primeira. Um caso concreto surgiu durante a preparação deste guia — uma
+degradação deliberada com `SSLProtocol +SSLv3` produziu configuração que o
+OpenSSL 3.0 do Ubuntu 22.04 recusa carregar (`SSLv3 not supported by this
+version of OpenSSL`): o Apache não arrancava, mas a configuração continuava a
+ser avaliável e a pontuar. Note-se ainda que `apache2ctl configtest` devolver
+`Syntax OK` também não garante arranque — a validação de cifras só acontece na
+inicialização real do módulo SSL.
+
+### 1.4 Introduzir vulnerabilidades de forma controlada
 
 **Faz cópia de segurança primeiro.** Vais editar configuração de um serviço
 real:
@@ -118,15 +171,27 @@ caspar scan --live apache2
 ```bash
 sudo a2enmod ssl
 sudo tee -a /etc/apache2/conf-available/security.conf >/dev/null <<'EOF'
-SSLProtocol +SSLv3 +TLSv1
-SSLCipherSuite RC4-SHA:AES128-SHA
+SSLProtocol all -SSLv2
+SSLCipherSuite AES128-SHA
 EOF
 
-sudo systemctl reload apache2
+sudo apache2ctl configtest && sudo systemctl reload apache2
+systemctl is-active apache2
 caspar scan --live apache2 --report -f json -o live-degraded
 ```
 
-### 1.4 O mesmo alvo, dois modos
+> **Não uses `SSLProtocol +SSLv3` nem cifras RC4 aqui**, por muito tentador que
+> seja como degradação. O OpenSSL 3.0 do Ubuntu 22.04 removeu-os do código, não
+> apenas os desactivou: o `SSLv3` faz falhar o próprio `configtest`
+> (`SSLv3 not supported by this version of OpenSSL`) e o Apache deixa de
+> arrancar — ficas sem serviço para testar, e os scans `--live` seguintes
+> passam a ler configuração em disco sem to dizerem (§1.3).
+>
+> `all -SSLv2` deixa TLSv1.0 e TLSv1.1 activos e `AES128-SHA` não tem forward
+> secrecy: continuam a ser más configurações, que é o que o teste precisa, mas
+> arrancam.
+
+### 1.5 O mesmo alvo, dois modos
 
 Compara o modo `--live` com o modo ficheiro sobre a mesma configuração:
 
@@ -141,7 +206,7 @@ Apache (portanto vê o `security.conf` que degradaste) e conhece a versão em
 execução, o que activa o cruzamento com CVEs. O modo ficheiro vê só o ficheiro
 que lhe deste.
 
-### 1.5 NGINX
+### 1.6 NGINX
 
 ```bash
 sudo cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.orig
@@ -150,19 +215,38 @@ sudo nginx -t                      # valida a sintaxe antes de recarregar
 caspar scan /etc/nginx/nginx.conf
 ```
 
-### 1.6 Restaurar (não saltes este passo)
+Este scan é em modo ficheiro, portanto não precisa do NGINX a correr. Se
+quiseres também o modo `--live`, troca os serviços primeiro (§1.1):
+
+```bash
+sudo systemctl stop apache2 && sudo systemctl start nginx
+systemctl is-active nginx
+caspar scan --live nginx
+```
+
+### 1.7 Restaurar (não saltes este passo)
 
 ```bash
 sudo cp /etc/apache2/apache2.conf.orig /etc/apache2/apache2.conf
 sudo cp /etc/apache2/conf-available/security.conf.orig \
         /etc/apache2/conf-available/security.conf
 sudo cp /etc/nginx/nginx.conf.orig /etc/nginx/nginx.conf
-sudo systemctl reload apache2
+sudo a2dismod ssl                   # só se o activaste no terceiro passo
+sudo apache2ctl configtest && sudo systemctl restart apache2
+systemctl is-active apache2         # confirma antes de medir (§1.3)
 caspar scan --live apache2          # tem de voltar ao valor de 1.2
 ```
 
 O regresso ao valor inicial é, ele próprio, uma verificação: confirma que o
-score reflecte a configuração e não estado acumulado.
+score reflecte a configuração e não estado acumulado. **Só é uma verificação
+válida com o serviço `active`** — a comparar com o serviço parado, estarias a
+medir outra coisa e a obter um número parecido na mesma.
+
+Se testaste também o NGINX, repõe o estado que preferires para a máquina:
+
+```bash
+sudo systemctl start nginx          # implica parar o apache2 (§1.1)
+```
 
 ---
 
