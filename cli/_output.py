@@ -157,10 +157,14 @@ def print_about() -> None:
     for line in _WORDMARK:
         click.echo("  " + click.style(line, fg="bright_blue"))
     click.echo()
+    # O backronym fica numa variável em vez de partido dentro das chavetas da
+    # f-string: quebras de linha dentro de {...} só são válidas a partir do
+    # Python 3.12 (PEP 701), e o projecto suporta 3.10 — em 3.10/3.11 isto é um
+    # SyntaxError na importação, portanto a CLI inteira deixava de arrancar.
+    _backronym = "Configuration Assessment, Scoring and Prioritisation of Attack Routes"
     click.echo(f"  {click.style('CASPAR', bold=True)} "
                f"{click.style(CASPAR_VERSION, dim=True)}"
-               f"   {click.style('Configuration Assessment, Scoring '
-                                 'and Prioritisation of Attack Routes', dim=True)}")
+               f"   {click.style(_backronym, dim=True)}")
     click.echo()
     # The distinction the header's one-liner has no room for: CVM is the
     # methodology being proposed, CASPAR is one implementation of it.
