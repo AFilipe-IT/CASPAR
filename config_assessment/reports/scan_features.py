@@ -18,6 +18,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 from config_assessment.core.engines.aggregation import HostRollup, aggregate_hosts
+from config_assessment.core.engines.scoring import severity_label
 
 
 # ── issue identity ─────────────────────────────────────────────────────
@@ -110,13 +111,21 @@ EXIT_CRITICAL = 2
 
 def classify_exit(result_severities: list[str], global_score: float,
                   threshold: float) -> int:
-    """Decide the process exit code from the issues' severities and threshold.
+    """Decide the process exit code from the assessment outcome and threshold.
 
-    - Any 'Critical' issue → EXIT_CRITICAL (2), regardless of threshold.
+    - A Critical outcome → EXIT_CRITICAL (2), regardless of threshold.
     - Else if a threshold is set and the score exceeds it → EXIT_THRESHOLD (1).
     - Else 0.
+
+    "Critical outcome" means either an individual Critical finding or a
+    Critical *global* score. The global score can be driven by an attack chain
+    rather than by any single finding — a config whose worst directive scores
+    8.7 (High) still reports 10.0 CRITICAL when two of its findings compose
+    into a privilege-escalation chain. Judging only on individual severities
+    made `--exit-code` pass such a config, which is precisely the case the
+    chain analysis exists to catch.
     """
-    if "Critical" in result_severities:
+    if "Critical" in result_severities or severity_label(global_score) == "Critical":
         return EXIT_CRITICAL
     if threshold > 0.0 and global_score > threshold:
         return EXIT_THRESHOLD

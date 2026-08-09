@@ -80,6 +80,23 @@ def test_exit_ok_when_clean():
     assert classify_exit([], 0.0, 0.0) == EXIT_OK
 
 
+def test_exit_critical_when_only_the_global_score_is_critical():
+    """A chain-driven Critical must fail the gate.
+
+    The demo Apache config scores 10.0 CRITICAL overall while its worst single
+    finding is 8.7 (High): the Critical comes from the privilege-escalation
+    chain composing User+Group. Judging on individual severities alone let
+    `--exit-code` return 0 there — the exact case chain analysis exists for.
+    """
+    assert classify_exit(["High", "Medium"], 10.0, 0.0) == EXIT_CRITICAL
+    assert classify_exit(["High"], 9.0, 0.0) == EXIT_CRITICAL
+
+
+def test_exit_high_global_score_alone_is_not_critical():
+    """8.9 is High, not Critical — no threshold set means no failure."""
+    assert classify_exit(["High"], 8.9, 0.0) == EXIT_OK
+
+
 # ── suppressions ───────────────────────────────────────────────────────
 
 def test_suppression_roundtrip_and_partition(tmp_path):
