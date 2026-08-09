@@ -136,6 +136,18 @@ export interface TargetInfo {
   priority: number;
 }
 
+/** A service `live` mode can resolve, from GET /targets/live.
+ *  `detected` means its config directory exists where the *server* runs —
+ *  false for everything under Docker unless the host's /etc is mounted. */
+export interface LiveService {
+  service: string;
+  plugin: string;
+  config_dir: string;
+  aliases: string[];
+  detected: boolean;
+  plugin_installed: boolean;
+}
+
 export interface Benchmark {
   name: string;
   version: string;

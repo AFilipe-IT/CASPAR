@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { UploadCloud, FileText, Radio } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { useTargets } from "@/api/targets";
+import { useLiveServices, useTargets } from "@/api/targets";
 import { useRunScan, useUploadScan } from "@/api/scans";
 import type { ScanResponse } from "@/api/types";
 import { usePreferences } from "@/context/PreferencesContext";
@@ -30,6 +30,8 @@ export function RunAssessmentForm({ onResult }: RunAssessmentFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: targets } = useTargets();
+  const { data: liveServices } = useLiveServices();
+  const selectedLive = liveServices?.find((s) => s.service === liveService);
   const runScan = useRunScan();
   const uploadScan = useUploadScan();
 
@@ -151,13 +153,26 @@ export function RunAssessmentForm({ onResult }: RunAssessmentFormProps) {
 
       {mode === "live" && (
         <div className={styles.field}>
-          <span className={styles.label}>Installed service name</span>
-          <input
-            className={styles.input}
-            placeholder="apache2"
+          <span className={styles.label}>Installed service</span>
+          <select
+            className={styles.select}
             value={liveService}
             onChange={(e) => setLiveService(e.target.value)}
-          />
+          >
+            <option value="">Select a service…</option>
+            {(liveServices ?? []).map((s) => (
+              <option key={s.plugin} value={s.service} disabled={!s.plugin_installed}>
+                {s.service}
+                {s.detected ? "" : " — not found on server"}
+                {s.plugin_installed ? "" : " (plugin not installed)"}
+              </option>
+            ))}
+          </select>
+          <span className={styles.hint}>
+            {selectedLive && !selectedLive.detected
+              ? `${selectedLive.config_dir} does not exist where the server runs. Under Docker the container has its own filesystem — use Upload, or bind-mount the host's /etc.`
+              : "Detected from this server's filesystem; the same list `caspar scan --live` accepts."}
+          </span>
         </div>
       )}
 

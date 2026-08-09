@@ -201,3 +201,11 @@
   grid-template-columns: repeat(3, 1fr);
   gap: var(--sp-4);
 }
+
+/* Explanatory line under a field — used by the live-service picker to say why
+   a service shows as undetected (the Docker filesystem case, most often). */
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}

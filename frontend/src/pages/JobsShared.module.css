@@ -172,3 +172,36 @@
   font-size: var(--fs-xs);
   font-family: var(--font-mono);
 }
+
+/* Mode selector — same visual language as the Assessment page's, so the
+   "pick a service vs. give a path" choice reads identically on both. */
+.modeRow {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-5);
+}
+
+.modeBtn {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.modeBtn:hover {
+  color: var(--text);
+}
+
+.modeBtnActive {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-soft);
+}

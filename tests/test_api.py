@@ -115,6 +115,45 @@ class TestHealthAndTargets:
         names = [t["name"] for t in r.json()]
         assert "dummy" in names
 
+    def test_live_services_are_listed_once_per_plugin(self, client):
+        """The console picks a service from here instead of typing one blind.
+
+        The resolver only accepts names from a fixed map, so a free-text field
+        made "Service 'x' not found" the normal outcome of a typo. The map is
+        alias-keyed (apache2/apache/httpd all reach apache-httpd); the endpoint
+        must collapse those into one entry, or the picker shows synonyms.
+        """
+        r = client.get("/api/v1/targets/live")
+        assert r.status_code == 200
+        body = r.json()
+
+        plugins = [e["plugin"] for e in body]
+        assert len(plugins) == len(set(plugins)), "one entry per plugin, not per alias"
+
+        apache = next(e for e in body if e["plugin"] == "apache-httpd")
+        assert apache["service"] == "apache2"
+        assert "httpd" in apache["aliases"]
+        # Every name the console can send must be one the resolver accepts.
+        assert apache["config_dir"].startswith("/etc/")
+
+    def test_live_services_report_detection_and_plugin_state(self, client):
+        """Both flags are needed to explain a failure before it happens.
+
+        `detected` false means the config isn't on this filesystem — the Docker
+        case, where the container has its own /etc. `plugin_installed` false
+        means the config may be there but nothing can assess it. They are
+        independent, and the console's message differs for each.
+        """
+        body = client.get("/api/v1/targets/live").json()
+        assert body, "the service map is never empty"
+        for entry in body:
+            assert isinstance(entry["detected"], bool)
+            assert isinstance(entry["plugin_installed"], bool)
+
+        # Detected services sort first, so the picker leads with usable ones.
+        flags = [e["detected"] for e in body]
+        assert flags == sorted(flags, reverse=True)
+
 
 # ------------------------------------------------------------------ #
 # Scans                                                                #

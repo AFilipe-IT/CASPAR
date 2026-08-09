@@ -21,6 +21,7 @@ import {
   useWatchSession,
   useWatchSessions,
 } from "@/api/watch";
+import { useLiveServices } from "@/api/targets";
 import type { WatchSession } from "@/api/types";
 import { scoreToHex, scoreToRiskLabel } from "@/lib/severity";
 import shared from "./JobsShared.module.css";
@@ -53,9 +54,20 @@ function fmtTime(ts: string | null): string {
 }
 
 export function WatchPage() {
+  // Watching a service is the common case (it is what `caspar watch --live`
+  // does), and a path had to be typed from memory before — hence the default.
+  const [mode, setMode] = useState<"service" | "path">("service");
+  const [service, setService] = useState("");
   const [path, setPath] = useState("");
   const [interval, setIntervalValue] = useState(2);
   const [selected, setSelected] = useState<string | undefined>();
+
+  const { data: liveServices } = useLiveServices();
+  const selectedService = liveServices?.find((s) => s.service === service);
+  // An undetected service is still startable: the picker says so, and the
+  // resolver's own error is the authority — it looks in more places than the
+  // single directory this check knows about.
+  const canStart = mode === "service" ? !!service : !!path;
 
   const { data: sessions, isLoading } = useWatchSessions();
   const { data: detail } = useWatchSession(selected);
@@ -97,23 +109,68 @@ export function WatchPage() {
 
       <Card
         title="Start a session"
-        subtitle="Re-scans on every change to the file or directory, server-side."
+        subtitle="Re-scans on every change, server-side. Watch an installed service or a path."
       >
         <div className={shared.form}>
+          <div className={shared.modeRow}>
+            <button
+              type="button"
+              className={[shared.modeBtn, mode === "service" ? shared.modeBtnActive : ""].join(" ")}
+              onClick={() => setMode("service")}
+            >
+              Installed service
+            </button>
+            <button
+              type="button"
+              className={[shared.modeBtn, mode === "path" ? shared.modeBtnActive : ""].join(" ")}
+              onClick={() => setMode("path")}
+            >
+              Config path
+            </button>
+          </div>
+
           <div className={shared.row2}>
-            <div className={shared.field}>
-              <label className={shared.label} htmlFor="wpath">
-                Config path
-              </label>
-              <input
-                id="wpath"
-                className={shared.input}
-                placeholder="/etc/nginx/nginx.conf"
-                value={path}
-                onChange={(e) => setPath(e.target.value)}
-              />
-              <span className={shared.hint}>A file or directory on the server.</span>
-            </div>
+            {mode === "service" ? (
+              <div className={shared.field}>
+                <label className={shared.label} htmlFor="wservice">
+                  Service
+                </label>
+                <select
+                  id="wservice"
+                  className={shared.input}
+                  value={service}
+                  onChange={(e) => setService(e.target.value)}
+                >
+                  <option value="">Select a service…</option>
+                  {(liveServices ?? []).map((s) => (
+                    <option key={s.plugin} value={s.service} disabled={!s.plugin_installed}>
+                      {s.service}
+                      {s.detected ? "" : " — not found on server"}
+                      {s.plugin_installed ? "" : " (plugin not installed)"}
+                    </option>
+                  ))}
+                </select>
+                <span className={shared.hint}>
+                  {selectedService && !selectedService.detected
+                    ? `${selectedService.config_dir} does not exist where the server runs — under Docker the container has its own filesystem.`
+                    : "Resolved to the service's config directory, like `caspar watch --live`."}
+                </span>
+              </div>
+            ) : (
+              <div className={shared.field}>
+                <label className={shared.label} htmlFor="wpath">
+                  Config path
+                </label>
+                <input
+                  id="wpath"
+                  className={shared.input}
+                  placeholder="/etc/nginx/nginx.conf"
+                  value={path}
+                  onChange={(e) => setPath(e.target.value)}
+                />
+                <span className={shared.hint}>A file or directory on the server.</span>
+              </div>
+            )}
 
             <div className={shared.field}>
               <label className={shared.label} htmlFor="winterval">
@@ -139,10 +196,12 @@ export function WatchPage() {
             <Button
               variant="primary"
               icon={<PlayCircle size={16} />}
-              disabled={!path || startWatch.isPending}
+              disabled={!canStart || startWatch.isPending}
               onClick={() =>
                 startWatch.mutate(
-                  { path, interval },
+                  mode === "service"
+                    ? { path: service, live: true, interval }
+                    : { path, interval },
                   { onSuccess: (r) => setSelected(r.watch_session) },
                 )
               }

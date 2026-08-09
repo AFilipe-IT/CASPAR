@@ -101,3 +101,40 @@ def test_idempotent(seed, tmp_path):
 
 def test_missing_files_are_safe(tmp_path):
     assert refresh_builtins_if_stale(tmp_path / "nope.db", tmp_path / "no-seed.db") is False
+
+
+class TestCanonicalShipsNoScans:
+    """A fresh install starts with an empty history.
+
+    The canonical dump used to carry 54 development scans, so the console's
+    Dashboard showed scores, findings and attack chains to someone who had
+    never run an assessment — and any number a user took from that screen
+    silently mixed their own results with ours. The knowledge base (rules,
+    chains, targets) is the product and must stay; the scan history is not.
+    """
+
+    def test_no_scan_results_in_the_canonical_dump(self, seed):
+        conn = sqlite3.connect(str(seed))
+        assert conn.execute("SELECT COUNT(*) FROM scan_results").fetchone()[0] == 0
+
+    def test_the_knowledge_base_is_still_there(self, seed):
+        """The counterpart assertion: stripping scans must not strip content."""
+        conn = sqlite3.connect(str(seed))
+        misconfigs = conn.execute("SELECT COUNT(*) FROM misconfigurations").fetchone()[0]
+        chains = conn.execute("SELECT COUNT(*) FROM attack_chains").fetchone()[0]
+        targets = conn.execute("SELECT COUNT(*) FROM targets").fetchone()[0]
+        assert misconfigs > 400
+        assert chains > 20
+        assert targets >= 11
+
+    def test_the_first_user_scan_gets_id_one(self, seed):
+        """sqlite_sequence must not remember the stripped rows.
+
+        Leaving scan_results' sequence behind would start a user's first scan
+        at id 55 — harmless in effect, but it is a leftover of data that is no
+        longer there, and it shows in URLs.
+        """
+        conn = sqlite3.connect(str(seed))
+        row = conn.execute(
+            "SELECT seq FROM sqlite_sequence WHERE name='scan_results'").fetchone()
+        assert row is None

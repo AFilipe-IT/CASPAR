@@ -26,7 +26,7 @@ from pathlib import Path
 
 # Bump this whenever data/ccss_canonical.sql changes in a way that should reach
 # existing volumes (e.g. corrected justifications, new built-in misconfigs).
-BASE_DB_VERSION = 2
+BASE_DB_VERSION = 3
 
 # The targets shipped in the image. Anything else in a working DB was installed
 # by the user (plugin add / fetch) and must be preserved across a refresh.
