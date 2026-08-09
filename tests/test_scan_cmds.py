@@ -75,3 +75,64 @@ class TestScanHostTagging:
             assert len(db.list_hosts()) == 1
             host_id = db.get_host_id("web01")
             assert len(db.get_scans_for_host(host_id)) == 2
+
+
+class TestScanOutputVerbosity:
+    """Default `scan` is an operational summary; detail is opt-in.
+
+    The default output kept growing until a real service configuration pushed
+    the score and the recommendation off the top of the screen, so the per-
+    finding and per-chain sections now sit behind flags.
+    """
+
+    def _scan(self, tmp_path, *extra):
+        db_path = _seed(tmp_path)
+        f = tmp_path / "sysctl.conf"
+        f.write_text(_SYSCTL_BAD)
+        res = CliRunner().invoke(
+            m.cli, ["--db", str(db_path), "scan", str(f), *extra])
+        assert res.exit_code == 0, res.output
+        return res.output
+
+    def test_default_output_omits_detail_sections(self, tmp_path):
+        out = self._scan(tmp_path)
+        assert "ALL FINDINGS" not in out
+        assert "ATTACK CHAINS (detail)" not in out
+        # …but the summary the operator came for is still there.
+        assert "CONFIGURATION VULNERABILITY SCORE" in out
+        assert "RECOMMENDATION" in out
+        assert "COVERAGE" in out
+
+    def test_default_output_advertises_the_flags_it_hid(self, tmp_path):
+        out = self._scan(tmp_path)
+        assert "--verbose" in out and "--show-uncovered" in out
+
+    def test_verbose_restores_per_finding_detail(self, tmp_path):
+        out = self._scan(tmp_path, "--verbose")
+        assert "ALL FINDINGS" in out
+        # Having shown everything, it must not then advertise --verbose.
+        assert "# every finding in full detail" not in out
+
+    def test_show_chains_adds_chains_without_per_finding_detail(self, tmp_path):
+        out = self._scan(tmp_path, "--show-chains")
+        assert "ALL FINDINGS" not in out
+
+
+class TestAbout:
+    # A box-drawing run alone is not enough to identify the wordmark — the
+    # score meter is drawn with the same block character.
+    WORDMARK_GLYPH = "╚██████╗"
+
+    def test_about_carries_the_wordmark_and_version(self):
+        res = CliRunner().invoke(m.cli, ["about"])
+        assert res.exit_code == 0, res.output
+        assert self.WORDMARK_GLYPH in res.output
+        assert "Configuration Vulnerability Meter" in res.output
+
+    def test_scan_does_not_print_the_wordmark(self, tmp_path):
+        """The logo belongs to `about`; `scan` is run many times a day."""
+        db_path = _seed(tmp_path)
+        f = tmp_path / "sysctl.conf"
+        f.write_text(_SYSCTL_BAD)
+        res = CliRunner().invoke(m.cli, ["--db", str(db_path), "scan", str(f)])
+        assert self.WORDMARK_GLYPH not in res.output

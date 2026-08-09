@@ -59,6 +59,12 @@ logger = logging.getLogger("ccss")
 @click.option("--show-uncovered", "show_uncovered", is_flag=True, default=False,
               help="List every uncovered directive, not just the suspicious "
                    "ones (a real config has hundreds of benign unknowns).")
+@click.option("--verbose", "-v", "verbose", is_flag=True, default=False,
+              help="Full detail for every finding and attack chain. Without "
+                   "it, scan prints an operational summary.")
+@click.option("--show-chains", "show_chains", is_flag=True, default=False,
+              help="Full attack-chain analysis (narratives and component "
+                   "directives), without the per-finding detail of --verbose.")
 @click.option("--profile", "env_profile", default=None,
               type=click.Choice(["production", "internal", "dev"]),
               help="Deployment profile — adjusts exposure (AV) used for scoring: "
@@ -77,8 +83,8 @@ logger = logging.getLogger("ccss")
 @click.pass_context
 def scan(ctx, input_path, live, report, fmt, output, threshold,
          differentiated_exit, suppress_file, online, service_version,
-         assess_unknown, docs_path, show_uncovered, env_profile, host_label,
-         publish_to) -> None:
+         assess_unknown, docs_path, show_uncovered, verbose, show_chains,
+         env_profile, host_label, publish_to) -> None:
     """Analyse service configurations — 4 modes.
 
     \b
@@ -178,7 +184,8 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
     if assess_unknown and result.unknown_directives:
         _assess_unknown_directives(result, docs_path)
 
-    _print_result(result, resolved=resolved, show_uncovered=show_uncovered)
+    _print_result(result, resolved=resolved, show_uncovered=show_uncovered,
+                  verbose=verbose, show_chains=show_chains)
     if suppressed_issues:
         click.echo(click.style(
             f"  ({len(suppressed_issues)} issue(s) suppressed via {_supp_path})",

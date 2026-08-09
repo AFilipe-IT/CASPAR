@@ -102,7 +102,50 @@ def _dedup_chains(chains: list) -> list:
     return result
 
 
-# ── Cabeçalho: banner + Risk Score box ──────────────────────────────
+# ── Identidade: wordmark (só em `caspar about`) ─────────────────────
+
+# The wordmark is deliberately absent from `scan`. A security CLI is run many
+# times a day and the logo carries no information the second time it is seen;
+# it lives here, where someone asking "what is this tool" actually wants it.
+_WORDMARK = [
+    r" ██████╗ █████╗ ███████╗██████╗  █████╗ ██████╗ ",
+    r"██╔════╝██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔══██╗",
+    r"██║     ███████║███████╗██████╔╝███████║██████╔╝",
+    r"██║     ██╔══██║╚════██║██╔═══╝ ██╔══██║██╔══██╗",
+    r"╚██████╗██║  ██║███████║██║     ██║  ██║██║  ██║",
+    r" ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝",
+]
+
+
+def print_about() -> None:
+    """The wordmark, the version, and what CASPAR is versus what CVM is."""
+    from config_assessment.core.manifest import CASPAR_VERSION
+
+    click.echo()
+    for line in _WORDMARK:
+        click.echo("  " + click.style(line, fg="bright_blue"))
+    click.echo()
+    click.echo(f"  {click.style('CASPAR', bold=True)} "
+               f"{click.style(CASPAR_VERSION, dim=True)}"
+               f"   {click.style('Configuration Assessment, Scoring '
+                                 'and Prioritisation of Attack Routes', dim=True)}")
+    click.echo()
+    # The distinction the header's one-liner has no room for: CVM is the
+    # methodology being proposed, CASPAR is one implementation of it.
+    click.echo(f"  {click.style('Configuration Vulnerability Meter (CVM)', bold=True)}")
+    click.echo("  A methodology for quantitative, reproducible scoring of")
+    click.echo("  security misconfigurations, built on CCSS (NISTIR 7502) and")
+    click.echo("  extended with attack-chain composition. CASPAR is its")
+    click.echo("  reference implementation.")
+    click.echo()
+    click.echo(f"  {click.style('caspar scan --help', fg='green')}"
+               f"   {click.style('# assess a configuration', dim=True)}")
+    click.echo(f"  {click.style('caspar demo', fg='green')}"
+               f"          {click.style('# example configurations to try', dim=True)}")
+    click.echo()
+
+
+# ── Cabeçalho: identidade compacta + Risk Score box ─────────────────
 
 def _boxed_center(plain: str, inner_w: int, **style_kw) -> str:
     """Center `plain` inside a box row of interior width `inner_w`, styling
@@ -196,56 +239,55 @@ def _risk_box_lines(score: float, severity: str) -> list[str]:
 
 
 def _print_header(result, resolved, score: float) -> None:
-    """Banner + Risk Score box side by side (falls back to stacked on narrow
-    terminals so redirected/CI output never wraps mid-box)."""
+    """Identity line, assessment summary and the score panel side by side
+    (falls back to stacked on narrow terminals so redirected/CI output never
+    wraps mid-box)."""
     from config_assessment.core.ccss import severity_label as sl
 
     term_w = shutil.get_terminal_size(fallback=(100, 24)).columns
-    banner = list(_BANNER)
     box = _risk_box_lines(score, sl(score))
-    banner_w = max(len(l) for l in banner)
 
-    mode_labels = {"file": "file", "directory": "directory", "live": "service", "docker": "Docker"}
-    input_str = result.input_path
+    # Three distinct concepts that were previously collapsed into "Target":
+    # the service running on the host, the plugin whose rules were applied, and
+    # the configuration actually read. In --live mode they differ (apache2 /
+    # apache-httpd / /etc/apache2/apache2.conf) and conflating them made the
+    # NEXT STEPS suggest `--live apache-httpd`, which is not a service name.
+    mode_labels = {"file": "file", "directory": "directory",
+                   "live": "installed service", "docker": "container image"}
     mode_str = mode_labels.get(resolved.mode, resolved.mode) if resolved else "file"
-    if resolved:
-        if resolved.mode == "docker":
-            input_str = resolved.metadata.get("image", result.input_path)
-        elif resolved.mode == "live":
-            svc = resolved.metadata.get("service", "")
-            ver = resolved.metadata.get("version", "")
-            input_str = f"{svc} {ver}".strip() if ver and ver != "unknown" else svc
 
-    # Identity block sitting to the right of the wordmark.
-    # Same constant the reproducibility footer stamps, so the banner version
-    # and the manifest version can never drift apart.
-    from config_assessment.core.manifest import CASPAR_VERSION as _ver
-    subtitle = [
-        click.style("Configuration Vulnerability Meter", bold=True),
-        click.style("Reference Implementation", dim=True),
-        "",
-        (click.style(f"CASPAR {_ver}", fg="bright_cyan", bold=True)
-         + click.style("  |  ", dim=True)
-         + click.style("CVM Engine 1.0", dim=True)),
+    rows = [("Plugin", result.target_name)]
+    if resolved and resolved.mode == "live":
+        svc = resolved.metadata.get("service", "")
+        ver = resolved.metadata.get("version", "")
+        rows.insert(0, ("Service", f"{svc} {ver}".strip()
+                        if ver and ver != "unknown" else svc))
+        rows.append(("Configuration", result.input_path))
+    elif resolved and resolved.mode == "docker":
+        rows.insert(0, ("Image", resolved.metadata.get("image", result.input_path)))
+        rows.append(("Configuration", result.input_path))
+    else:
+        rows.append(("Configuration", result.input_path))
+
+    rows += [
+        ("Mode", mode_str),
+        ("Date", result.timestamp.strftime("%Y-%m-%d %H:%M:%S")),
+        ("Profile", f"AV:{result.profile.av} Au:{result.profile.au}"),
     ]
 
+    # Compact identity block. The wordmark moved to `caspar --about`: an
+    # operational tool is run many times a day and the logo carries no
+    # information the second time it is seen.
+    from config_assessment.core.manifest import CASPAR_VERSION as _ver
     click.echo()
-    for b_line, sub in zip_longest(banner, subtitle, fillvalue=""):
-        pad = " " * (banner_w - len(b_line) + 4)
-        click.echo(f"  {click.style(b_line, fg='bright_blue', bold=True)}{pad}{sub}")
+    click.echo(f"  {click.style('CASPAR', fg='bright_blue', bold=True)} "
+               f"{click.style(_ver, dim=True)}")
+    click.echo(f"  {click.style('Configuration Vulnerability Meter', bold=True)} "
+               f"{click.style('· Reference Implementation', dim=True)}")
     click.echo()
     click.echo(click.style("  " + "─" * min(term_w - 4, 96), dim=True))
     click.echo()
 
-    rows = [
-        ("Target", result.target_name),
-        ("Configuration", input_str),
-        ("Mode", mode_str),
-        ("Date", result.timestamp.strftime("%Y-%m-%d %H:%M:%S")),
-        ("Profile", f"AV:{result.profile.av} Au:{result.profile.au}"),
-        ("Directives scanned", str(result.total_directives_scanned)),
-        ("Findings", str(len(_dedup_issues(result.issues)))),
-    ]
     label_w = max(len(r[0]) for r in rows)
 
     # Side by side when the terminal allows it; stacked otherwise, so a narrow
@@ -369,7 +411,8 @@ def _print_findings_table(groups: list) -> None:
 
 # ── Relatório terminal ─────────────────────────────────────────────
 
-def _print_result(result, resolved=None, show_uncovered=False) -> None:
+def _print_result(result, resolved=None, show_uncovered=False,
+                  verbose=False, show_chains=False) -> None:
     from config_assessment.core.ccss import severity_label as sl
 
     groups = _dedup_issues(sorted(result.issues, key=lambda x: -x.temporal_score))
@@ -418,9 +461,17 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
     click.echo()
 
     if active_chains:
-        click.echo(click.style("  ATTACK CHAINS TRIGGERED", fg="bright_cyan", bold=True))
+        # Capped like TOP FINDINGS above it. The chains are already sorted
+        # worst-first, and the ones that matter for the score are at the top;
+        # --show-chains carries the complete analysis.
+        shown_chains = active_chains if (verbose or show_chains) else active_chains[:5]
+        head = click.style("  ATTACK CHAINS TRIGGERED", fg="bright_cyan", bold=True)
+        if len(shown_chains) < len(active_chains):
+            head += click.style(
+                f"   top {len(shown_chains)} of {len(active_chains)}", dim=True)
+        click.echo(head)
         click.echo()
-        for chain in active_chains:
+        for chain in shown_chains:
             sc2 = _sev_color(chain.amplified_score)
             dirs = " -> ".join(chain.triggered_by)
             click.echo(
@@ -432,38 +483,110 @@ def _print_result(result, resolved=None, show_uncovered=False) -> None:
 
     _print_recommendation(result, top_sorted, active_chains)
 
-    summary_parts = []
-    for sev, color in [("Critical", "bright_red"), ("High", "red"), ("Medium", "yellow"), ("Low", "cyan")]:
-        if counts.get(sev, 0):
-            summary_parts.append(click.style(f"{counts[sev]} {sev}", fg=color, bold=sev in ("Critical", "High")))
-    click.echo(click.style("  ALL FINDINGS", fg="bright_cyan", bold=True)
-               + f"  {' · '.join(summary_parts)}")
-    click.echo()
-
-    for sev_name in ["Critical", "High", "Medium", "Low"]:
-        sev_groups = [g for g in groups if sl(g["issue"].temporal_score) == sev_name]
-        if not sev_groups:
-            continue
-        sc2 = {"Critical": "bright_red", "High": "red", "Medium": "yellow", "Low": "cyan"}[sev_name]
-        click.echo(f"  {click.style(f'── {sev_name} ({len(sev_groups)})', fg=sc2, bold=True)}")
+    # Per-finding detail is opt-in. A real service configuration produces a
+    # page of it, which buries the summary the operator actually came for.
+    if verbose:
+        summary_parts = []
+        for sev, color in [("Critical", "bright_red"), ("High", "red"),
+                           ("Medium", "yellow"), ("Low", "cyan")]:
+            if counts.get(sev, 0):
+                summary_parts.append(click.style(
+                    f"{counts[sev]} {sev}", fg=color,
+                    bold=sev in ("Critical", "High")))
+        click.echo(click.style("  ALL FINDINGS", fg="bright_cyan", bold=True)
+                   + f"  {' · '.join(summary_parts)}")
         click.echo()
-        for g in sorted(sev_groups, key=lambda x: -x["issue"].temporal_score):
-            _print_issue_compact(g)
 
-    if active_chains:
-        click.echo(f"  {click.style('ATTACK CHAINS (detail)', bold=True)}  {click.style(f'({len(active_chains)})', dim=True)}")
+        for sev_name in ["Critical", "High", "Medium", "Low"]:
+            sev_groups = [g for g in groups if sl(g["issue"].temporal_score) == sev_name]
+            if not sev_groups:
+                continue
+            sc2 = {"Critical": "bright_red", "High": "red",
+                   "Medium": "yellow", "Low": "cyan"}[sev_name]
+            click.echo(f"  {click.style(f'── {sev_name} ({len(sev_groups)})', fg=sc2, bold=True)}")
+            click.echo()
+            for g in sorted(sev_groups, key=lambda x: -x["issue"].temporal_score):
+                _print_issue_compact(g)
+
+    if active_chains and (verbose or show_chains):
+        click.echo(f"  {click.style('ATTACK CHAINS (detail)', bold=True)}  "
+                   f"{click.style(f'({len(active_chains)})', dim=True)}")
         click.echo()
         for chain in active_chains:
             _print_chain_compact(chain)
 
-    _print_unknown_directives(getattr(result, "unknown_directives", []),
-                              show_all=show_uncovered)
+    _print_coverage(result, show_uncovered)
+
+    if not (verbose and show_uncovered):
+        _print_more_hints(verbose, show_chains, show_uncovered, bool(active_chains))
 
     _print_next_steps(result, resolved)
 
     click.echo(click.style("  REPRODUCIBILITY", fg="bright_cyan", bold=True))
     click.echo()
     _print_manifest_line(getattr(result, "manifest", {}))
+
+
+def _print_coverage(result, show_uncovered: bool) -> None:
+    """Knowledge-base coverage for this scan.
+
+    Framed as coverage rather than as a findings section. "244 uncovered
+    directives" listed under the findings reads as 244 unassessed risks; what
+    it actually states is how much of this configuration the current knowledge
+    base has rules for. The suspicious subset still surfaces, because an
+    uncovered directive that looks dangerous is worth a human's attention even
+    though it carries no score.
+    """
+    unknowns = getattr(result, "unknown_directives", []) or []
+    manifest = getattr(result, "manifest", {}) or {}
+    rules = manifest.get("rules_for_target")
+
+    total = result.total_directives_scanned
+    covered = total - len(unknowns)
+
+    click.echo(click.style("  COVERAGE", fg="bright_cyan", bold=True))
+    click.echo()
+    # Phrased as "n of m read", not as three independent totals: the reader
+    # needs to see that the uncovered set is a fraction of this file, and that
+    # the rule count is a property of the knowledge base rather than of the
+    # configuration. Listed as a bare "244 uncovered" it reads as 244 unassessed
+    # risks, which is the opposite of what it means.
+    click.echo(f"  {click.style(f'{covered} of {total}', bold=True)} "
+               f"directives read from the configuration were matched against "
+               f"the knowledge base")
+    if unknowns:
+        tail = "" if show_uncovered else click.style(
+            " — use --show-uncovered to list them", dim=True)
+        click.echo(click.style(
+            f"  {len(unknowns)} directive(s) have no rule yet", dim=True) + tail)
+    if rules:
+        click.echo(click.style(
+            f"  {rules} rules available for {result.target_name}", dim=True))
+    click.echo()
+
+    # The suspicious ones are shown regardless: they are the reason the
+    # uncovered set is surfaced at all rather than silently dropped.
+    _print_unknown_directives(unknowns, show_all=show_uncovered)
+
+
+def _print_more_hints(verbose: bool, show_chains: bool,
+                      show_uncovered: bool, has_chains: bool) -> None:
+    """What the summary left out, and the flag that reveals it."""
+    hints = []
+    if not verbose:
+        hints.append(("--verbose", "every finding in full detail"))
+    if has_chains and not (verbose or show_chains):
+        hints.append(("--show-chains", "full attack-chain analysis"))
+    if not show_uncovered:
+        hints.append(("--show-uncovered", "every uncovered directive"))
+    if not hints:
+        return
+
+    width = max(len(f) for f, _ in hints)
+    for flag, what in hints:
+        click.echo(f"  {click.style(flag.ljust(width), fg='green')}"
+                   f"   {click.style('# ' + what, dim=True)}")
+    click.echo()
 
 
 def _print_recommendation(result, top_sorted: list, active_chains: list) -> None:
@@ -559,24 +682,25 @@ def _print_manifest_line(manifest: dict) -> None:
 
 
 def _print_unknown_directives(unknowns: list, show_all: bool = False) -> None:
-    """Show directives the knowledge base does not cover (unknown-directive
-    detection). By default only the *suspicious* ones are listed in full, with
-    the benign remainder summarised — a real config has hundreds of benign
+    """List the directives the knowledge base does not cover.
+
+    The body of the COVERAGE section, which supplies the counts and the
+    heading. By default only the *suspicious* ones are listed, with the benign
+    remainder left to the count above — a real config has hundreds of benign
     unknowns (AddCharset, AddIcon…) that would bury the signal. `show_all`
-    (--show-uncovered) lists every one. Never scored — a coverage-gap panel."""
+    (--show-uncovered) lists every one. Never scored.
+    """
     if not unknowns:
         return
     suspicious = [u for u in unknowns if u.suspicious]
     benign = [u for u in unknowns if not u.suspicious]
     assessed = [u for u in unknowns if u.llm_is_misconfig is not None]
 
-    head = f"UNCOVERED DIRECTIVES  {click.style(f'({len(unknowns)})', dim=True)}"
     if suspicious:
-        head += "  " + click.style(f"{len(suspicious)} suspicious", fg="yellow", bold=True)
-    click.echo(f"  {click.style(head, bold=True)}")
-    click.echo(click.style(
-        "  not in the knowledge base — surfaced, not scored", dim=True))
-    click.echo()
+        click.echo("  " + click.style(
+            f"{len(suspicious)} uncovered directive(s) look suspicious "
+            "— surfaced, not scored", fg="yellow", bold=True))
+        click.echo()
 
     def _line(u):
         if u.suspicious:
@@ -607,12 +731,8 @@ def _print_unknown_directives(unknowns: list, show_all: bool = False) -> None:
     shown_benign = benign if (show_all or assessed) else []
     for u in shown_benign:
         _line(u)
-    hidden = len(benign) - len(shown_benign)
-    if hidden:
-        click.echo(click.style(
-            f"  … and {hidden} more benign uncovered directive(s) "
-            "— use --show-uncovered to list all", dim=True))
-    click.echo()
+    if suspicious or shown_benign:
+        click.echo()
 
 
 def _print_issue_compact(g: dict) -> None:

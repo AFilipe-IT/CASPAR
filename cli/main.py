@@ -90,6 +90,13 @@ def cli(ctx: click.Context, db: str, verbose: bool) -> None:
     ctx.obj["db_path"] = db
 
 
+@click.command("about")
+def about() -> None:
+    """What CASPAR and CVM are, and the version in use."""
+    from cli._output import print_about
+    print_about()
+
+
 for _cmd in (
     scan, watch, publish,                          # runtime
     plugin_group,                                  # plugin add / fetch
@@ -98,6 +105,7 @@ for _cmd in (
     suppress, doctor, fix, promote,                # state management
     serve,                                          # REST API + CVM Console
     demo,                                           # example configurations
+    about,                                          # wordmark + what CVM is
 ):
     cli.add_command(_cmd)
 
