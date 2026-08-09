@@ -203,7 +203,16 @@ if echo "$*" | grep -qE "(^| )watch( |$)"; then
     docker rm -f caspar-watch >/dev/null 2>&1 || true
 fi
 
-exec docker run --rm --init $NAME_ARG \
+# Sem TTY o Docker não dá terminal ao container, o Click conclui que o output
+# não é um terminal e desliga as cores — a CLI aparecia monocromática a quem
+# instalasse por Docker. Só com terminal: com -t o Docker injecta \r em cada
+# linha, o que corromperia 'caspar scan ... > ficheiro.txt' e pipes.
+TTY_ARG=""
+if [ -t 1 ]; then
+    TTY_ARG="-t"
+fi
+
+exec docker run --rm --init $NAME_ARG $TTY_ARG \
     $MOUNT_ARGS \
     $OLLAMA_VOL \
     $REPORTS_VOL \
