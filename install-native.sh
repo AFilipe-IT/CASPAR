@@ -13,7 +13,12 @@ source .venv/bin/activate
 
 # Instalar
 pip install --upgrade pip --quiet
-pip install -e . --quiet
+# Com o extra [api]: sem ele o 'caspar serve' — e portanto toda a consola web —
+# rebentava com ModuleNotFoundError numa instalação nativa, obrigando a um
+# 'pip install -e ".[api]"' manual que ninguém adivinha. A consola vem
+# construída no repositório, logo esta é a única peça que falta para o serve
+# funcionar de origem.
+pip install -e ".[api]" --quiet
 
 # Restaurar base de dados canónica a partir do SQL
 sqlite3 ccss.db < data/ccss_canonical.sql

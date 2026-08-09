@@ -381,9 +381,12 @@ depois: o `kb sha256` **tem** de mudar.
 ## Parte 5 — API REST
 
 ```bash
-pip install -e ".[api]"       # se instalaste por pip
 caspar serve
 ```
+
+Na imagem Docker e no `install-native.sh` as dependências da API já vêm
+instaladas. Só num `pip install -e .` feito à mão é que precisas do extra:
+`pip install -e ".[api]"`.
 
 Noutra sessão:
 
