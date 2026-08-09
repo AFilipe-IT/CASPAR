@@ -18,7 +18,10 @@ from config_assessment.core.engines.aggregation import sparkline as _sparkline
 
 
 @click.command("targets")
-def targets() -> None:
+@click.option("--all", "show_all", is_flag=True,
+              help="Include plugins with no rules in the knowledge base.")
+@click.pass_context
+def targets(ctx: click.Context, show_all: bool) -> None:
     """List available plugins."""
     _discover_plugins()
     from config_assessment.core.runtime import registered_plugins
@@ -26,6 +29,21 @@ def targets() -> None:
     # registered (the suite builds scans on it), but listing it among the
     # supported targets misrepresents what CASPAR covers.
     plugins = [p for p in registered_plugins() if p.metadata().name != "dummy"]
+
+    # A plugin whose code ships but whose rules were never built into the
+    # knowledge base would be announced as supported and then find nothing —
+    # worse than not listing it. Hide those unless asked, and say so.
+    rule_counts = _rule_counts(ctx.obj.get("db_path") if ctx.obj else None)
+    hidden = []
+    if rule_counts is not None and not show_all:
+        kept = []
+        for p in plugins:
+            if rule_counts.get(p.metadata().name, 0) > 0:
+                kept.append(p)
+            else:
+                hidden.append(p.metadata().name)
+        plugins = kept
+
     if not plugins:
         click.echo("No plugins registered.")
         return
@@ -36,6 +54,30 @@ def targets() -> None:
         m = p.metadata()
         click.echo(f"  {m.name:<22}  {m.version:<10}  {m.benchmark_source}")
     click.echo()
+    if hidden:
+        names = ", ".join(sorted(hidden))
+        click.echo(click.style(
+            f"  {len(hidden)} plugin(s) not shown — no rules in this database: "
+            f"{names}", dim=True))
+        click.echo(click.style(
+            "  Build them with 'caspar build --target <name>', or list them "
+            "with 'caspar targets --all'.", dim=True))
+        click.echo()
+
+
+def _rule_counts(db_path: str | None) -> dict[str, int] | None:
+    """Rules per target name, or None if the database cannot be read."""
+    if not db_path or not Path(db_path).exists():
+        return None
+    import sqlite3
+    try:
+        with sqlite3.connect(db_path) as conn:
+            return {name: n for name, n in conn.execute(
+                "SELECT t.name, COUNT(m.id) FROM targets t "
+                "LEFT JOIN misconfigurations m ON m.target_id = t.id "
+                "GROUP BY t.name")}
+    except sqlite3.Error:
+        return None
 
 
 # ── diff (#1) ──────────────────────────────────────────────────────────
