@@ -213,6 +213,23 @@ if echo "$*" | grep -qE "(^| )watch( |$)"; then
     docker rm -f caspar-watch >/dev/null 2>&1 || true
 fi
 
+# 'serve' expõe a API REST e a consola web. Sem publicar a porta, o servidor
+# arrancava dentro do container e o utilizador via os URLs impressos no ecrã
+# sem conseguir abrir nenhum — o container está isolado. Além da porta, é
+# preciso forçar --host 0.0.0.0: o default 127.0.0.1 só aceita ligações de
+# dentro do container, portanto a publicação da porta não bastaria.
+PORT_ARGS=""
+if echo "$*" | grep -qE "(^| )serve( |$)"; then
+    # Respeita um --port escolhido pelo utilizador; senão usa o default da CLI.
+    _port=$(echo "$*" | sed -n 's/.*--port[= ]*\([0-9]\{1,\}\).*/\1/p' | head -n1)
+    [ -n "$_port" ] || _port=8000
+    PORT_ARGS="-p $_port:$_port"
+    if ! echo "$*" | grep -q "\-\-host"; then
+        set -- "$@" --host 0.0.0.0
+    fi
+    echo "🌐 Console: http://localhost:$_port/app   API: http://localhost:$_port/docs" >&2
+fi
+
 # Sem TTY o Docker não dá terminal ao container, o Click conclui que o output
 # não é um terminal e desliga as cores — a CLI aparecia monocromática a quem
 # instalasse por Docker. Só com terminal: com -t o Docker injecta \r em cada
@@ -223,6 +240,7 @@ if [ -t 1 ]; then
 fi
 
 exec docker run --rm --init $NAME_ARG $TTY_ARG \
+    $PORT_ARGS \
     $MOUNT_ARGS \
     $OLLAMA_VOL \
     $REPORTS_VOL \
