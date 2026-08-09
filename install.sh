@@ -117,9 +117,17 @@ done
 set -- "${_new[@]}"
 
 # Montar a pasta escolhida em /workspace (leitura apenas por omissão).
-# Excepção: 'watch --log' precisa de ESCREVER o ficheiro de log, logo read-write.
-if echo "$*" | grep -qE "(^| )watch( |$)" && echo "$*" | grep -q "\-\-log"; then
-    MOUNT_ARGS="-v $WORKDIR_HOST:/workspace"    # read-write: para o log
+# Excepções, ambas casos em que o container tem mesmo de escrever no cwd:
+#   - 'watch --log' escreve o ficheiro de log;
+#   - '--report' com '-o pasta' escreve os relatórios nessa pasta. O -o é
+#     relativo ao cwd, logo resolve para /workspace/<pasta>: com o mount
+#     read-only o scan corria até ao fim e só depois rebentava no mkdir, com
+#     um traceback de 'Read-only file system'. Sem -o não havia problema (cai
+#     no CASPAR_REPORTS_DIR=/reports, montado à parte e escrevível), o que
+#     tornava a falha tanto mais confusa.
+if { echo "$*" | grep -qE "(^| )watch( |$)" && echo "$*" | grep -q "\-\-log"; } \
+   || echo "$*" | grep -q "\-\-report"; then
+    MOUNT_ARGS="-v $WORKDIR_HOST:/workspace"    # read-write: log / relatórios
 else
     MOUNT_ARGS="-v $WORKDIR_HOST:/workspace:ro"
 fi
@@ -165,7 +173,9 @@ if echo "$*" | grep -q "\-\-live" \
     esac
     if [ -n "$_ver" ]; then
         set -- "$@" --service-version "$_ver"
-        echo "🔎 Versão detetada no host: $_svc $_ver (passada ao scan)" >&2
+        # Em inglês: é output da CLI, e a CLI é toda em inglês. Os comentários
+        # deste script ficam em português, mas o que o utilizador vê não.
+        echo "🔎 Detected on host: $_svc $_ver (passed to the scan)" >&2
     fi
 fi
 

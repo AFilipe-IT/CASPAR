@@ -7,6 +7,7 @@ continuous watcher built on top of it. Registered on the group in cli/main.py.
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
@@ -204,7 +205,21 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
             od = Path(os.environ["CASPAR_REPORTS_DIR"])
         else:
             od = Path(__file__).resolve().parent.parent.parent / "reports"
-        od.mkdir(parents=True, exist_ok=True)
+        # A assessment already ran and its output is on screen; failing to
+        # create the directory must not bury that behind a traceback. The
+        # read-only case is called out by name because it is the one a Docker
+        # user hits: the wrapper mounts the working directory read-only unless
+        # the command asks to write there.
+        try:
+            od.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            hint = ""
+            if exc.errno in (errno.EROFS, errno.EACCES, errno.EPERM):
+                hint = ("\n  Drop -o and the report lands in the reports "
+                        "directory, or point -o at a writable path.")
+            raise click.ClickException(
+                f"cannot create report directory '{od}': {exc.strerror}{hint}"
+            ) from exc
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         stem = (
             input_path

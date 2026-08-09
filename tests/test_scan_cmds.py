@@ -156,3 +156,48 @@ class TestAbout:
         f.write_text(_SYSCTL_BAD)
         res = CliRunner().invoke(m.cli, ["--db", str(db_path), "scan", str(f)])
         assert self.WORDMARK_GLYPH not in res.output
+
+
+class TestReportOutputDirErrors:
+    """An unwritable -o reports an error, never a traceback.
+
+    The assessment has already run and printed its result by the time the
+    report directory is created, so a raw OSError buries a completed scan
+    under a stack trace. This was reached in practice through the Docker
+    wrapper, which mounted the working directory read-only.
+    """
+
+    def test_unwritable_output_dir_is_a_clean_error(self, tmp_path):
+        db_path = _seed(tmp_path)
+        f = tmp_path / "sysctl.conf"
+        f.write_text(_SYSCTL_BAD)
+
+        ro = tmp_path / "ro"
+        ro.mkdir()
+        ro.chmod(0o500)  # r-x: cannot create children
+        try:
+            res = CliRunner().invoke(
+                m.cli,
+                ["--db", str(db_path), "scan", str(f),
+                 "--report", "-f", "json", "-o", str(ro / "out")],
+            )
+            assert res.exit_code != 0
+            assert res.exception is None or isinstance(res.exception, SystemExit)
+            assert "cannot create report directory" in res.output
+            assert "Traceback" not in res.output
+        finally:
+            ro.chmod(0o700)  # so tmp_path cleanup can remove it
+
+    def test_writable_output_dir_still_works(self, tmp_path):
+        db_path = _seed(tmp_path)
+        f = tmp_path / "sysctl.conf"
+        f.write_text(_SYSCTL_BAD)
+
+        out = tmp_path / "nested" / "reports"
+        res = CliRunner().invoke(
+            m.cli,
+            ["--db", str(db_path), "scan", str(f),
+             "--report", "-f", "json", "-o", str(out)],
+        )
+        assert res.exit_code == 0, res.output
+        assert list(out.glob("*.json")), "report was not written"
