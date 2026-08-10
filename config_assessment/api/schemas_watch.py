@@ -40,9 +40,14 @@ class WatchSession(BaseModel):
     timestamp: str | None = None
     last_seen: str | None = None
     live: bool = False
-    # 'running' | 'paused' | 'stopped' when this process owns the loop;
-    # None for a CLI-started session, whose state is heartbeat-derived only.
+    # 'running' | 'paused' | 'stopped' | 'failed' when this process owns the
+    # loop; None for a CLI-started session, whose state is heartbeat-derived
+    # only.
     runner_state: str | None = None
+    # Preenchido só quando runner_state == 'failed'. Sem isto, uma sessão que
+    # rebentava (um caminho que nenhum plugin reconhece, por exemplo) devolvia
+    # 202 e desaparecia sem deixar rasto na consola.
+    error: str | None = None
 
 
 class WatchEvent(BaseModel):

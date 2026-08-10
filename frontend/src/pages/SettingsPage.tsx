@@ -54,10 +54,10 @@ function EffectiveConfig() {
       <div className={styles.configRow}>
         <span className={styles.configKey}>Registered plugins</span>
         <span className={styles.pluginTags}>
-          {data.registered_plugins.length === 0 ? (
+          {(data.registered_plugins ?? []).length === 0 ? (
             <span className={styles.unset}>none</span>
           ) : (
-            data.registered_plugins.map((p) => (
+            (data.registered_plugins ?? []).map((p) => (
               <Badge key={p} tone="accent">
                 {p}
               </Badge>
@@ -143,7 +143,7 @@ function DoctorPanel() {
             </span>
           </div>
 
-          {data.findings.length === 0 ? (
+          {(data.findings ?? []).length === 0 ? (
             <EmptyState
               icon={<CheckCircle2 size={24} />}
               title="No integrity problems"
@@ -151,7 +151,7 @@ function DoctorPanel() {
             />
           ) : (
             <div className={styles.findingList}>
-              {data.findings.map((f, i) => (
+              {(data.findings ?? []).map((f, i) => (
                 <div key={i} className={[styles.finding, styles[f.severity]].filter(Boolean).join(" ")}>
                   <span className={styles.stripe} aria-hidden="true" />
                   <span className={styles.findingMeta}>

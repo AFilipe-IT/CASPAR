@@ -76,6 +76,8 @@ def _decorate(row: dict) -> dict:
     row = dict(row)
     row["live"] = is_live(row)
     row["runner_state"] = watch_runner.runner_state(row["watch_session"])
+    if row["runner_state"] == "failed":
+        row["error"] = watch_runner.runner_error(row["watch_session"])
     return row
 
 
@@ -92,7 +94,14 @@ def list_watch_sessions(limit: int = 50,
     here. A paused session deliberately keeps beating, so `runner_state`
     takes precedence over `live` when both are present.
     """
-    return [_decorate(r) for r in db.get_active_watches(limit=limit)]
+    rows = [_decorate(r) for r in db.get_active_watches(limit=limit)]
+    # Uma sessão que rebentou ao primeiro ciclo nunca escreveu resultado
+    # nenhum, portanto não vem da base de dados. Sem a juntar aqui, a consola
+    # aceitava o pedido e depois não mostrava nem a sessão nem o erro.
+    known = {r["watch_session"] for r in rows}
+    rows.extend(s for s in watch_runner.failed_sessions()
+                if s["watch_session"] not in known)
+    return rows
 
 
 @router.get("/{watch_session}", response_model=WatchDetail)

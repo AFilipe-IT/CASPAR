@@ -203,6 +203,34 @@ class TestWatchStart:
                             json={"path": "/no/such/config.conf"})
         assert resp.status_code == 400
 
+    def test_a_session_that_dies_surfaces_with_its_reason(self, client, tmp_path):
+        """Uma sessão que rebenta ao primeiro ciclo tem de aparecer na lista.
+
+        O caso real: um ficheiro cujo nome nenhum plugin reconhece. O POST
+        devolvia 202, a thread morria, e como nunca se escreveu resultado
+        nenhum a sessão não vinha da base de dados — a consola aceitava o
+        pedido e depois não mostrava nem a sessão nem o erro. Existir o
+        ficheiro é o que distingue este caso do 400 de caminho inexistente:
+        aqui a validação passa e a falha só acontece dentro da thread.
+        """
+        doomed = tmp_path / "sem-plugin-nenhum.conf"
+        doomed.write_text("irrelevante\n")
+
+        resp = client.post("/api/v1/watch",
+                            json={"path": str(doomed), "interval": INTERVAL})
+        assert resp.status_code == 202
+        session_id = resp.json()["watch_session"]
+
+        entry = _wait_until(
+            lambda: next((s for s in client.get("/api/v1/watch").json()
+                          if s["watch_session"] == session_id), None),
+            lambda e: e is not None and e["runner_state"] == "failed",
+        )
+        assert entry["runner_state"] == "failed"
+        # A mensagem é o que torna isto accionável — diz qual é o problema.
+        assert entry["error"]
+        assert "plugin" in entry["error"].lower()
+
     def test_session_appears_in_the_list(self, client, config_file):
         session_id = client.post(
             "/api/v1/watch", json={"path": config_file, "interval": INTERVAL},

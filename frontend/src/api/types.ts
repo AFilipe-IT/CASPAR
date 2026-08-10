@@ -219,7 +219,8 @@ export interface PluginsResponse {
 // `live` is heartbeat-derived (true for any running session, CLI or server).
 // `runner_state` is only set for sessions this server process owns — a CLI
 // session reports null, and cannot be paused or stopped from the console.
-export type RunnerState = "running" | "paused" | "stopped";
+// "failed": a sessão rebentou (ex.: caminho que nenhum plugin reconhece).
+export type RunnerState = "running" | "paused" | "stopped" | "failed";
 
 export interface WatchSession {
   watch_session: string;
@@ -235,6 +236,8 @@ export interface WatchSession {
   last_seen: string | null;
   live: boolean;
   runner_state: RunnerState | null;
+  /** Preenchido só quando runner_state === "failed". */
+  error?: string | null;
 }
 
 export interface WatchEvent {

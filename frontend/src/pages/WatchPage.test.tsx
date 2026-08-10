@@ -39,4 +39,15 @@ describe("stateOf", () => {
     // signals disagree. The explicit signal is the truthful one.
     expect(stateOf({ live: true, runner_state: "stopped" }).label).toBe("Stopped");
   });
+
+  it("reports a crashed session as failed, not stopped", () => {
+    // Uma sessão que rebentou também tem a thread morta. Chamar-lhe "Stopped"
+    // fazia uma avaria passar por uma paragem normal — foi assim que um
+    // caminho sem plugin correspondente desapareceu sem explicação.
+    expect(stateOf({ live: false, runner_state: "failed" }).label).toBe("Failed");
+  });
+
+  it("prefers the failure over a not-yet-stale heartbeat", () => {
+    expect(stateOf({ live: true, runner_state: "failed" }).label).toBe("Failed");
+  });
 });

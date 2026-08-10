@@ -21,7 +21,13 @@ export function PluginsPage() {
   const [noLlm, setNoLlm] = useState(false);
   const [dryRun, setDryRun] = useState(false);
 
-  const { data, isLoading, refetch } = usePlugins();
+  // A resposta pode chegar sem as listas (erro serializado, versão antiga do
+  // servidor). Normalizar aqui em vez de espalhar `data?.installed ?? []` por
+  // todo o componente — e nunca ler `.length` de algo que pode não existir.
+  const { data: raw, isLoading, refetch } = usePlugins();
+  const installed = raw?.installed ?? [];
+  const available = raw?.available ?? [];
+  const data = raw ? { ...raw, installed, available } : undefined;
   const installPlugin = useInstallPlugin();
   const invalidateAfterJob = useInvalidateAfterJob();
 
@@ -49,13 +55,13 @@ export function PluginsPage() {
           className={[styles.tab, tab === "installed" ? styles.tabActive : ""].join(" ")}
           onClick={() => setTab("installed")}
         >
-          Installed{data ? ` (${data.installed.length})` : ""}
+          Installed{data ? ` (${installed.length})` : ""}
         </button>
         <button
           className={[styles.tab, tab === "available" ? styles.tabActive : ""].join(" ")}
           onClick={() => setTab("available")}
         >
-          Available{data ? ` (${data.available.length})` : ""}
+          Available{data ? ` (${available.length})` : ""}
         </button>
         <button
           className={[styles.tab, tab === "manual" ? styles.tabActive : ""].join(" ")}
@@ -69,9 +75,9 @@ export function PluginsPage() {
         <Card title="Installed plugins" subtitle="Technologies this server can assess right now.">
           {isLoading ? (
             <SkeletonBlock rows={4} />
-          ) : data && data.installed.length > 0 ? (
+          ) : installed.length > 0 ? (
             <div className={styles.pluginGrid}>
-              {data.installed.map((p) => (
+              {installed.map((p) => (
                 <div key={p.name} className={styles.pluginCard}>
                   <span className={styles.pluginName}>{p.display_name}</span>
                   <span className={styles.pluginMeta}>{p.benchmark_source}</span>
@@ -95,9 +101,9 @@ export function PluginsPage() {
         >
           {isLoading ? (
             <SkeletonBlock rows={4} />
-          ) : data && data.available.length > 0 ? (
+          ) : available.length > 0 ? (
             <div className={styles.pluginGrid}>
-              {data.available.map((p) => (
+              {available.map((p) => (
                 <div key={p.service} className={styles.pluginCard}>
                   <span className={styles.pluginName}>{p.service_name}</span>
                   <span className={styles.pluginMeta}>

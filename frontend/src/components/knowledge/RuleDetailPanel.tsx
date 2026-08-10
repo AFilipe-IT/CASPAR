@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { Badge, severityTone } from "@/components/ui/Badge";
 import { scoreToSeverity } from "@/lib/severity";
 import type { Misconfiguration } from "@/api/types";
+import { FindingDetail } from "./FindingDetail";
 import styles from "./RuleDetailPanel.module.css";
 
 export function RuleDetailPanel({ rule, onClose }: { rule: Misconfiguration; onClose: () => void }) {
@@ -40,19 +41,7 @@ export function RuleDetailPanel({ rule, onClose }: { rule: Misconfiguration; onC
         <dd>{rule.cves.length > 0 ? rule.cves.join(", ") : "none"}</dd>
       </dl>
 
-      {rule.justification && (
-        <section className={styles.section}>
-          <h4>Justification</h4>
-          <p>{rule.justification}</p>
-        </section>
-      )}
-
-      {rule.recommendation && (
-        <section className={styles.section}>
-          <h4>Recommendation</h4>
-          <p>{rule.recommendation}</p>
-        </section>
-      )}
+      <FindingDetail rule={rule} />
     </div>
   );
 }

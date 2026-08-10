@@ -1,0 +1,101 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.section h4 {
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+  margin-bottom: var(--sp-1);
+}
+
+.section p {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.list li + li {
+  margin-top: var(--sp-1);
+}
+
+.meta {
+  font-size: var(--fs-xs) !important;
+  color: var(--text-muted) !important;
+}
+
+.muted {
+  color: var(--text-faint);
+}
+
+.result {
+  color: var(--text-muted) !important;
+}
+
+.fix {
+  font-size: var(--fs-sm);
+  color: var(--text-muted) !important;
+}
+
+.fix code,
+.metricValue {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-alt);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.92em;
+}
+
+/* Uma linha por métrica: nome + valor à esquerda, justificação à direita.
+   Numa coluna estreita passa a empilhar, para o texto não ficar espremido. */
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 0;
+}
+
+.metricRow {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  align-items: baseline;
+}
+
+.metricRow dt {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  justify-content: space-between;
+}
+
+.metricName {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.metricRow dd {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  line-height: 1.55;
+}
+
+@media (max-width: 620px) {
+  .metricRow {
+    grid-template-columns: 1fr;
+  }
+
+  .metricRow dt {
+    justify-content: flex-start;
+  }
+}

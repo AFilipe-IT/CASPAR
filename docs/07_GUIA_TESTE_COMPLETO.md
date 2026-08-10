@@ -585,12 +585,147 @@ Abre `http://localhost:8000/app`.
    escrita por HTTP é deliberadamente inexistente.
 2. **Suppressions em Settings → Accepted risks.** Cria uma, confirma que
    aparece no ficheiro; remove-a, confirma que desaparece.
-3. **Watch tem pausa e paragem** que o CLI não tem. Confirma que pausar
-   interrompe os batimentos e que a sessão fica inactiva.
+3. **Watch tem pausa e paragem** que o CLI não tem — ver §6.3, que é um
+   procedimento completo e não um item de lista.
 4. **Tema claro e escuro** com o selector.
+5. **Detalhe de um finding.** Clica numa linha da tabela de findings (no
+   Dashboard ou no resultado de um scan). Abre um painel com a descrição, o
+   impacto potencial, o cenário de exploração, a remediação e a justificação
+   de **cada métrica CCSS**. É a mesma informação que a Knowledge Base mostra
+   para a regra correspondente.
 
-Se preferires o dashboard servido pelo Jinja2 (a interface anterior, mantida):
-`http://localhost:8000/dashboard`.
+> A consola em `/app` é a única interface Web. O dashboard Jinja2 que existia
+> em `/dashboard` foi removido — se encontrares essa referência em notas
+> antigas, o endereço responde 404.
+
+---
+
+### 6.3 Testar o modo `watch` na consola
+
+O `watch` é o que mais custa a testar, porque três coisas diferentes se
+parecem todas com "o painel não mexe". Este procedimento separa-as.
+
+#### Passo 0 — a armadilha: o serviço tem de estar a correr
+
+Isto derrubou duas VMs de validação. O Apache e o NGINX arrancam ambos
+automaticamente e disputam o porto 80; o NGINX costuma ganhar, e o Apache fica
+em `failed`. O `--live` continua a dar um score — lê a configuração em disco,
+de propósito — e a leitura fácil é que o CVM não reage.
+
+```bash
+systemctl is-active apache2 nginx     # tem de dizer "active" duas vezes
+sudo ss -lptn 'sport = :80'           # só o apache2 aqui
+```
+
+Se o NGINX estiver com o porto 80, aplica o §1.1 (move-o para 8080) — parar o
+NGINX só resolve até ao reboot seguinte. Desde a versão actual, um scan a um
+serviço parado **avisa** em vez de devolver um score em silêncio.
+
+#### Passo 1 — usar um ficheiro, não o serviço
+
+Para ver o mecanismo a funcionar, começa por um ficheiro que possas editar à
+vontade. É mais rápido e não exige `sudo` a cada passo:
+
+```bash
+mkdir -p ~/watch-demo
+cp /etc/apache2/apache2.conf ~/watch-demo/apache2.conf
+```
+
+> **O nome do ficheiro importa.** A escolha do plugin é feita pelo nome — um
+> `demo.conf` não corresponde a plugin nenhum e a sessão morre com
+> "No registered plugin can handle input". Mantém `apache2.conf`,
+> `nginx.conf`, `sshd_config`, etc.
+
+#### Passo 2 — iniciar a sessão pela consola
+
+Em **Watch → Start session**, indica o caminho (`/home/<user>/watch-demo/apache2.conf`)
+e um intervalo curto (2 segundos) para não esperares. O equivalente por API,
+útil para confirmar o que a consola está a fazer:
+
+```bash
+curl -s -X POST localhost:8000/api/v1/watch \
+     -H 'Content-Type: application/json' \
+     -d '{"path": "'$HOME'/watch-demo/apache2.conf", "interval": 2}'
+```
+
+A resposta traz o `watch_session`. Ao fim de poucos segundos deve aparecer na
+lista com `live: true` e `runner_state: "running"`.
+
+#### Passo 3 — provocar a mudança
+
+Noutro terminal, degrada o ficheiro:
+
+```bash
+printf '\nServerTokens Full\nServerSignature On\nTraceEnable On\n' >> ~/watch-demo/apache2.conf
+```
+
+Numa execução de referência nesta máquina, o painel passou de **6.0 (7 issues)**
+para **7.1 (10 issues)** no ciclo seguinte — menos de 10 segundos com
+`interval=2`. Os valores exactos dependem da tua configuração de partida; o que
+tem de acontecer é o score **subir** e um evento novo aparecer na sessão.
+
+Confirmação por API:
+
+```bash
+curl -s localhost:8000/api/v1/watch | python3 -m json.tool
+```
+
+#### Passo 4 — pausar, retomar, parar
+
+São capacidades que o CLI não tem. Testadas pelos botões da consola ou:
+
+```bash
+S=<watch_session>
+curl -s -X POST localhost:8000/api/v1/watch/$S/pause
+curl -s -X POST localhost:8000/api/v1/watch/$S/resume
+curl -s -X POST localhost:8000/api/v1/watch/$S/stop
+```
+
+O `runner_state` deve percorrer `running → paused → running → stopped`.
+
+> **Porque é que `live` continua `true` numa sessão em pausa?** São dois
+> sinais independentes: `live` vem do batimento, e uma sessão em pausa
+> continua a bater de propósito. Quem manda no rótulo é o `runner_state`.
+> Uma sessão iniciada pelo `caspar watch` no terminal não tem `runner_state`
+> (este processo não é dono dela) e é lida só pelo batimento.
+
+#### Passo 5 — só agora, o serviço real
+
+Com o mecanismo já confirmado, repete contra o serviço, que é o cenário da
+dissertação:
+
+```bash
+sudo cp /etc/apache2/conf-available/security.conf /tmp/security.conf.bak
+sudo tee -a /etc/apache2/conf-available/security.conf >/dev/null <<'EOF'
+
+# --- Degradação deliberada para teste CVM (remover depois) ---
+ServerTokens Full
+ServerSignature On
+TraceEnable On
+EOF
+sudo apache2ctl configtest && sudo systemctl reload apache2
+```
+
+O `reload` tem de dizer que correu. Se disser `apache2.service is not active,
+cannot reload`, volta ao Passo 0 — as alterações **não estão em vigor** e o
+score que estás a ver não é o do serviço a correr.
+
+Restaurar no fim:
+
+```bash
+sudo cp /tmp/security.conf.bak /etc/apache2/conf-available/security.conf
+sudo systemctl reload apache2
+```
+
+#### Se o painel não mexer — por esta ordem
+
+| Sintoma | Causa provável | Confirmação |
+|---|---|---|
+| Sessão desaparece logo a seguir a criar | nome do ficheiro não corresponde a plugin | log do servidor: "No registered plugin can handle input" |
+| Score não muda depois de editar | ficheiro editado ≠ ficheiro vigiado | compara o `path` da sessão com o que editaste |
+| Score não muda com o serviço | `reload` falhou; serviço parado | `systemctl is-active apache2` |
+| Nada aparece na lista | sessão nunca chegou a correr | `tail` ao terminal do `caspar serve` |
+| Ecrã escuro ao voltar a uma página | erro de render (corrigido) | consola do browser (F12) |
 
 ---
 
@@ -636,6 +771,9 @@ validação da dissertação.
 | 14 | API: `X-API-Key` | 401 sem chave, 200 com | | |
 | 15 | Consola: as 8 páginas carregam | sem erros de consola | | |
 | 16 | Consola: Remediate não escreve | ficheiro intacto | | |
+| 16a | Consola: detalhe de um finding (§6.2.5) | impacto, remediação e justificação por métrica | | |
+| 16b | Watch na consola (§6.3) | score sobe após editar; `running→paused→running→stopped` | | |
+| 16c | Watch: sessão inválida | aparece como "Failed" com o motivo | | |
 | 17 | Suite de testes | 0 falhas, 0 erros | | |
 
 **Ambiente:** distribuição, versão do Python, método de instalação (pip ou

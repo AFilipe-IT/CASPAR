@@ -1,0 +1,71 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: var(--sp-6);
+}
+
+.modal {
+  width: min(760px, 100%);
+  max-height: min(80vh, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.subtitle {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--panel-alt);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.close:hover {
+  color: var(--text);
+}
+
+/* O detalhe pode ser longo (impacto + cenário + oito métricas): rola aqui
+   dentro, para o overlay ficar fixo e a página por baixo não abanar. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  overflow-y: auto;
+}

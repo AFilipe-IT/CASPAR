@@ -152,15 +152,46 @@ def stop_watch(session_id: str) -> bool:
 
 
 def runner_state(session_id: str) -> str | None:
-    """'running' | 'paused' | 'stopped' for a session owned by this process,
-    or None for one this process doesn't own (a CLI run, or a session from
-    before a restart) — whose liveness is then heartbeat-derived only."""
+    """'running' | 'paused' | 'stopped' | 'failed' for a session owned by this
+    process, or None for one this process doesn't own (a CLI run, or a session
+    from before a restart) — whose liveness is then heartbeat-derived only."""
     session = _SESSIONS.get(session_id)
     if session is None:
         return None
+    # 'failed' antes de 'stopped': uma sessão que rebentou também tem a thread
+    # morta, e reportá-la como parada faz uma avaria passar por uma paragem
+    # normal. Era o que acontecia com um caminho sem plugin correspondente —
+    # o POST devolvia 202, a sessão desaparecia, e o painel não dizia nada.
+    if session.error is not None:
+        return "failed"
     if session.stop.is_set() or (session.thread and not session.thread.is_alive()):
         return "stopped"
     return "running" if session.resumed.is_set() else "paused"
+
+
+def runner_error(session_id: str) -> str | None:
+    """A mensagem que derrubou a sessão, ou None se não houve nenhuma."""
+    session = _SESSIONS.get(session_id)
+    return session.error if session else None
+
+
+def failed_sessions() -> list[dict]:
+    """Sessões que rebentaram antes de escreverem qualquer resultado.
+
+    A lista da consola é construída a partir da base de dados, e uma sessão
+    que morreu ao primeiro ciclo nunca lá chegou a escrever nada — ficava
+    invisível. O caso real: um caminho cujo nome nenhum plugin reconhece
+    (`demo.conf`), em que o POST devolvia 202 e depois não havia sessão
+    nenhuma para ver, nem erro que explicasse porquê.
+    """
+    with _LOCK:
+        sessions = list(_SESSIONS.values())
+    return [
+        {"watch_session": s.session_id, "input_path": s.path,
+         "target_name": s.label, "watch_interval": s.interval,
+         "live": False, "runner_state": "failed", "error": s.error}
+        for s in sessions if s.error is not None
+    ]
 
 
 def clear_registry(timeout: float = 5.0) -> None:

@@ -31,6 +31,9 @@ import styles from "./WatchPage.module.css";
  *  gives us: heartbeat liveness, and (only for sessions this server owns)
  *  the runner's own state. */
 export function stateOf(s: Pick<WatchSession, "live" | "runner_state">) {
+  // 'failed' primeiro: uma sessão que rebentou também não está viva, e
+  // mostrá-la como "Stopped" faz uma avaria passar por uma paragem normal.
+  if (s.runner_state === "failed") return { label: "Failed", dot: styles.dotFailed };
   if (s.runner_state === "paused") return { label: "Paused", dot: styles.dotPaused };
   if (s.runner_state === "stopped") return { label: "Stopped", dot: styles.dot };
   if (s.live) return { label: "Live", dot: styles.dotLive };
@@ -242,6 +245,7 @@ export function WatchPage() {
                       {s.global_temporal_score.toFixed(1)}
                     </Badge>
                   </div>
+                  {s.error && <div className={styles.sessionError}>{s.error}</div>}
                 </div>
               ))}
             </div>

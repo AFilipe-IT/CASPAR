@@ -64,9 +64,9 @@ export function CompareView() {
             deltaLabel="pts"
             tone={diff.data.score_delta > 0 ? "critical" : "neutral"}
           />
-          <KpiTile label="Resolved issues" value={diff.data.resolved.length} icon={<GitCompare size={18} />} />
-          <KpiTile label="New issues" value={diff.data.new_issues.length} icon={<GitCompare size={18} />}
-            tone={diff.data.new_issues.length > 0 ? "critical" : "neutral"} />
+          <KpiTile label="Resolved issues" value={(diff.data.resolved ?? []).length} icon={<GitCompare size={18} />} />
+          <KpiTile label="New issues" value={(diff.data.new_issues ?? []).length} icon={<GitCompare size={18} />}
+            tone={(diff.data.new_issues ?? []).length > 0 ? "critical" : "neutral"} />
         </div>
       )}
 

@@ -94,6 +94,24 @@
   background: var(--sev-medium);
 }
 
+.dotFailed {
+  background: var(--sev-critical);
+}
+
+/* A razão da avaria, por baixo da sessão. Sem ela ficava só "Failed", que
+   não chega para agir — o erro costuma dizer exactamente o que corrigir. */
+.sessionError {
+  grid-column: 1 / -1;
+  margin-top: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--panel-alt);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
