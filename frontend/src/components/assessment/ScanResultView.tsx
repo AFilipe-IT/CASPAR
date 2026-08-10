@@ -62,7 +62,7 @@ export function ScanResultView({ result }: { result: ScanResponse }) {
 
       {result.chains.length > 0 && (
         <div style={{ marginTop: "var(--sp-5)" }}>
-          <AttackChainsList chains={result.chains} />
+          <AttackChainsList chains={result.chains} findings={result.issues} />
         </div>
       )}
     </Card>

@@ -6,14 +6,25 @@
 
 .row {
   display: grid;
-  grid-template-columns: 120px 1fr 40px;
+  grid-template-columns: minmax(140px, 34%) 1fr 40px;
   align-items: center;
   gap: var(--sp-3);
 }
 
 .name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-size: var(--fs-sm);
   color: var(--text);
+  overflow: hidden;
+}
+
+/* O caminho é o desempate entre alvos com o mesmo nome de serviço, mas é
+   informação secundária — fica mais pequeno e recuado. */
+.path {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -44,6 +44,33 @@ export function useStartWatch() {
 }
 
 /**
+ * Apagar uma sessão parada e o seu histórico. A API responde 409 a uma sessão
+ * ainda a correr — pará-la primeiro é deliberado, não uma limitação: apagar
+ * debaixo do loop deixá-lo-ia a escrever eventos de um histórico que já não
+ * existe.
+ */
+export function useDeleteWatchSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      api.delete<{ watch_session: string; events_removed: number }>(
+        `/watch/${sessionId}`,
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["watch"] }),
+  });
+}
+
+/** Limpar todas as sessões paradas de uma vez; as vivas ficam. */
+export function useClearWatchSessions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.delete<{ sessions_removed: number; kept_running: number }>("/watch"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["watch"] }),
+  });
+}
+
+/**
  * pause / resume / stop. These only work on sessions this server process
  * started — the API answers 409 for a CLI-started session, which the page
  * surfaces rather than swallowing.

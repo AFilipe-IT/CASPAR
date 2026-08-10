@@ -306,6 +306,79 @@ class TestWatchLifecycle:
         assert client.post(f"/api/v1/watch/{session_id}/stop").status_code == 200
 
 
+class TestWatchDeletion:
+    """Limpar sessões antigas.
+
+    Uma máquina de validação acumula sessões paradas depressa e a lista deixa
+    de ser navegável — mas uma sessão viva apagada continuaria a escrever
+    eventos para um histórico que já não existe, portanto essa é protegida.
+    """
+
+    def _start(self, client, config_file) -> str:
+        session_id = client.post(
+            "/api/v1/watch", json={"path": config_file, "interval": INTERVAL},
+        ).json()["watch_session"]
+        _wait_for_events(client, session_id, 1)
+        return session_id
+
+    def test_delete_removes_a_stopped_session(self, client, config_file):
+        session_id = self._start(client, config_file)
+        client.post(f"/api/v1/watch/{session_id}/stop")
+
+        resp = client.delete(f"/api/v1/watch/{session_id}")
+        assert resp.status_code == 200
+        assert resp.json()["events_removed"] >= 1
+        # Some do histórico e da lista, não de uma só das duas tabelas.
+        assert client.get(f"/api/v1/watch/{session_id}").status_code == 404
+        assert session_id not in [s["watch_session"]
+                                  for s in client.get("/api/v1/watch").json()]
+
+    def test_delete_of_a_running_session_is_409(self, client, config_file):
+        session_id = self._start(client, config_file)
+        assert client.delete(f"/api/v1/watch/{session_id}").status_code == 409
+        # E não apagou nada por engano.
+        assert client.get(f"/api/v1/watch/{session_id}").status_code == 200
+
+    def test_delete_of_unknown_session_is_404(self, client):
+        assert client.delete("/api/v1/watch/unknown-session").status_code == 404
+
+    def test_clear_keeps_the_running_session(self, client, config_file):
+        stopped = self._start(client, config_file)
+        client.post(f"/api/v1/watch/{stopped}/stop")
+        running = self._start(client, config_file)
+
+        body = client.delete("/api/v1/watch").json()
+        assert body["kept_running"] == 1
+        assert body["sessions_removed"] >= 1
+
+        remaining = [s["watch_session"] for s in client.get("/api/v1/watch").json()]
+        assert running in remaining
+        assert stopped not in remaining
+
+
+class TestWatchEventDetail:
+    """Um evento tem de dar acesso às directivas que moveram o score.
+
+    Sem a chave do scan, a sessão mostrava um número global e mais nada —
+    não havia como saber que configuração o produziu.
+    """
+
+    def test_events_carry_the_scan_id(self, client, config_file):
+        session_id = client.post(
+            "/api/v1/watch", json={"path": config_file, "interval": INTERVAL},
+        ).json()["watch_session"]
+        _wait_for_events(client, session_id, 1)
+
+        detail = client.get(f"/api/v1/watch/{session_id}").json()
+        scan_id = detail["events"][0]["scan_id"]
+        assert scan_id
+
+        # E a chave abre mesmo o scan completo, com os achados lá dentro.
+        scan = client.get(f"/api/v1/scans/{scan_id}")
+        assert scan.status_code == 200
+        assert "issues" in scan.json()
+
+
 class TestWatchControlErrors:
     """A session this process doesn't own can't be controlled — say so with a
     409 rather than reporting a pause that never happened."""

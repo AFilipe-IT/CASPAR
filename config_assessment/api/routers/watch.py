@@ -121,6 +121,39 @@ def get_watch_session(watch_session: str,
     return ctx
 
 
+@router.delete("/{watch_session}")
+def delete_session(watch_session: str, db: Database = Depends(get_db),
+                    _auth: None = Depends(require_api_key)) -> dict:
+    """Apagar uma sessão e o seu histórico.
+
+    Recusa uma sessão ainda viva: apagar debaixo dos pés do loop deixaria a
+    thread a escrever eventos de uma sessão que já não existe. Pára-a primeiro.
+    """
+    if watch_runner.runner_state(watch_session) in {"running", "paused"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Session is still running — stop it before deleting.")
+    removed = db.delete_watch_session(watch_session)
+    if removed == 0 and watch_runner.runner_state(watch_session) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                             detail="Watch session not found")
+    return {"watch_session": watch_session, "events_removed": removed}
+
+
+@router.delete("")
+def clear_sessions(db: Database = Depends(get_db),
+                    _auth: None = Depends(require_api_key)) -> dict:
+    """Limpar todas as sessões paradas, preservando as que estão a correr.
+
+    Uma máquina de validação acumula sessões antigas depressa, e a lista
+    deixa de ser utilizável. As vivas ficam: são as únicas que ainda têm
+    alguma coisa para dizer.
+    """
+    alive = watch_runner.live_session_ids()
+    removed = db.delete_stale_watch_sessions(keep=alive)
+    return {"sessions_removed": removed, "kept_running": len(alive)}
+
+
 def _control(action, watch_session: str, verb: str) -> dict:
     if not action(watch_session):
         raise HTTPException(

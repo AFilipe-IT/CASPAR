@@ -8,21 +8,25 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Eye, Info, Pause, Play, PlayCircle, Square } from "lucide-react";
+import { Eye, Info, Pause, Play, PlayCircle, Square, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge, severityTone } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
+import { Modal } from "@/components/ui/Modal";
+import { WatchEventDetail } from "@/components/watch/WatchEventDetail";
 import {
+  useClearWatchSessions,
+  useDeleteWatchSession,
   useStartWatch,
   useWatchControl,
   useWatchSession,
   useWatchSessions,
 } from "@/api/watch";
 import { useLiveServices } from "@/api/targets";
-import type { WatchSession } from "@/api/types";
+import type { WatchEvent, WatchSession } from "@/api/types";
 import { scoreToHex, scoreToRiskLabel } from "@/lib/severity";
 import shared from "./JobsShared.module.css";
 import styles from "./WatchPage.module.css";
@@ -64,6 +68,8 @@ export function WatchPage() {
   const [path, setPath] = useState("");
   const [interval, setIntervalValue] = useState(2);
   const [selected, setSelected] = useState<string | undefined>();
+  // O evento aberto no detalhe: as directivas que produziram aquele score.
+  const [openEvent, setOpenEvent] = useState<WatchEvent | null>(null);
 
   const { data: liveServices } = useLiveServices();
   const selectedService = liveServices?.find((s) => s.service === service);
@@ -76,6 +82,8 @@ export function WatchPage() {
   const { data: detail } = useWatchSession(selected);
   const startWatch = useStartWatch();
   const control = useWatchControl();
+  const deleteSession = useDeleteWatchSession();
+  const clearSessions = useClearWatchSessions();
 
   // Abrir na sessão VIVA, não na primeira da lista. A lista vem ordenada por
   // histórico, e num ambiente já usado as primeiras são sessões antigas e
@@ -108,6 +116,22 @@ export function WatchPage() {
     if (!selected) return;
     control.mutate({ sessionId: selected, action });
   }
+
+  /** Apagar uma sessão. Deselecciona-a antes: sem isso a página ficava a
+   *  pedir o detalhe de uma sessão que já não existe e mostrava um 404. */
+  function removeSession(sessionId: string) {
+    deleteSession.mutate(sessionId, {
+      onSuccess: () => {
+        if (sessionId === selected) setSelected(undefined);
+      },
+    });
+  }
+
+  // Só sessões paradas se podem apagar; uma viva tem de ser parada primeiro,
+  // e o botão de limpeza não faria nada se não houvesse nenhuma parada.
+  const stoppedCount = (sessions ?? []).filter(
+    (s) => stateOf(s).label !== "Live" && stateOf(s).label !== "Paused",
+  ).length;
 
   return (
     <>
@@ -222,7 +246,36 @@ export function WatchPage() {
       </Card>
 
       <div className={styles.layout}>
-        <Card title="Sessions" subtitle="Started here or by the CLI.">
+        <Card
+          title="Sessions"
+          subtitle="Started here or by the CLI."
+          action={
+            stoppedCount > 0 ? (
+              <Button
+                icon={<Trash2 size={14} />}
+                disabled={clearSessions.isPending}
+                onClick={() => {
+                  // Apagar histórico não se desfaz — confirmar é barato.
+                  if (
+                    window.confirm(
+                      `Delete ${stoppedCount} stopped session(s) and their history? ` +
+                        "Running sessions are kept.",
+                    )
+                  ) {
+                    clearSessions.mutate();
+                  }
+                }}
+              >
+                {clearSessions.isPending ? "Clearing…" : `Clear ${stoppedCount} stopped`}
+              </Button>
+            ) : undefined
+          }
+        >
+          {(deleteSession.isError || clearSessions.isError) && (
+            <div className={shared.error}>
+              {((deleteSession.error ?? clearSessions.error) as Error).message}
+            </div>
+          )}
           {isLoading ? (
             <SkeletonBlock rows={4} />
           ) : sessions && sessions.length > 0 ? (
@@ -247,9 +300,29 @@ export function WatchPage() {
                     <span className={styles.sessionMeta}>
                       {s.watch_session.slice(0, 8)}
                     </span>
-                    <Badge tone={severityTone(s.severity ?? "None")}>
-                      {s.global_temporal_score.toFixed(1)}
-                    </Badge>
+                    <div className={styles.sessionActions}>
+                      <Badge tone={severityTone(s.severity ?? "None")}>
+                        {s.global_temporal_score.toFixed(1)}
+                      </Badge>
+                      {/* Só nas paradas: a API recusa apagar uma viva, e um
+                          botão que só devolve 409 é ruído. `stopPropagation`
+                          porque a linha inteira selecciona a sessão. */}
+                      {stateOf(s).label !== "Live" && stateOf(s).label !== "Paused" && (
+                        <button
+                          type="button"
+                          className={styles.deleteBtn}
+                          title="Delete this session and its history"
+                          aria-label={`Delete session ${s.watch_session.slice(0, 8)}`}
+                          disabled={deleteSession.isPending}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeSession(s.watch_session);
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {s.error && <div className={styles.sessionError}>{s.error}</div>}
                 </div>
@@ -398,9 +471,22 @@ export function WatchPage() {
                 )}
               </Card>
 
-              <Card title="Events" subtitle="Every re-scan, newest first.">
+              <Card
+                title="Events"
+                subtitle="Every re-scan, newest first — open one to see the directives behind its score."
+              >
                 {detail.events.map((e, i) => (
-                  <div key={i} className={styles.eventRow}>
+                  // Um botão, não uma <div> com onClick: cada evento abre um
+                  // detalhe, portanto é accionável por teclado e anuncia-se
+                  // como tal. Eventos antigos, gravados antes de o `scan_id`
+                  // ir na resposta, ficam sem detalhe — daí o disabled.
+                  <button
+                    key={e.scan_id ?? i}
+                    type="button"
+                    className={styles.eventRow}
+                    disabled={!e.scan_id}
+                    onClick={() => e.scan_id && setOpenEvent(e)}
+                  >
                     <span className={styles.eventTime}>{fmtTime(e.timestamp)}</span>
                     <Badge tone={severityTone(e.severity ?? "None")}>
                       {e.severity ?? "None"}
@@ -414,7 +500,7 @@ export function WatchPage() {
                     >
                       {e.global_temporal_score.toFixed(1)}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </Card>
             </>
@@ -429,6 +515,16 @@ export function WatchPage() {
           )}
         </div>
       </div>
+
+      {openEvent?.scan_id && (
+        <Modal
+          title={`${openEvent.target_name ?? "Config"} · ${openEvent.global_temporal_score.toFixed(1)}`}
+          subtitle={`${openEvent.input_path ?? ""} · ${fmtTime(openEvent.timestamp)}`}
+          onClose={() => setOpenEvent(null)}
+        >
+          <WatchEventDetail scanId={openEvent.scan_id} />
+        </Modal>
+      )}
     </>
   );
 }

@@ -8,12 +8,34 @@
 }
 
 .item {
+  border-bottom: 1px solid var(--border);
+}
+
+/* O botão é a linha inteira, para o alvo de clique cobrir a área visível
+   em vez de só o texto. */
+.trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
+  width: 100%;
   padding: var(--sp-2) var(--sp-1);
-  border-bottom: 1px solid var(--border);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.trigger:hover {
+  background: var(--panel-alt);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .item:last-child {

@@ -194,6 +194,19 @@ def failed_sessions() -> list[dict]:
     ]
 
 
+def live_session_ids() -> set[str]:
+    """Sessões que este processo ainda está a correr (a correr ou em pausa).
+
+    A limpeza em lote da consola precisa de saber o que não pode apagar: uma
+    sessão viva apagada continuaria a escrever eventos de um histórico que já
+    não existe. Só este módulo sabe quais são — a base de dados vê batimentos,
+    não threads.
+    """
+    with _LOCK:
+        ids = list(_SESSIONS)
+    return {sid for sid in ids if runner_state(sid) in {"running", "paused"}}
+
+
 def clear_registry(timeout: float = 5.0) -> None:
     """Stop every session and wait for its thread, then forget them all.
 

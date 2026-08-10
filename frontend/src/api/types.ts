@@ -237,6 +237,7 @@ export type RunnerState = "running" | "paused" | "stopped" | "failed";
 
 export interface WatchSession {
   watch_session: string;
+  scan_id?: string | null;
   target_name: string | null;
   input_path: string | null;
   host_id: number | null;
@@ -254,6 +255,8 @@ export interface WatchSession {
 }
 
 export interface WatchEvent {
+  /** Chave do scan guardado neste evento: abre as directivas por trás do score. */
+  scan_id: string | null;
   timestamp: string | null;
   target_name: string | null;
   input_path: string | null;

@@ -46,6 +46,34 @@
   gap: var(--sp-2);
 }
 
+.sessionActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.deleteBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.deleteBtn:hover:not(:disabled) {
+  color: var(--sev-critical);
+  background: var(--panel-alt);
+}
+
+.deleteBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .sessionName {
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -181,13 +209,30 @@
   margin-top: var(--sp-4);
 }
 
+/* Um <button> a largura toda: o elemento é accionável, mas tem de continuar a
+   ler-se como uma linha da lista, não como um botão de formulário. */
 .eventRow {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  width: 100%;
   padding: var(--sp-3) var(--sp-1);
+  border: none;
   border-bottom: 1px solid var(--border);
+  background: none;
+  font-family: inherit;
   font-size: var(--fs-sm);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.eventRow:hover:not(:disabled) {
+  background: var(--panel-alt);
+}
+
+.eventRow:disabled {
+  cursor: default;
 }
 
 .eventTime {

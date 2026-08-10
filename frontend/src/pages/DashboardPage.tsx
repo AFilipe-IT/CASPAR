@@ -43,8 +43,15 @@ export function DashboardPage() {
   const detailsLoading = scanDetailQueries.some((q) => q.isLoading);
 
   const worstScore = rollup?.worst_score ?? 0;
+  // O caminho vai junto: vários alvos partilham `target_name` (o apache do
+  // sistema, uma fixture, uma cópia de trabalho) e a lista mostrava
+  // "apache-httpd" quatro vezes sem dizer qual era qual.
   const services = details
-    .map((d) => ({ name: d.target_name, score: d.global_temporal_score }))
+    .map((d) => ({
+      name: d.target_name,
+      score: d.global_temporal_score,
+      input: d.input_path,
+    }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
@@ -54,6 +61,9 @@ export function DashboardPage() {
     .slice(0, 5);
 
   const allChains = details.flatMap((d) => d.chains);
+  // Os achados de todos os scans: o detalhe de uma cadeia liga cada
+  // directiva ao problema concreto encontrado.
+  const allIssues = details.flatMap((d) => d.issues);
   const totalDirectives = details.reduce((sum, d) => sum + d.total_directives_scanned, 0);
   // Problemas em aberto no estado ACTUAL de cada configuração — uma leitura por
   // `input_path`, a mais recente. O `rollup.total_issues` agrega o histórico
@@ -114,7 +124,7 @@ export function DashboardPage() {
           {isLoading ? <SkeletonBlock rows={5} /> : <FindingsTable rows={topFindings} />}
         </Card>
         <Card title="Attack Chains (Top Risk)">
-          {isLoading ? <SkeletonBlock rows={3} /> : <AttackChainsList chains={allChains} />}
+          {isLoading ? <SkeletonBlock rows={3} /> : <AttackChainsList chains={allChains} findings={allIssues} />}
         </Card>
       </div>
 

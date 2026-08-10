@@ -99,3 +99,34 @@
     justify-content: flex-start;
   }
 }
+
+/* Referências externas (CVE/CCE/CIS) — identificadores curtos em linha,
+   com o rótulo a servir de coluna para os três serem lidos em paralelo. */
+.refs {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.refLabel {
+  min-width: 34px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cve {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.cve:hover,
+.cve:focus-visible {
+  border-bottom-color: currentColor;
+}

@@ -1,0 +1,99 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.title {
+  font-size: var(--fs-md);
+  color: var(--text);
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+}
+
+.target {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.section h4 {
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+  margin-bottom: var(--sp-1);
+}
+
+.body {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.step {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+.arrow {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.stepBody {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.directive {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.stepScore {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.badValue {
+  color: var(--text-muted);
+}
+
+.meta {
+  font-size: var(--fs-sm);
+  color: var(--text);
+  margin: 0;
+}
+
+.muted {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}

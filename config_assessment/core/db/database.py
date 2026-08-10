@@ -816,9 +816,13 @@ class Database:
 
     def get_watch_events(self, watch_session: str, limit: int = 200) -> list[dict]:
         """Full event history for one watch session, newest first."""
+        # O `id` vai junto: cada evento é um scan completo guardado, e sem a
+        # chave o painel só conseguia mostrar o score global. Com ela, abrir um
+        # evento leva às directivas concretas que o produziram (GET /scans/{id}).
         sql = (
-            "SELECT timestamp, target_name, input_path, global_temporal_score, "
-            "severity, total_issues, total_chains, watch_interval "
+            "SELECT id AS scan_id, timestamp, target_name, input_path, "
+            "global_temporal_score, severity, total_issues, total_chains, "
+            "watch_interval "
             "FROM scan_results WHERE watch_session = ? "
             "ORDER BY rowid DESC LIMIT ?"
         )
@@ -832,6 +836,42 @@ class Database:
             (watch_session,),
         ).fetchone()
         return row["last_seen"] if row else None
+
+    def delete_watch_session(self, watch_session: str) -> int:
+        """Apagar uma sessão de watch: os seus eventos e o batimento.
+
+        Uma sessão vive em duas tabelas — as leituras em `scan_results` e a
+        marca de vida em `watch_heartbeats`. Apagar só uma delas deixava a
+        sessão meio existente: sem histórico mas ainda listada, ou o inverso.
+
+        Devolve o número de eventos removidos.
+        """
+        cur = self._conn.execute(
+            "DELETE FROM scan_results WHERE watch_session = ?", (watch_session,))
+        removed = cur.rowcount
+        self._conn.execute(
+            "DELETE FROM watch_heartbeats WHERE watch_session = ?", (watch_session,))
+        self._conn.commit()
+        return removed
+
+    def delete_stale_watch_sessions(self, keep: set[str] | None = None) -> int:
+        """Apagar todas as sessões de watch excepto as indicadas em *keep*.
+
+        Serve a limpeza em lote da consola: uma máquina de testes acumula
+        dezenas de sessões paradas e a lista deixa de ser navegável. As
+        sessões vivas são protegidas pelo chamador, que é quem sabe quais
+        estão a correr neste processo.
+
+        Devolve o número de sessões removidas.
+        """
+        keep = keep or set()
+        rows = self._conn.execute(
+            "SELECT DISTINCT watch_session FROM scan_results "
+            "WHERE watch_session IS NOT NULL").fetchall()
+        targets = [r[0] for r in rows if r[0] not in keep]
+        for session in targets:
+            self.delete_watch_session(session)
+        return len(targets)
 
     def delete_scan_result(self, scan_id: str) -> bool:
         """Remove a persisted scan record. Returns True if a row was deleted."""

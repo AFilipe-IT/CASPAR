@@ -95,6 +95,44 @@ export function FindingDetail({ rule }: { rule: Misconfiguration }) {
         )}
       </section>
 
+      {/* CVE/CCE/CIS já vinham na resposta da API e nunca chegavam ao ecrã.
+          São a ligação entre um achado de configuração e a vulnerabilidade
+          publicada correspondente — a primeira coisa que se procura para
+          justificar a gravidade a quem não conhece a regra. */}
+      {(rule.cves?.length > 0 || rule.cce_id || rule.cis_section) && (
+        <section className={styles.section}>
+          <h4>References</h4>
+          {rule.cves?.length > 0 && (
+            <p className={styles.refs}>
+              <span className={styles.refLabel}>CVE</span>
+              {rule.cves.map((cve) => (
+                <a
+                  key={cve}
+                  className={styles.cve}
+                  href={`https://nvd.nist.gov/vuln/detail/${cve}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  {cve}
+                </a>
+              ))}
+            </p>
+          )}
+          {rule.cce_id && (
+            <p className={styles.refs}>
+              <span className={styles.refLabel}>CCE</span>
+              <code>{rule.cce_id}</code>
+            </p>
+          )}
+          {rule.cis_section && (
+            <p className={styles.refs}>
+              <span className={styles.refLabel}>CIS</span>
+              <code>{rule.cis_section}</code>
+            </p>
+          )}
+        </section>
+      )}
+
       <section className={styles.section}>
         <h4>Score breakdown (CCSS)</h4>
         <p className={styles.meta}>

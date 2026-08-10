@@ -29,6 +29,8 @@ class WatchStartRequest(BaseModel):
 class WatchSession(BaseModel):
     """One session's summary, as shown in the sessions list."""
     watch_session: str
+    # O scan mais recente da sessão, quando o resumo vem do histórico.
+    scan_id: str | None = None
     target_name: str | None = None
     input_path: str | None = None
     host_id: int | None = None
@@ -51,6 +53,10 @@ class WatchSession(BaseModel):
 
 
 class WatchEvent(BaseModel):
+    # Cada evento é um scan guardado por inteiro. A chave é o que permite ir
+    # das linhas do histórico às directivas que moveram o score, em vez de
+    # ficar pelo número global.
+    scan_id: str | None = None
     timestamp: str | None = None
     target_name: str | None = None
     input_path: str | None = None
