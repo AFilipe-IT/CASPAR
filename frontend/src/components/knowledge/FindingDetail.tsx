@@ -28,8 +28,42 @@ export function FindingDetail({ rule }: { rule: Misconfiguration }) {
     grl: rule.grl,
   };
 
+  // Onde é que isto está, de facto. O `--dashboard live` mostrava a linha da
+  // configuração e esta consola não — sem ela, "Set ServerTokens to Prod"
+  // deixa o trabalho de encontrar a linha todo para quem lê, e num apache com
+  // mods-available espalhados por dezenas de ficheiros isso não é trivial. Já
+  // vinha na resposta (`source_directive`), era descartado.
+  const src = rule.source_directive;
+
   return (
     <>
+      {src?.source_file && (
+        <section className={styles.section}>
+          <h4>Where it is</h4>
+          <p className={styles.location}>
+            <code>
+              {src.source_file}
+              {src.line_number != null && `:${src.line_number}`}
+            </code>
+          </p>
+          {src.value && (
+            <pre className={styles.snippet}>
+              <span className={styles.lineNo}>
+                {src.line_number != null ? src.line_number : "—"}
+              </span>
+              <code>
+                {src.name} {src.value}
+              </code>
+            </pre>
+          )}
+          {src.context && src.context !== "global" && (
+            <p className={styles.meta}>
+              Context: <code>{src.context}</code>
+            </p>
+          )}
+        </section>
+      )}
+
       {narrative?.description && (
         <section className={styles.section}>
           <h4>What this is</h4>

@@ -16,6 +16,19 @@ import styles from "./ChainDetail.module.css";
  * directiva pode aparecer sem achado correspondente (a regra existe mas não
  * disparou), e nesse caso é mostrada à mesma, sem score.
  */
+/** O achado de onde sai o número, para a conta ser auditável em vez de
+ *  aparecer um score amplificado sem origem visível. */
+function formatWorst(chain: AttackChain, findings: Misconfiguration[]): string {
+  const constituents = findings.filter((f) =>
+    chain.misconfig_directives.includes(f.directive),
+  );
+  if (constituents.length === 0) return "its worst component";
+  const worst = constituents.reduce((a, b) =>
+    b.temporal_score > a.temporal_score ? b : a,
+  );
+  return `${worst.directive} at ${worst.temporal_score.toFixed(1)}`;
+}
+
 export function ChainDetail({
   chain,
   findings = [],
@@ -75,11 +88,23 @@ export function ChainDetail({
       </section>
 
       <section className={styles.section}>
-        <h4>Scoring</h4>
+        <h4>Composite risk (indicative)</h4>
+        {/* O factor é uma constante escrita no `chains.json` do plugin, curada
+            por perito — não é derivado do NISTIR nem medido empiricamente.
+            Apresentá-lo como "Amplification ×1.60 · amplified score 10.0", ao
+            lado de scores CCSS que SÃO derivados, dava-lhe um estatuto que
+            não tem e não se defende. O rótulo e a nota abaixo dizem-no. */}
         <p className={styles.meta}>
-          Amplification ×{chain.amplification.toFixed(2)} · amplified score{" "}
-          {chain.amplified_score.toFixed(1)}
+          Indicative composite score {chain.amplified_score.toFixed(1)}
           {chain.cross_target && " · spans more than one service"}
+        </p>
+        <p className={styles.muted}>
+          Derived from the chain's worst component (
+          {formatWorst(chain, findings)}) using a curated factor of ×
+          {chain.amplification.toFixed(1)}, capped at 10.0. Unlike the CCSS
+          scores of the individual findings, this factor is a qualitative,
+          expert-assigned calibration — it ranks chains against each other and
+          is not an empirically validated measure of risk.
         </p>
         {/* Esclarece uma dúvida recorrente: uma cadeia a 10.0 ao lado de um
             score global de 8.7 não é incoerência. */}
