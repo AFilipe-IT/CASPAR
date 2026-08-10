@@ -16,7 +16,7 @@ primeiro scan, aqui assume-se que a instalação já funciona.
 
 ```bash
 which caspar          # .venv/bin/caspar (pip) ou ~/.local/bin/caspar (Docker)
-caspar targets        # tem de listar 11 alvos
+caspar targets        # tem de listar 12 alvos
 ```
 
 Cada scan imprime no fim uma linha `reproducible: … kb sha256:…`. **Anota-a.**
@@ -451,7 +451,7 @@ existem apenas através da API e da consola, uma assimetria deliberada.
 ### 4.1 Inspeccionar
 
 ```bash
-caspar targets            # 11 alvos com regras
+caspar targets            # 12 alvos com regras
 caspar targets --all      # inclui os que não têm regras construídas
 ```
 
@@ -837,7 +837,7 @@ validação da dissertação.
 
 | # | Verificação | Esperado | Obtido | ✓/✗ |
 |---|---|---|---|---|
-| 1 | `caspar targets` | 11 alvos | | |
+| 1 | `caspar targets` | 12 alvos | | |
 | 2 | Apache por omissão (`--live`) | score de referência | | |
 | 3 | Após degradação 1 (info disclosure) | score sobe, cadeia activa | | |
 | 4 | Após degradação 2 (permissões) | score sobe | | |

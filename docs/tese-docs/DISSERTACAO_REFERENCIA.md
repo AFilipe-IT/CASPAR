@@ -1,25 +1,29 @@
-# AEGIS — Referência para a Dissertação
+# CVM / CASPAR — Referência para a Dissertação
 
 > **Propósito:** documento único e verificado com tudo o que a dissertação
 > precisa — funcionalidades, arquitectura/implementação, e validação com
 > resultados finais (verificados num Ubuntu 22.04 real). A tese escreve-se em
 > **inglês**; este documento é o material-fonte em Português Europeu.
 >
-> **Nomenclatura (actualizada 2026-08-02):** **AEGIS** é o nome único, usado
-> tanto para a metodologia (a contribuição científica: a separação
-> build-time/runtime que torna o CCSS aplicável automaticamente sem perder
-> reprodutibilidade) como para a sua própria implementação de referência
-> (prova de conceito, CLI `sca`). Já não existe um segundo nome — "AMiSA"
-> (metodologia) e "CASPAR" (ferramenta) foram unificados sob AEGIS; ver
-> primeira menção por capítulo em `tese/` para o enquadramento
-> framework-vs-PoC. Zero ocorrências de AMiSA/CASPAR restam em `tese/*.tex`.
-> **Estado:** parte prática FECHADA e validada (2026-07-09). Adenda pós-fecho:
-> replicação NISTIR 7502 18/18 (2026-07-14), experiência de determinismo da
-> extração LLM (2026-07-18), motivadas pelo feedback dos revisores do INForum
-> (§6), e três gaps fechados na simulação de defesa de 2026-08-02 — IC de
-> Wilson 95% nas proporções-chave, admissão explícita de falta de análise de
-> sensibilidade, e nomeação do conflito CIS/STIG como assunção não testada
-> (ver §4.8 e §4.9).
+> **Nomenclatura (actualizada 2026-08-10):** dois nomes, com papéis distintos —
+> é assim que `tese/` já está escrita e é a forma a usar. **CVM**
+> (*Configuration Vulnerability Meter*) é a **metodologia**: a contribuição
+> científica, a separação build-time/runtime que torna o CCSS aplicável
+> automaticamente sem perder reprodutibilidade. **CASPAR** é a sua
+> **implementação de referência** (prova de conceito, CLI `caspar`), aquilo que
+> demonstra a viabilidade da metodologia mas não se confunde com ela. O
+> percurso do nome foi AMiSA → AEGIS → CVM; "AEGIS" sobrevive apenas em nomes
+> de ficheiro e comentários de `tese/` (`Chapter4_AEGIS.tex`), não na prosa.
+>
+> **Estado:** parte prática FECHADA e validada (2026-07-09). Adendas
+> pós-fecho: replicação NISTIR 7502 18/18 (2026-07-14) e experiência de
+> determinismo da extração LLM (2026-07-18), ambas motivadas pelo feedback dos
+> revisores do INForum (§6); três gaps fechados na simulação de defesa de
+> 2026-08-02 — IC de Wilson 95% nas proporções-chave, admissão explícita de
+> falta de análise de sensibilidade, e nomeação do conflito CIS/STIG como
+> assunção não testada (§4.8, §4.9); e, em Agosto de 2026, o alvo
+> `postgresql` (12 alvos) e a consola web de gestão (§2.6). **Nada disto
+> altera os resultados de §4** — o motor de scoring não foi tocado.
 
 ---
 
@@ -29,7 +33,7 @@
 recomendações em prosa; as ferramentas existentes dão veredictos binários
 (pass/fail) sem uma medida de risco reproduzível e explicável.
 
-**Contribuição (AEGIS).** Uma metodologia para transformar benchmarks em
+**Contribuição (CVM).** Uma metodologia para transformar benchmarks em
 **scores CCSS (NISTIR 7502) reproduzíveis e auditáveis** de misconfigurations,
 com a separação **build-time / runtime** como garantia central:
 
@@ -62,15 +66,20 @@ reprodutibilidade* (§3.6).
 - **Perfis de ambiente** (`--profile production|internal|dev`) ajustam a
   exposição (AV) no scoring.
 
-### 2.2 Alvos suportados (11)
+### 2.2 Alvos suportados (12)
 | Categoria | Alvos |
 |---|---|
 | Servidores web/app | apache-httpd, nginx, tomcat |
-| Bases de dados | mysql, redis |
+| Bases de dados | mysql, **postgresql**, redis |
 | Sistema / daemon | ssh, docker (daemon), **ubuntu** (OS hardening) |
 | **IaC** | **kubernetes**, **dockerfile**, **azure-iac** (Terraform/Bicep/ARM) |
 
 Formatos parseados: key-value, YAML, Dockerfile, HCL, Bicep, ARM JSON.
+
+Regras por alvo na base de conhecimento de referência (`ccss.db`, 2026-08-10):
+azure-iac 220 · docker 57 · tomcat 49 · redis 36 · apache-httpd 35 ·
+postgresql 26 · mysql 23 · nginx 18 · ubuntu 18 · ssh 17 · kubernetes 10 ·
+dockerfile 5. (O plugin `dummy` é uma fixture de testes e não conta como alvo.)
 
 ### 2.3 Gestão de conhecimento (build-time)
 - `plugin add` (extrai de PDF CIS ou XCCDF STIG via LLM+RAG), `plugin fetch`
@@ -90,22 +99,68 @@ Formatos parseados: key-value, YAML, Dockerfile, HCL, Bicep, ARM JSON.
 - Terminal, HTML, dashboard, JSON, **SARIF** (GitHub Code Scanning / PRs).
 - Gates de CI: `--threshold`, `--exit-code`; `report --merge`, `badge`.
 
+### 2.6 Consola web de gestão (Agosto 2026)
+Uma interface React (`frontend/`, ~6.100 linhas TS/TSX) servida em `/app` por
+`caspar serve`, sobre a API REST `/api/v1` (14 routers). Não é um visualizador:
+tem paridade funcional com o CLI, **incluindo acções de escrita** — iniciar
+scans (upload de ficheiro ou caminho no servidor), instalar plugins, lançar
+builds, controlar sessões `watch` (pausa/retoma/paragem).
+
+Duas decisões de arquitectura merecem menção na tese por serem consequência
+directa das características do sistema, e não escolhas de conveniência:
+
+1. **Trabalhos longos correm em segundo plano, nunca em pedidos HTTP
+   bloqueantes.** Um build LLM medido demorou ~1h46min; nenhum cliente HTTP
+   espera isso. Tabelas `jobs`/`job_logs` na mesma `ccss.db`, uma thread por
+   trabalho, e *polling* com log incremental. Um trabalho interrompido por
+   reinício do servidor é marcado como falhado, não retomado — retoma com
+   *checkpoints* de um build LLM fica fora de âmbito.
+2. **A consola nunca recalcula scores.** Toda a agregação que mostra vem da
+   API; o motor determinístico de §3.6 continua a ser a única fonte de
+   pontuação. Isto preserva a afirmação de reprodutibilidade: mudar a
+   interface não pode mudar um score.
+
+**Relevância para a tese:** é sobretudo evidência de *usabilidade* da
+metodologia — os mesmos dados que produzem um score sustentam também uma
+narrativa auditável (que directiva, em que ficheiro e linha, com que
+justificação por métrica CCSS, e que CVE/CCE/CIS lhe corresponde). Duas
+decisões de apresentação valem por si:
+
+- **Localização do achado.** Cada misconfiguration mostra o ficheiro e a linha
+  exactos (`source_directive`), mais o contexto quando não é global. Nos dados
+  reais isto não é cosmético: o `ServerTokens` do Apache está em
+  `conf-available/security.conf:12` e não no `apache2.conf`, e três achados
+  distintos de `Options` só se distinguem por `Directory(/)` vs
+  `Directory(/var/www/)`.
+- **A amplificação de chains não é exibida como número derivado.** A consola
+  mostra "*composite risk (indicative)*" com a origem do valor (o pior
+  componente) e diz explicitamente que o factor é calibração qualitativa —
+  coerente com §3.7 e com o CLI, que já o omitia por opção. Exibir "×1.60" ao
+  lado de scores CCSS derivados dar-lhe-ia um estatuto que a §3.7 não
+  reivindica.
+
 ---
 
 ## 3. Arquitectura e implementação (como foi feito)
 
-### 3.1 Dimensão (verificado)
-~22.100 linhas de Python · **647 testes** · 6 parsers genéricos · 11 targets.
+### 3.1 Dimensão (verificado 2026-08-10)
+~23.500 linhas de Python · ~6.100 de TypeScript/TSX (consola, §2.6) ·
+**823 testes Python** (+1 *skip* deliberado: a sintaxe mínima só é validável
+pelo interpretador 3.10 do CI) e **39 testes de frontend** · 6 parsers
+genéricos · 12 targets.
 
 ### 3.2 O contrato `Target` (extensibilidade)
 O núcleo (`config_assessment/core/`) é agnóstico ao serviço. Adicionar um alvo =
 criar um plugin que implementa 4 métodos (`detect`, `parse_config`,
-`get_profile`, `metadata`) — **zero alterações ao core**. Foi assim que os 11
-alvos (incl. os 4 de IaC/OS) foram adicionados.
+`get_profile`, `metadata`) — **zero alterações ao core**. Foi assim que os 12
+alvos (incl. os 4 de IaC/OS) foram adicionados; o `postgresql`, o mais recente,
+é a evidência mais limpa da afirmação por ter sido acrescentado depois de a
+parte prática estar fechada, sem tocar no core.
 
 ### 3.3 As três proveniências de conhecimento
 Todas alimentam o MESMO scoring determinístico:
-1. **LLM-extraída** — apache, nginx, ssh, mysql, redis, tomcat, docker, azure-iac.
+1. **LLM-extraída** — apache, nginx, ssh, mysql, postgresql, redis, tomcat,
+   docker, azure-iac.
 2. **Curada** — kubernetes, dockerfile, ubuntu (métricas revistas à mão,
    `build/curated_build.py`, sem LLM).
 3. **Promovida** — ciclo `promote` (candidata da L3 → regra permanente).
@@ -121,7 +176,7 @@ caminhos com pontos, `bad_value` inválido (JSON/prosa/None), impacto nulo;
 canonicalização de sinónimos booleanos (`off`/`Disabled`→`false`).
 
 ### 3.5 Fronteira de escopo: config vs estado do sistema
-O CASPAR avalia **ficheiros de configuração**. Ferramentas como o OpenSCAP
+O CVM avalia **ficheiros de configuração**. Ferramentas como o OpenSCAP
 avaliam o **estado do sistema vivo** (permissões, módulos de kernel, serviços).
 O target `ubuntu` cobre o **subconjunto config-based** do CIS Ubuntu (sysctl,
 login.defs) — o terreno sobreponível, onde a comparação é justa. Esta distinção
@@ -154,6 +209,17 @@ valor derivado do NISTIR:**
   justificação textual** — cada chain diz *porquê* aquele valor.
 - *Honestidade (para a defesa):* é uma **heurística de calibração qualitativa,
   curada por perito**; a validação empírica da gama fica como **trabalho futuro**.
+- *Coerência nas interfaces (2026-08-10):* esta ressalva não vive só no papel.
+  Nenhuma superfície exibe o factor como um número derivado — o CLI omite-o por
+  opção e a consola web apresenta um "*composite risk (indicative)*" com a
+  origem explícita (o pior componente) e a nota de que é calibração
+  qualitativa. Mostrar "×1.60" ao lado de scores CCSS derivados convidaria a
+  lê-lo com o mesmo estatuto, que é precisamente o que este ponto nega.
+- *Nota de âmbito:* as chains são **reportadas mas não elevam o score global**,
+  que continua a ser o pior achado individual. É deliberado — evita que uma
+  heurística não validada contamine a métrica que §4 valida — e deve ser dito
+  na tese, porque uma chain a 10.0 ao lado de um score global de 8.7 parece
+  incoerente a quem não conhece a regra.
 
 ### 3.8 Base de conhecimento RAG e o manual do serviço
 Para a avaliação de directivas desconhecidas (Camada 3, opt-in), o LLM é ancorado
@@ -170,11 +236,20 @@ ficheiro local ou URL. **Nunca toca no scoring determinístico** — só a Camad
 
 ## 4. VALIDAÇÃO (resultados finais — Ubuntu 22.04 real, 2026-07-09)
 
-Reproduzível com `python -m scripts.evaluate` e
-`python -m scripts.baseline_compare --oscap`.
+Reproduzível com `python3 -m scripts.evaluate` e
+`python3 -m scripts.baseline_compare --oscap`.
+
+> **Os números desta secção estão congelados na data da medição** e são os que
+> a tese cita. Não foram reescritos com as adições posteriores (o alvo
+> `postgresql`, §2.2, e a consola, §2.6) — reescrevê-los faria a secção
+> descrever uma medição que nunca foi corrida. Daí §4 falar em 11 alvos e §2.2
+> em 12: são momentos diferentes, não uma contradição. As adições posteriores
+> não tocaram no motor de scoring, pelo que nenhum resultado abaixo é
+> invalidado por elas; re-executar `scripts.evaluate` hoje mediria uma base de
+> conhecimento maior.
 
 ### 4.1 Base de conhecimento
-**11 targets · 488 regras · 27 attack chains.**
+**11 targets · 488 regras · 27 attack chains** (medição de 2026-07-09).
 
 ### 4.2 Correção do motor CCSS — replicação NISTIR 7502 (18/18)
 O motor de scoring foi validado contra os **18 exemplos resolvidos do próprio
@@ -219,7 +294,7 @@ rule*, que têm de estar presentes com valor aceitável, não apenas omitidas):
 | tomcat | tomcat_demo/tomcat.conf | 100% | 12 | 0 | 100% | 100% |
 | **Total** | | **100% (96/96)** | **96** | **0** | **100%** | **100%** |
 
-Reproduzível com `python -m scripts.evaluate` (secções "Detection" e
+Reproduzível com `python3 -m scripts.evaluate` (secções "Detection" e
 "Precision & F1"). Nota de honestidade: o corpus é sintético e
 deliberadamente worst-case/best-case; não substitui um corpus de
 configurações reais recolhidas "em estado selvagem" — ver §4.8.
@@ -544,6 +619,17 @@ avaliação.
   §Trust and Threat Model e como trabalho futuro em
   `Chapter7_Conclusion.tex` §Future Work ("Cross-benchmark conflict
   resolution").
+- **A consola web não foi avaliada com utilizadores:** a interface de §2.6 é
+  demonstrada, não validada — não houve estudo de usabilidade, medição de
+  tempo-para-diagnóstico, nem comparação com o CLI. As afirmações sobre ela
+  na tese devem limitar-se ao que é verificável (que dados expõe, que
+  operações permite), não a ganhos de eficiência não medidos. Um estudo com
+  utilizadores é trabalho futuro óbvio e barato.
+- **Trabalhos em segundo plano não sobrevivem a reinício do servidor:** um
+  build interrompido é marcado como falhado e reiniciado do zero, não
+  retomado (§2.6). É uma limitação de engenharia assumida — retoma com
+  *checkpoints* de um pipeline LLM de ~1h46min é trabalho substancial e sem
+  interesse científico para a tese.
 
 ### 4.9 Três gaps fechados na simulação de defesa (2026-08-02)
 
@@ -577,12 +663,20 @@ Todas as três edições verificadas contra o código antes de escrever
 
 ```bash
 # setup (Ubuntu 22.04): ver 03_GUIA_VM_UBUNTU22.md e 04_AVALIACAO_FUNCIONAL.md
-python -m pytest tests/ -q                    # 647 passed (inclui NISTIR 18/18)
-python -m scripts.functional_check            # 13/13 checks end-to-end
-python -m scripts.evaluate                    # KB · MAE 0% · recall 100% · precisão/F1 100%
-python -m scripts.baseline_compare --oscap    # Trivy + OpenSCAP (pass/fail reais)
-python scripts/determinism_experiment.py analyze   # §4.7 (re-correr: run --runs 5, ~2h com Ollama)
+python3 -m pytest tests/ -q                    # 823 passed, 1 skipped (inclui NISTIR 18/18)
+python3 -m scripts.functional_check            # 13/13 checks end-to-end
+python3 -m scripts.evaluate                    # KB · MAE 0% · recall 100% · precisão/F1 100%
+python3 -m scripts.baseline_compare --oscap    # Trivy + OpenSCAP (pass/fail reais)
+python3 scripts/determinism_experiment.py analyze   # §4.7 (re-correr: run --runs 5, ~2h com Ollama)
+
+# consola web (§2.6) — precisa do extra [api]; build do frontend já versionado
+python3 -m cli.main serve                      # API /api/v1 · consola /app · Swagger /docs
+cd frontend && npx vitest run                  # 39 testes de frontend
 ```
+
+> O `python` sem sufixo não existe em Ubuntu 22.04/24.04 nem em WSL — usar
+> sempre `python3`, ou o wrapper `caspar` quando instalado. Note-se ainda que
+> as opções globais do CLI (`--db`, etc.) têm de **preceder** o subcomando.
 
 ## 6. Feedback dos revisores (INForum 2026) — obrigações de escrita
 
@@ -619,9 +713,12 @@ tratá-los como checklist):
 
 ## 7. Documentos relacionados
 - [README.md](../../README.md) — vitrine + comandos (roteiro numerado 01-06)
-- [02_GUIA_CASPAR.md](../02_GUIA_CASPAR.md) — guia de utilizador/demo
+- [02_GUIA_CASPAR.md](../02_GUIA_CASPAR.md) — guia de utilizador/demo (inclui a consola web)
 - [03_GUIA_VM_UBUNTU22.md](../03_GUIA_VM_UBUNTU22.md) — instalar + testar tudo + build Docker
 - [04_AVALIACAO_FUNCIONAL.md](../04_AVALIACAO_FUNCIONAL.md) — roteiro de avaliação
 - [05_GUIA_TECNICO.md](../05_GUIA_TECNICO.md) — arquitectura interna
 - [06_VALIDACAO.md](../06_VALIDACAO.md) — plano de validação completo
+- [07_GUIA_TESTE_COMPLETO.md](../07_GUIA_TESTE_COMPLETO.md) — roteiro de teste exaustivo
 - [HANDOFF.md](../HANDOFF.md) — briefing técnico completo
+- [RESPOSTA_REVISORES.md](RESPOSTA_REVISORES.md) — resposta ponto a ponto ao INForum (§6)
+- [frontend/README.md](../../frontend/README.md) — desenvolvimento e build da consola (§2.6)

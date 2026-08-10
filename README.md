@@ -106,7 +106,8 @@ A decisão de design central é a separação entre **build time** (LLM + CVE lo
 | Relatório terminal compacto | ✅ |
 | Relatório HTML com narrativas completas | ✅ |
 | Relatório SARIF / JSON | ✅ |
-| 777 testes automatizados | ✅ |
+| 823 testes automatizados (+39 de frontend) | ✅ |
+| Consola web de gestão (React, servida em `/app`) | ✅ |
 
 ---
 
@@ -505,6 +506,10 @@ TemporalScore = round(BaseScore × GEL[gel] × GRL[grl], 1)
 
 ## Estrutura de ficheiros
 
+> Esquema conceptual, não caminhos literais: `core/`, `plugins/`, `api/` e
+> `fetch/` vivem hoje dentro de `config_assessment/`; `cli/`, `tests/` e
+> `frontend/` são de topo.
+
 ```
 ccss_scan/
 │
@@ -545,7 +550,15 @@ ccss_scan/
 ├── cli/
 │   └── main.py                   # scan, build, targets, refresh, plugin add/fetch
 │
-├── tests/                         # 777 testes — fórmulas CCSS,
+├── api/                          # REST /api/v1 (14 routers) — serve a consola
+│   ├── job_runner.py             # trabalhos longos (build/plugin) em threads
+│   └── routers/                  # scans, knowledge, watch, builds, jobs, …
+│
+├── frontend/                     # consola web React+TS, servida em /app
+│   ├── src/                      # 8 páginas; `dist/` versionado (sem Node p/ instalar)
+│   └── dist/                     # build pronto — `caspar serve` monta-o
+│
+├── tests/                         # 823 testes — fórmulas CCSS,
 │   ├── test_ccss.py               #   parsers/regras por plugin, pipeline LLM
 │   ├── test_runtime.py            #   (Stage 1/2/3), chains, enrichment CVE/TTP,
 │   ├── test_apache.py             #   IaC (azure/k8s/dockerfile), CLI, RAG,

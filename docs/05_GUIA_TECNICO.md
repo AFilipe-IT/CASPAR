@@ -240,7 +240,7 @@ caspar scan /etc/apache2/ --threshold 7.0   # exit 1 se score > 7 (CI/CD)
 # ── Utilitários ──
 caspar targets                              # lista os 13 plugins
 caspar doctor                               # integridade da DB
-pytest tests/ -q                            # corre os 647 testes
+pytest tests/ -q                            # corre os 823 testes
 ```
 
 ---
@@ -292,7 +292,7 @@ O runtime chama `detection_confidence(path)` em todos os candidatos que passaram
 - CVE enrichment (NVD + KEV) e TTP enrichment (MITRE ATT&CK)
 - Relatórios terminal / HTML / JSON / SARIF, com manifesto de reprodutibilidade (hash SHA-256 do conteúdo da KB)
 - 0% mismatch (MAE) contra o ground truth CCE no Apache; 100% de recall nas fixtures vulneráveis (96/96)
-- 647 testes automatizados, todos offline-safe, incl. réplica dos 18 exemplos oficiais do NISTIR 7502 §4
+- 823 testes automatizados, todos offline-safe, incl. réplica dos 18 exemplos oficiais do NISTIR 7502 §4
 
 **13 plugins registados** (12 com regras próprias + `dummy` de teste): apache-httpd, nginx, mysql, postgresql, redis, ssh, tomcat, docker, dockerfile, kubernetes, ubuntu, azure-iac. 514 misconfigurations catalogadas, 32 attack chains, distribuídas de forma muito desigual (azure-iac 220, docker 57, tomcat 49… dockerfile 5) — reflexo direto da riqueza do benchmark-fonte de cada um, não de esforço desigual.
 

@@ -56,8 +56,8 @@ testes RAG do Apache fazem *skip*, o que é normal. Nada do que segue precisa de
 ## 2. Verificação de sanidade (unit + smoke)
 
 ```bash
-python -m pytest tests/ -q                    # ~647 passed (uns skips)
-python -m scripts.functional_check            # 13/13 checks (end-to-end)
+python3 -m pytest tests/ -q                   # 823 passed, 1 skipped
+python3 -m scripts.functional_check           # 13/13 checks (end-to-end)
 ```
 
 ✓ **Capturar:** o output do `functional_check` (13/13 PASS) — prova que todas

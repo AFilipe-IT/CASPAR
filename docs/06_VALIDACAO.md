@@ -22,7 +22,7 @@
 | 1 | Científica — correção | Os scores estão certos? | MAE / taxa de mismatch vs CCE | `scripts/evaluate.py` | ✅ 0% |
 | 1b | Científica — submétricas | Cada submétrica CCSS está certa? | Concordância exata + Cohen's κ por submétrica | protocolo §1.2 | ✅ anotador-LLM (§1.2) |
 | 2 | Funcional — deteção | Encontra as misconfigurations? | Recall + precision + F1 | `scripts/evaluate.py` | ✅ 100% recall · 100% precision/F1 |
-| 3 | Funcional — integração | Tudo funciona de ponta a ponta? | Checks pass/fail | `scripts/functional_check.py` + pytest | ✅ 13/13 · ~647 |
+| 3 | Funcional — integração | Tudo funciona de ponta a ponta? | Checks pass/fail | `scripts/functional_check.py` + pytest | ✅ 13/13 · 823 |
 | 4 | Fiabilidade | Dá sempre o mesmo resultado? | Determinismo, robustez, estabilidade do build LLM | §3 | ✅/🔲 |
 | 5 | Desempenho — scan | Quanto custa identificar misconfigurations? | Latência, CPU, RAM, energia | §4.1 | ✅ WSL2 + Ubuntu nativo (`scripts/perf_scan.py`) |
 | 6 | Desempenho — extensão | Quanto custa adicionar um target novo? | Wall time, tokens/custo LLM, esforço humano | §4.2 | ✅ WSL2, N=1 (`postgresql`) / 🔲 repetir em Ubuntu nativo + N≥5 (§3.2) |
@@ -344,7 +344,7 @@ selvagem", uma limitação a declarar explicitamente (ver Revisor 1, ponto 6).
 ### 2.3 Integração ponta a ponta — ✅
 
 ```bash
-python -m pytest tests/ -q            # ~647 passed
+python3 -m pytest tests/ -q           # 823 passed, 1 skipped
 python -m scripts.functional_check    # 13/13 capacidades integradas
 ```
 
@@ -981,7 +981,7 @@ N e IC; nunca uma comparação de tempos sem a máquina e o nº de corridas.
 
 ```bash
 # já implementado (correr primeiro — são os números-âncora)
-python -m pytest tests/ -q                    # ~647 passed
+python3 -m pytest tests/ -q                   # 823 passed, 1 skipped
 python -m scripts.functional_check            # 13/13
 python -m scripts.evaluate                    # KB · MAE 0% · recall 100% · precision/F1 100%
 python -m scripts.baseline_compare --oscap    # Trivy + OpenSCAP
