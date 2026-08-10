@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { FindingDetail } from "@/components/knowledge/FindingDetail";
 import { ShieldOff } from "lucide-react";
 import type { Misconfiguration } from "@/api/types";
+import styles from "./FindingsTable.module.css";
 
 interface FindingRow {
   finding: Misconfiguration;
@@ -39,7 +40,24 @@ export function FindingsTable({ rows }: { rows: FindingRow[] }) {
         return <Badge tone={severityTone(sev)}>{sev}</Badge>;
       },
     },
-    { key: "finding", header: "Finding", render: (r) => r.finding.directive },
+    {
+      key: "finding",
+      header: "Finding",
+      // O CVE fica no detalhe, mas sem uma marca na linha não há forma de
+      // saber que ele existe sem abrir tudo à vez. Na prática são as
+      // directivas de TLS que os têm, e essas raramente estão no topo por
+      // score — o crachá é o que as torna encontráveis.
+      render: (r) => (
+        <span className={styles.finding}>
+          {r.finding.directive}
+          {r.finding.cves?.length > 0 && (
+            <span className={styles.cveTag} title={r.finding.cves.join(", ")}>
+              {r.finding.cves.length === 1 ? r.finding.cves[0] : `${r.finding.cves.length} CVEs`}
+            </span>
+          )}
+        </span>
+      ),
+    },
     { key: "service", header: "Service", render: (r) => r.service },
   ];
 

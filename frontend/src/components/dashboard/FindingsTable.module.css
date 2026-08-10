@@ -1,0 +1,17 @@
+.finding {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* Discreto de propósito: assinala que há uma referência publicada por trás
+   do achado sem competir com a severidade, que é a coluna que ordena. */
+.cveTag {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}

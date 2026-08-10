@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { ShieldAlert, Layers, FileWarning, Siren } from "lucide-react";
+import { ShieldAlert, Layers, FileWarning, Siren, Bug } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
@@ -11,6 +11,7 @@ import { AttackChainsList } from "@/components/dashboard/AttackChainsList";
 import { RecentAssessmentsList } from "@/components/dashboard/RecentAssessmentsList";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { KpiTile } from "@/components/dashboard/KpiTile";
+import { summarise } from "@/lib/dashboard";
 import { useScans } from "@/api/scans";
 import { useHostsRollup } from "@/api/hosts";
 import { api } from "@/api/client";
@@ -43,36 +44,15 @@ export function DashboardPage() {
   const detailsLoading = scanDetailQueries.some((q) => q.isLoading);
 
   const worstScore = rollup?.worst_score ?? 0;
-  // O caminho vai junto: vários alvos partilham `target_name` (o apache do
-  // sistema, uma fixture, uma cópia de trabalho) e a lista mostrava
-  // "apache-httpd" quatro vezes sem dizer qual era qual.
-  const services = details
-    .map((d) => ({
-      name: d.target_name,
-      score: d.global_temporal_score,
-      input: d.input_path,
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
-
-  const topFindings = details
-    .flatMap((d) => d.issues.map((issue) => ({ finding: issue, service: d.target_name })))
-    .sort((a, b) => b.finding.temporal_score - a.finding.temporal_score)
-    .slice(0, 5);
-
-  const allChains = details.flatMap((d) => d.chains);
-  // Os achados de todos os scans: o detalhe de uma cadeia liga cada
-  // directiva ao problema concreto encontrado.
-  const allIssues = details.flatMap((d) => d.issues);
-  const totalDirectives = details.reduce((sum, d) => sum + d.total_directives_scanned, 0);
-  // Problemas em aberto no estado ACTUAL de cada configuração — uma leitura por
-  // `input_path`, a mais recente. O `rollup.total_issues` agrega o histórico
-  // todo (até 200 scans), pelo que somava avaliações já substituídas: num
-  // ambiente de testes dava 6158 quando o estado actual tinha algumas dezenas.
-  // Um KPI de postura tem de descrever o presente, não o acumulado.
-  const openIssues = details.reduce((sum, d) => sum + d.issues.length, 0);
-  const criticalFindings = details.reduce(
-    (sum, d) => sum + d.issues.filter((i) => i.temporal_score >= 9).length, 0);
+  // Toda a agregação vive em lib/dashboard.ts: é lá que estão as decisões
+  // fáceis de enganar (o que conta como "em aberto", o que se deduplica) e
+  // aqui não eram testáveis, presas ao `useQueries`.
+  const {
+    services, topFindings, cveFindings, allChains, allIssues,
+    totalDirectives, openIssues, criticalFindings, cveCount,
+    // `details` é um array novo a cada render, portanto a dependência é o que
+    // nele muda de facto: quais scans já chegaram.
+  } = useMemo(() => summarise(details), [details.map((d) => d.scan_id).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isLoading = scansLoading || rollupLoading || detailsLoading;
 
@@ -94,6 +74,11 @@ export function DashboardPage() {
         {/* Contava dentro de `topFindings`, que já está cortado nos 5 primeiros
             — o máximo possível era 5, e dava 0 mesmo com um scan Critical 10.0
             na base de dados. Tem de varrer todos os problemas em aberto. */}
+        {/* CVEs distintos ligados às configurações avaliadas. Estavam na
+            resposta e não tinham onde aparecer; e como quase só as directivas
+            de TLS os trazem, ficavam fora do corte por score das Top Findings
+            e não havia sinal nenhum de que existiam. */}
+        <KpiTile label="Related CVEs" value={cveCount} icon={<Bug size={18} />} />
         <KpiTile
           label="Critical findings"
           value={criticalFindings}
@@ -118,6 +103,19 @@ export function DashboardPage() {
           )}
         </Card>
       </div>
+
+      {/* Painel próprio, e não mais linhas nas Top Findings: os achados com
+          CVE são quase todos de TLS e pontuam baixo, pelo que nunca sobrevivem
+          a um corte por score. Sem lista própria, o KPI dizia que existiam seis
+          e não havia como chegar a nenhum deles. Só aparece quando há. */}
+      {cveFindings.length > 0 && (
+        <Card
+          title="Findings with known CVEs"
+          subtitle="Configuration weaknesses that map to a published vulnerability. Open one for the references."
+        >
+          <FindingsTable rows={cveFindings} />
+        </Card>
+      )}
 
       <div className="grid-2">
         <Card title="Top Findings">
