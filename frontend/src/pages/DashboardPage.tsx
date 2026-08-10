@@ -68,9 +68,13 @@ export function DashboardPage() {
       <div className="grid-kpi">
         <KpiTile label="Services assessed" value={details.length} icon={<Layers size={18} />} />
         <KpiTile label="Directives scanned" value={totalDirectives} icon={<FileWarning size={18} />} />
+        {/* Dizia "Rules evaluated" e mostrava `rollup.scans` — que é a lista de
+            alvos, não uma contagem de regras. Passar o array ao KpiTile era o
+            React #31 que deixava o /app em branco. O número de alvos já está em
+            "Services assessed"; o que falta aqui é o total de problemas. */}
         <KpiTile
-          label="Rules evaluated"
-          value={rollup?.scans ?? 0}
+          label="Issues found"
+          value={rollup?.total_issues ?? 0}
           icon={<ShieldAlert size={18} />}
         />
         <KpiTile

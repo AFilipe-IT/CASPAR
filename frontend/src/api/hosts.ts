@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "./client";
 import type { HostRollup } from "./types";
 
-export interface HostsRollupResponse extends HostRollup {
-  scans: number;
-}
+// A resposta de GET /hosts é o rollup tal e qual. Havia aqui um `scans: number`
+// a redeclarar o campo, o que anulava o tipo real e deixava passar o erro.
+export type HostsRollupResponse = HostRollup;
 
 export function useHostsRollup() {
   return useQuery({

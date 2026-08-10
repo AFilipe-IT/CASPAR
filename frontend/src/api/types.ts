@@ -119,8 +119,21 @@ export interface TrendSeries {
   sparkline: string;
 }
 
+/** Uma linha do rollup: um alvo, no seu scan mais recente. */
+export interface HostRollupScan {
+  target: string;
+  input: string;
+  score: number;
+  severity: string;
+  issues: number;
+  chains: number;
+}
+
 export interface HostRollup {
-  scans: number;
+  // `scans` é a LISTA de alvos (uma linha por `input_path`), não a contagem.
+  // Estava declarado como `number`, e o painel passava o array directamente a
+  // um KpiTile — React #31, que rebentava a página inteira.
+  scans: HostRollupScan[];
   total_issues: number;
   total_chains: number;
   worst_score: number;
