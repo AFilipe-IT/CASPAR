@@ -77,11 +77,17 @@ export function WatchPage() {
   const startWatch = useStartWatch();
   const control = useWatchControl();
 
-  // Default to the first session so the page is never empty when one exists.
+  // Abrir na sessão VIVA, não na primeira da lista. A lista vem ordenada por
+  // histórico, e num ambiente já usado as primeiras são sessões antigas e
+  // paradas — a página abria num cemitério de sessões e parecia que o watch
+  // nunca mexia. Uma sessão a correr (ou em pausa, que também está viva) é
+  // sempre a que interessa ver.
   useEffect(() => {
-    if (!selected && sessions && sessions.length > 0) {
-      setSelected(sessions[0].watch_session);
-    }
+    if (selected || !sessions || sessions.length === 0) return;
+    const alive = sessions.find(
+      (s) => s.runner_state === "running" || s.runner_state === "paused" || s.live,
+    );
+    setSelected((alive ?? sessions[0]).watch_session);
   }, [sessions, selected]);
 
   const latest = detail?.latest;

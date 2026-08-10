@@ -16,6 +16,8 @@ env/
 
 # Cache de exploitabilidade por versão (F1, online-first)
 .ccss_cache/
+# config de trabalho do scripts/watch_demo.py
+.watch_demo/
 
 # Relatórios gerados pelo scan (output, não versionar)
 reports/*

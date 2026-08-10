@@ -25,7 +25,7 @@ const ROLLUP = {
     { target: "nginx", input: "/etc/nginx", score: 6.0,
       severity: "Medium", issues: 7, chains: 2 },
   ],
-  total_issues: 24,
+  total_issues: 9999,   // histórico acumulado, deliberadamente absurdo
   total_chains: 11,
   worst_score: 7.1,
   worst_target: "apache-httpd",
@@ -74,13 +74,13 @@ describe("Dashboard com o payload real de /hosts", () => {
     expect(screen.queryByText(/Erro ao renderizar/i)).not.toBeInTheDocument();
   });
 
-  it("mostra o total de problemas, não a lista de alvos", async () => {
+  it("conta problemas em aberto, não o histórico acumulado", async () => {
+    // `total_issues` do rollup soma o histórico todo (aqui 9999); o KPI tem de
+    // descrever o estado actual, vindo dos scans mais recentes.
     renderApp();
-    // O cabeçalho aparece logo, ainda a carregar — esperar por ele não chega.
-    // É o valor que tem de ser esperado.
     await waitFor(() => {
-      expect(screen.getByText("24")).toBeInTheDocument();
+      expect(screen.getByText("Open issues")).toBeInTheDocument();
     });
-    expect(screen.getByText("Issues found")).toBeInTheDocument();
+    expect(screen.queryByText("9999")).not.toBeInTheDocument();
   });
 });

@@ -621,15 +621,17 @@ Se o NGINX estiver com o porto 80, aplica o §1.1 (move-o para 8080) — parar o
 NGINX só resolve até ao reboot seguinte. Desde a versão actual, um scan a um
 serviço parado **avisa** em vez de devolver um score em silêncio.
 
-#### Passo 1 — usar um ficheiro, não o serviço
+#### Passo 1 — usar a configuração de demonstração, não o serviço
 
-Para ver o mecanismo a funcionar, começa por um ficheiro que possas editar à
-vontade. É mais rápido e não exige `sudo` a cada passo:
+Para ver o mecanismo a funcionar, usa a configuração preparada para isso:
 
 ```bash
-mkdir -p ~/watch-demo
-cp /etc/apache2/apache2.conf ~/watch-demo/apache2.conf
+python3 scripts/watch_demo.py --prepare
 ```
+
+Cria `.watch_demo/httpd.conf` e imprime o caminho a vigiar. Copiar o teu
+`/etc/apache2/apache2.conf` **também funciona, mas costuma não mostrar nada** —
+ver o aviso do Passo 3.
 
 > **O nome do ficheiro importa.** A escolha do plugin é feita pelo nome — um
 > `demo.conf` não corresponde a plugin nenhum e a sessão morre com
@@ -653,21 +655,54 @@ lista com `live: true` e `runner_state: "running"`.
 
 #### Passo 3 — provocar a mudança
 
-Noutro terminal, degrada o ficheiro:
+> **Porque é que "editei e não mudou nada".** Esta é a confusão número um do
+> `watch`, e quase nunca é uma avaria. O score global é o **pior achado
+> individual**. Se editares uma directiva cujo achado fica *abaixo* desse
+> máximo, o CVM regista o problema novo — o número de issues sobe — mas o
+> **score não se mexe**, porque o topo continua onde estava. Pior ainda:
+> directivas como `Timeout` não têm regra nenhuma (numa instalação normal
+> ~12 directivas ficam sem cobertura), e mexer-lhes não muda rigorosamente
+> nada. Editar um `/etc/apache2/apache2.conf` de origem cai quase sempre num
+> destes dois casos, e parece que o watch está morto.
+
+Noutro terminal, aplica os degraus preparados:
 
 ```bash
-printf '\nServerTokens Full\nServerSignature On\nTraceEnable On\n' >> ~/watch-demo/apache2.conf
+python3 scripts/watch_demo.py --auto      # todos, com 8s de intervalo
+python3 scripts/watch_demo.py --step 1    # ou um de cada vez
 ```
 
-Numa execução de referência nesta máquina, o painel passou de **6.0 (7 issues)**
-para **7.1 (10 issues)** no ciclo seguinte — menos de 10 segundos com
-`interval=2`. Os valores exactos dependem da tua configuração de partida; o que
-tem de acontecer é o score **subir** e um evento novo aparecer na sessão.
+Cada degrau remedeia o achado que está no topo, deixando o seguinte à vista.
+Medido nesta fixture (reconfirma com `--verify`):
 
-Confirmação por API:
+| Degrau | Alteração | Score global |
+|---|---|---|
+| — | estado inicial | **8.7** |
+| 1 | `User root` → `www-data` | **7.9** |
+| 2 | `Group root` → `www-data` | **7.1** |
+| 3 | `ServerTokens Full` → `Prod` | **6.0** |
+| 4 | `ServerSignature On` → `Off` | 6.0 |
+| 5 | `TraceEnable On` → `Off` | 6.0 |
+
+Os degraus 1–3 fazem o número descer no painel. **Os degraus 4 e 5 não** — e
+isso é o comportamento correcto, não uma falha: a partir dos 6.0 o topo passa
+a ser um achado `Header` que estes degraus não tocam. A lista de problemas
+encurta, o score fica. Vale a pena ver os dois casos, porque é exactamente a
+diferença que faz o `watch` parecer partido quando não está.
+
+Confirmação por API (`events` tem de crescer a cada degrau):
 
 ```bash
-curl -s localhost:8000/api/v1/watch | python3 -m json.tool
+curl -s localhost:8000/api/v1/watch/$S | python3 -m json.tool | head -20
+```
+
+Latência medida: **~2 segundos** entre gravar o ficheiro e o evento novo, com
+`interval=2`.
+
+Para repor e repetir:
+
+```bash
+python3 scripts/watch_demo.py --reset
 ```
 
 #### Passo 4 — pausar, retomar, parar
@@ -721,11 +756,58 @@ sudo systemctl reload apache2
 
 | Sintoma | Causa provável | Confirmação |
 |---|---|---|
+| **Score não muda mas os issues sobem** | **normal** — o achado editado está abaixo do topo | compara `total_issues` entre eventos: se cresce, o watch está a funcionar |
+| **Score não muda e os issues também não** | directiva sem regra na base de conhecimento | `caspar scan <ficheiro> --show-uncovered` |
 | Sessão desaparece logo a seguir a criar | nome do ficheiro não corresponde a plugin | log do servidor: "No registered plugin can handle input" |
 | Score não muda depois de editar | ficheiro editado ≠ ficheiro vigiado | compara o `path` da sessão com o que editaste |
 | Score não muda com o serviço | `reload` falhou; serviço parado | `systemctl is-active apache2` |
+| Lista só mostra sessões paradas | sessões antigas de execuções anteriores | a consola abre na sessão viva; `runner_state` diz qual |
 | Nada aparece na lista | sessão nunca chegou a correr | `tail` ao terminal do `caspar serve` |
 | Ecrã escuro ao voltar a uma página | erro de render (corrigido) | consola do browser (F12) |
+
+As duas primeiras linhas cobrem a esmagadora maioria dos casos de "o watch não
+mexe". Antes de suspeitares do mecanismo, confirma que a directiva que editaste
+**tem regra** e que o achado dela **é o mais alto** do ficheiro.
+
+---
+
+### 6.4 Imagens Docker vulneráveis
+
+Uma imagem deliberadamente insegura é a forma mais limpa de testar: não mexe no
+sistema, dá sempre o mesmo resultado e não precisa de `sudo`. O CVM lê a
+configuração de dentro da imagem através do esquema `docker://`.
+
+O repositório traz duas:
+
+```bash
+docker build -t caspar-vuln-apache:test -f tests/docker_fixtures/Dockerfile.vulnerable tests/docker_fixtures/
+docker build -t caspar-vuln-nginx:test docker/nginx-vulnerable/
+```
+
+Avaliar (não é preciso ter o contentor a correr — basta a imagem existir):
+
+```bash
+caspar scan docker://caspar-vuln-apache:test
+caspar scan docker://caspar-vuln-nginx:test
+```
+
+Valores medidos nesta versão:
+
+| Imagem | Score | Achado mais alto | Cadeias |
+|---|---|---|---|
+| `caspar-vuln-apache:test` | **8.7 HIGH** | `User root` (8.7) | 9 |
+| `caspar-vuln-nginx:test` | **7.5 HIGH** | — | 3 |
+
+A imagem Apache é a mesma configuração que o `watch_demo.py` usa, o que a torna
+útil para comparar os dois caminhos: o scan pontual da imagem e a sessão de
+watch sobre o ficheiro devem dar o mesmo score de partida (8.7).
+
+Estas imagens servem também a página **Assessment** da consola: constrói-as,
+avalia por `docker://`, e o resultado aparece no histórico como qualquer outro.
+
+> Para testar o `--live` contra um serviço realmente a correr dentro de um
+> contentor (em vez da configuração em disco), o contentor tem de estar activo
+> e a configuração acessível — ver §1.3 sobre o que o `--live` observa.
 
 ---
 

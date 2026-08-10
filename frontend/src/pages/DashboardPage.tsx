@@ -55,6 +55,14 @@ export function DashboardPage() {
 
   const allChains = details.flatMap((d) => d.chains);
   const totalDirectives = details.reduce((sum, d) => sum + d.total_directives_scanned, 0);
+  // Problemas em aberto no estado ACTUAL de cada configuração — uma leitura por
+  // `input_path`, a mais recente. O `rollup.total_issues` agrega o histórico
+  // todo (até 200 scans), pelo que somava avaliações já substituídas: num
+  // ambiente de testes dava 6158 quando o estado actual tinha algumas dezenas.
+  // Um KPI de postura tem de descrever o presente, não o acumulado.
+  const openIssues = details.reduce((sum, d) => sum + d.issues.length, 0);
+  const criticalFindings = details.reduce(
+    (sum, d) => sum + d.issues.filter((i) => i.temporal_score >= 9).length, 0);
 
   const isLoading = scansLoading || rollupLoading || detailsLoading;
 
@@ -68,18 +76,17 @@ export function DashboardPage() {
       <div className="grid-kpi">
         <KpiTile label="Services assessed" value={details.length} icon={<Layers size={18} />} />
         <KpiTile label="Directives scanned" value={totalDirectives} icon={<FileWarning size={18} />} />
-        {/* Dizia "Rules evaluated" e mostrava `rollup.scans` — que é a lista de
-            alvos, não uma contagem de regras. Passar o array ao KpiTile era o
-            React #31 que deixava o /app em branco. O número de alvos já está em
-            "Services assessed"; o que falta aqui é o total de problemas. */}
         <KpiTile
-          label="Issues found"
-          value={rollup?.total_issues ?? 0}
+          label="Open issues"
+          value={openIssues}
           icon={<ShieldAlert size={18} />}
         />
+        {/* Contava dentro de `topFindings`, que já está cortado nos 5 primeiros
+            — o máximo possível era 5, e dava 0 mesmo com um scan Critical 10.0
+            na base de dados. Tem de varrer todos os problemas em aberto. */}
         <KpiTile
           label="Critical findings"
-          value={topFindings.filter((f) => f.finding.temporal_score >= 9).length}
+          value={criticalFindings}
           icon={<Siren size={18} />}
           tone="critical"
         />
