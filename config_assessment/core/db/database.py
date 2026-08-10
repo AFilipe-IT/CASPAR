@@ -57,7 +57,23 @@ class Database:
 
     def __init__(self, path: str = ":memory:") -> None:
         self._path = path
-        self._conn = sqlite3.connect(path)
+        # check_same_thread=False: o FastAPI resolve as dependências (get_db, que
+        # abre esta ligação) e corre os handlers síncronos em threads distintas
+        # do mesmo pool do anyio. Com a verificação ligada, o handler recebia
+        # "SQLite objects created in a thread can only be used in that same
+        # thread" — e de forma intermitente, porque o pool às vezes reutiliza a
+        # mesma thread e o pedido passa. O `watch` tem o mesmo padrão: o loop
+        # corre numa thread própria.
+        #
+        # O que a flag desliga é só a verificação de thread. NÃO torna uma
+        # ligação partilhável por threads a correr em paralelo: fazê-lo dá
+        # "InterfaceError: bad parameter or other API misuse" (verificado em
+        # tests/test_api.py::TestDatabaseIsUsableAcrossThreads). É seguro aqui
+        # porque cada ligação tem um só dono de cada vez — get_db abre uma por
+        # pedido e fecha-a no fim, e o job_runner/watch_runner abrem a sua
+        # dentro de cada thread. Ao mudar este ficheiro, mantenha essa
+        # propriedade: uma Database por pedido/por thread, nunca uma global.
+        self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         # Enable WAL for better concurrent read performance
         self._conn.execute("PRAGMA journal_mode=WAL")

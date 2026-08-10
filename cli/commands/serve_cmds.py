@@ -28,7 +28,22 @@ def serve(ctx: click.Context, host: str, port: int, reload: bool) -> None:
     Swagger UI:   http://127.0.0.1:8000/docs
     CVM Console:  http://127.0.0.1:8000/app
     """
-    import uvicorn
+    # As dependências do servidor são um extra opcional: quem só usa a CLI não
+    # precisa de instalar fastapi/uvicorn. Sem esta captura, um `pip install -e .`
+    # sem o extra (o que o install-native.sh evita, mas quem instala à mão faz)
+    # rebentava com um traceback de ModuleNotFoundError, que não diz a ninguém
+    # qual é o comando que falta.
+    try:
+        import uvicorn
+    except ModuleNotFoundError as exc:
+        click.echo(
+            click.style(f"O 'caspar serve' precisa do extra [api] (falta: {exc.name}).\n",
+                        fg="yellow") +
+            "Instale com: " + click.style('pip install -e ".[api]"', bold=True) + "\n"
+            "A CLI (scan, build, plugin, report) funciona sem ele.",
+            err=True,
+        )
+        sys.exit(2)
 
     db_path: str = ctx.obj["db_path"]
     if not Path(db_path).exists():

@@ -393,3 +393,82 @@ class TestCliApiParity:
             cli_result = runtime.scan(dummy_config_file, db)
 
         assert cli_result.global_temporal_score == api_score
+
+
+# ------------------------------------------------------------------ #
+# Uso entre threads (o pool do anyio)                                  #
+# ------------------------------------------------------------------ #
+
+class TestDatabaseIsUsableAcrossThreads:
+    """Regressão: `GET /api/v1/hosts` devolvia 500 em produção.
+
+    O FastAPI corre handlers síncronos (`def`, que é o caso de todos os desta
+    API) num pool de threads do anyio, e resolve as dependências noutra thread
+    do mesmo pool. Sem `check_same_thread=False`, o handler recebia da sqlite3
+    "SQLite objects created in a thread can only be used in that same thread".
+
+    Estes testes usam threads directamente em vez do TestClient de propósito:
+    verificou-se que o TestClient devolve 200 mesmo com o defeito presente
+    (executa o pedido de forma a calhar a mesma thread), pelo que um teste
+    feito através dele passaria nos dois sentidos e não provaria nada. Foi
+    também por isso que a suite inteira passou com o defeito em produção.
+    """
+
+    def test_connection_survives_use_from_another_thread(self, db_path):
+        """O padrão exacto do FastAPI: abrir numa thread, consultar noutra."""
+        import threading
+
+        db = Database(db_path)
+        try:
+            outcome: dict = {}
+
+            def worker():
+                try:
+                    db.list_scans(limit=1)
+                    outcome["ok"] = True
+                except Exception as exc:  # noqa: BLE001 — queremos o tipo exacto
+                    outcome["error"] = f"{type(exc).__name__}: {exc}"
+
+            t = threading.Thread(target=worker)
+            t.start()
+            t.join()
+
+            assert outcome.get("ok"), (
+                "consulta a partir de outra thread falhou: "
+                f"{outcome.get('error')}"
+            )
+        finally:
+            db.close()
+
+    def test_concurrent_requests_each_with_their_own_connection(self, db_path):
+        """Vários pedidos em paralelo, cada um com a sua ligação.
+
+        É este o padrão real: `get_db` abre uma Database por pedido e fecha-a
+        no fim, e o job_runner/watch_runner fazem o mesmo dentro de cada
+        thread. A flag `check_same_thread=False` cobre a passagem da ligação
+        entre threads do pool *dentro* de um pedido; não autoriza partilhar uma
+        ligação por threads a correr ao mesmo tempo — isso dá "InterfaceError:
+        bad parameter or other API misuse" (verificado), e é por isso que
+        nenhum caminho do código o faz.
+        """
+        import threading
+
+        errors: list[str] = []
+        lock = threading.Lock()
+
+        def worker():
+            try:
+                for _ in range(5):
+                    with Database(db_path) as db:
+                        db.list_scans(limit=5)
+            except Exception as exc:  # noqa: BLE001
+                with lock:
+                    errors.append(f"{type(exc).__name__}: {exc}")
+
+        threads = [threading.Thread(target=worker) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"pedidos concorrentes falharam: {errors}"

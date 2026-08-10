@@ -147,6 +147,26 @@ sudo systemctl reload apache2
 caspar scan --live apache2
 ```
 
+> **Se o `reload` disser `apache2.service is not active, cannot reload`** — o
+> serviço já estava em baixo *antes* desta alteração; estas três directivas
+> passam `configtest` sem problema (verificado num Ubuntu 22.04 limpo). O
+> `reload` só recarrega um serviço a correr, e não te diz porque é que ele não
+> está. Diagnostica antes de continuar:
+>
+> ```bash
+> sudo apache2ctl configtest      # erro de sintaxe? diz o ficheiro e a linha
+> sudo ss -lptn 'sport = :80'     # outro processo (nginx!) na porta 80?
+> sudo tail -20 /var/log/apache2/error.log
+> ```
+>
+> As duas causas que apanhámos nesta VM foram (1) `SSLProtocol +SSLv3` num
+> passo anterior — o OpenSSL 3.0 removeu o SSLv3 do código, não o desactivou,
+> logo o `configtest` falha; e (2) o nginx do §1.1 ainda a segurar a porta 80,
+> caso em que o `configtest` diz `Syntax OK` e mesmo assim o arranque falha com
+> `AH00072: could not bind to address [::]:80`. Ver §1.1 e §1.4.
+>
+> Depois de corrigir: `sudo systemctl start apache2 && systemctl is-active apache2`.
+
 O score tem de subir face a 1.2, e deve aparecer a cadeia
 `info-disclosure-chain`: `ServerTokens` e `ServerSignature` isoladas são
 divulgação de informação; juntas dão ao atacante a versão exacta *e* a
