@@ -128,6 +128,43 @@ class TestParser:
         directives = parse_file(path)
         assert directives[0].value == "300"
 
+    def test_included_files_lists_every_file_the_scan_reads(self):
+        """O conjunto que o `watch` tem de vigiar.
+
+        Um `apache2.conf` real chega a puxar ~36 ficheiros por `Include`, e o
+        `ServerTokens` vive num deles. Vigiar só o ponto de entrada deixava o
+        score congelado depois de uma correcção verdadeira — o ficheiro
+        editado nunca entrava no fingerprint.
+        """
+        from config_assessment.core import runtime
+        from config_assessment.core.watch_loop import included_files
+        from config_assessment.plugins.apache_httpd import ApachePlugin
+
+        runtime.register_plugin(ApachePlugin())
+
+        tmpdir = tempfile.mkdtemp()
+        sec = os.path.join(tmpdir, "security.conf")
+        Path(sec).write_text("ServerTokens OS\n", encoding="utf-8")
+        main = os.path.join(tmpdir, "apache2.conf")
+        Path(main).write_text(f"Timeout 300\nInclude {sec}\n", encoding="utf-8")
+
+        files = included_files(main)
+        # O incluído tem de lá estar — é o ponto todo.
+        assert str(Path(sec).resolve()) in files
+        # E o de entrada também: é dele que sai o `Timeout`.
+        assert str(Path(main).resolve()) in files
+
+    def test_included_files_is_quiet_on_an_unsupported_path(self):
+        # Um caminho que nenhum plugin reconhece não pode rebentar a sessão de
+        # watch — degrada para "só o ponto de entrada".
+        from config_assessment.core.watch_loop import included_files
+
+        tmpdir = tempfile.mkdtemp()
+        junk = os.path.join(tmpdir, "not-a-config.xyz")
+        Path(junk).write_text("\x00\x01binary\n", encoding="utf-8")
+
+        assert included_files(junk) == []
+
 
 # ------------------------------------------------------------------ #
 # Rule engine tests                                                    #

@@ -112,6 +112,103 @@ def test_unreadable_target_yields_empty_and_no_crash(tmp_path):
     assert events == []
 
 
+# ── ficheiros incluídos entram no fingerprint ──────────────────────────
+#
+# O bug que isto fecha: um `watch /etc/apache2/apache2.conf` reportava
+# `ServerTokens` a 7.1, mas essa directiva vive em
+# `conf-available/security.conf`. Corrigi-la deixava o ficheiro vigiado
+# byte-a-byte igual — nenhum evento, score congelado, e a sessão a bater o
+# heartbeat como se estivesse tudo bem. Um scan segue os includes; a vigilância
+# tem de seguir os mesmos ficheiros.
+
+def test_fingerprint_changes_when_an_included_file_changes(tmp_path):
+    entry = tmp_path / "apache2.conf"
+    entry.write_text("Timeout 300\n")
+    inc = tmp_path / "security.conf"
+    inc.write_text("ServerTokens OS\n")
+
+    before = _fingerprint(entry, (str(inc),))
+    inc.write_text("ServerTokens Prod\n")
+
+    assert _fingerprint(entry, (str(inc),)) != before
+    # E o ficheiro de entrada não mudou — é exactamente por isso que a versão
+    # anterior não dava por nada.
+    assert _fingerprint(entry, ()) == _fingerprint(entry, ())
+
+
+def test_watch_emits_when_only_an_included_file_is_edited(tmp_path):
+    entry = tmp_path / "apache2.conf"
+    entry.write_text("Timeout 300\n")
+    inc = tmp_path / "security.conf"
+    inc.write_text("ServerTokens OS\n")
+
+    ticks = {"n": 0}
+
+    def _sleep(_):
+        ticks["n"] += 1
+        if ticks["n"] == 1:
+            inc.write_text("ServerTokens Prod\n")
+
+    events = list(watch(entry, stop=lambda: ticks["n"] >= 3, sleep=_sleep,
+                        included_files=lambda: [str(inc)]))
+    # Baseline + a alteração do include.
+    assert len(events) == 2
+
+
+def test_included_files_are_reconsulted_each_poll(tmp_path):
+    # Um include acrescentado a meio tem de passar a ser vigiado: a lista é uma
+    # callable precisamente para isso, e não um conjunto fixo do arranque.
+    entry = tmp_path / "apache2.conf"
+    entry.write_text("Timeout 300\n")
+    later = tmp_path / "added.conf"
+
+    ticks = {"n": 0}
+    tracked: list[str] = []
+
+    def _sleep(_):
+        ticks["n"] += 1
+        if ticks["n"] == 1:
+            later.write_text("ServerSignature On\n")
+            tracked.append(str(later))
+        elif ticks["n"] == 2:
+            later.write_text("ServerSignature Off\n")
+
+    events = list(watch(entry, stop=lambda: ticks["n"] >= 3, sleep=_sleep,
+                        included_files=lambda: list(tracked)))
+    # baseline, o include a aparecer, e depois a sua edição.
+    assert len(events) == 3
+
+
+def test_unreadable_include_does_not_kill_the_loop(tmp_path):
+    # Um include apagado é, ele próprio, uma alteração digna de re-scan — não
+    # pode ser silenciosamente ignorado nem rebentar a sessão.
+    entry = tmp_path / "apache2.conf"
+    entry.write_text("Timeout 300\n")
+    inc = tmp_path / "security.conf"
+    inc.write_text("ServerTokens OS\n")
+
+    before = _fingerprint(entry, (str(inc),))
+    inc.unlink()
+    after = _fingerprint(entry, (str(inc),))
+
+    assert after != before
+    assert after != ""          # a entrada continua legível: a sessão segue
+
+
+def test_a_failing_include_resolver_degrades_to_the_entry_point(tmp_path):
+    # Uma config a meio de uma gravação pode não fazer parse. Perder um tick de
+    # cobertura é aceitável; perder a sessão não.
+    entry = tmp_path / "apache2.conf"
+    entry.write_text("Timeout 300\n")
+
+    def _boom():
+        raise RuntimeError("config mid-save")
+
+    events = list(watch(entry, stop=lambda: True, sleep=lambda _: None,
+                        included_files=_boom))
+    assert len(events) == 1     # baseline emitido à mesma
+
+
 # ── the compact alert line (CLI formatter) ─────────────────────────────
 
 class _Issue:

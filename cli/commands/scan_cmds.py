@@ -357,6 +357,7 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
     from config_assessment.core.db.database import Database
     from config_assessment.core.input_resolver import resolve
     from config_assessment.core.watch import watch as watch_loop
+    from config_assessment.core.watch_loop import included_files
     from config_assessment.core.watch_loop import run_watch_tick
 
     _discover_plugins()
@@ -459,7 +460,8 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
     prev = None   # previous ScanResult, for the delta
     try:
         for event in watch_loop(resolved.path, interval=interval,
-                                sleep=_sleep_and_heartbeat):
+                                sleep=_sleep_and_heartbeat,
+                                included_files=lambda: included_files(resolved.path)):
             result = _scan()
             ts = datetime.now().strftime("%H:%M:%S")
             if event.previous is None:

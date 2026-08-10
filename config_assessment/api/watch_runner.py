@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 from config_assessment.core.db.database import Database
-from config_assessment.core.watch_loop import run_watch_tick
+from config_assessment.core.watch_loop import included_files, run_watch_tick
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,8 @@ def start_watch(db_path: str, *, path: str, label: str, interval: float,
         try:
             for _event in watch_loop(path, interval=interval,
                                      stop=session.stop.is_set,
-                                     sleep=_sleep_and_heartbeat):
+                                     sleep=_sleep_and_heartbeat,
+                                     included_files=lambda: included_files(path)):
                 if session.stop.is_set():
                     break
                 session.resumed.wait()
