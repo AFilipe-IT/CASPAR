@@ -41,20 +41,35 @@ sudo apt-get install -y apache2 nginx
 ```
 
 **Os dois disputam a porta 80 e não podem estar activos ao mesmo tempo.** Quem
-arrancar primeiro fica com ela; o outro falha o arranque. Alterna conforme o
-serviço que estás a testar:
+arrancar primeiro fica com ela; o outro falha o arranque.
+
+**Faz isto agora, antes de qualquer teste** — passa o NGINX para a porta 8080,
+de modo a que os dois possam correr em simultâneo:
 
 ```bash
-# testes ao Apache
-sudo systemctl stop nginx && sudo systemctl start apache2
+sudo sed -i 's/listen 80 default_server;/listen 8080 default_server;/; s/listen \[::\]:80 default_server;/listen [::]:8080 default_server;/' \
+    /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl restart nginx
+sudo systemctl start apache2
 
-# testes ao NGINX
-sudo systemctl stop apache2 && sudo systemctl start nginx
+systemctl is-active apache2 nginx     # tem de dizer "active" duas vezes
+sudo ss -lptn 'sport = :80'           # só apache2 aqui
 ```
 
-Se preferires os dois a correr — útil para fazer `--live` a ambos sem andar a
-parar serviços — muda a porta do NGINX para 8080 em
-`/etc/nginx/sites-enabled/default` (`listen 8080;`) e reinicia-o.
+Não é só conveniência. O `systemctl stop nginx` resolve até ao reboot seguinte:
+ambos vêm com arranque automático, o nginx costuma ganhar a corrida, e o Apache
+fica em baixo outra vez — mas os scans `--live` continuam a produzir números
+plausíveis a ler o disco (§1.3), pelo que a falha passa despercebida e o `watch`
+nunca vê o serviço a mudar. Foi isto que aconteceu numa das VMs de validação,
+duas vezes.
+
+Se preferires mesmo assim alternar em vez de mudar a porta, o preço é confirmar
+o estado antes de **cada** scan:
+
+```bash
+sudo systemctl stop nginx && sudo systemctl start apache2   # testes ao Apache
+sudo systemctl stop apache2 && sudo systemctl start nginx   # testes ao NGINX
+```
 
 **Confirma sempre antes de cada scan `--live`:**
 

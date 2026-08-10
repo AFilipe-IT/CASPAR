@@ -283,6 +283,45 @@ _LIVE_SERVICE_MAP = {
 }
 
 
+def _service_is_running(service_name: str) -> bool | None:
+    """Se a unidade systemd do serviço está activa.
+
+    Devolve None quando não dá para saber — sem systemd (containers), sem
+    `systemctl` no PATH, ou unidade desconhecida. None significa "não sei", e
+    quem chama tem de o distinguir de False: só avisamos com False, para não
+    inventar avisos onde a pergunta não faz sentido.
+
+    Isto é *informativo*, nunca condiciona o scan. O `--live` lê a configuração
+    em disco de propósito e continua a funcionar com o serviço parado — o que
+    faltava era dizê-lo. Ver a nota em resolve_live_service.
+    """
+    import shutil
+
+    if not shutil.which("systemctl"):
+        return None
+    try:
+        result = subprocess.run(
+            ["systemctl", "is-active", service_name],
+            capture_output=True, text=True, timeout=5,
+        )
+    except Exception:
+        return None
+
+    state = result.stdout.strip()
+    if state == "active":
+        return True
+    # Uma unidade inexistente também responde "inactive" — mas com exit code 4,
+    # ao passo que uma unidade real parada dá 3. Sem esta distinção, pedir
+    # `--live mysql` numa máquina sem MySQL instalado como serviço systemd
+    # produzia o aviso "não está a correr", que é enganador: o que se passa é
+    # que não há unidade nenhuma com esse nome.
+    if result.returncode == 4:
+        return None
+    if state in ("inactive", "failed", "activating", "deactivating"):
+        return False
+    return None
+
+
 def _get_apache_version(binary: str) -> str:
     """Obter versão do Apache via `apache2 -v` ou `httpd -v`."""
     try:
@@ -367,6 +406,7 @@ def resolve_live_service(service_name: str) -> ResolvedInput:
                         "version": version,
                         "binary": binary,
                         "config_path": config_path,
+                        "running": _service_is_running(service_lower),
                     },
                 )
 
@@ -381,6 +421,7 @@ def resolve_live_service(service_name: str) -> ResolvedInput:
                 "service": plugin_id,
                 "version": version,
                 "config_path": resolved.path,
+                "running": _service_is_running(service_lower),
             })
             return resolved
         except FileNotFoundError:
@@ -398,6 +439,7 @@ def resolve_live_service(service_name: str) -> ResolvedInput:
                     "service": plugin_id,
                     "version": detect_version(plugin_id, candidate) or "unknown",
                     "config_path": candidate,
+                    "running": _service_is_running(service_lower),
                 },
             )
 

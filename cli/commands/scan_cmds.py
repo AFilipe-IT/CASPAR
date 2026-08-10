@@ -121,6 +121,20 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
         vs = f" {v}" if v and v != "unknown" else ""
         click.echo(click.style(f"  Service: {resolved.metadata.get('service', '')}{vs}", fg="cyan"))
         click.echo(click.style(f"  Config: {resolved.path}", dim=True))
+        # O --live lê a configuração em disco, e continua a funcionar com o
+        # serviço parado — de propósito. O que faltava era dizê-lo: sem este
+        # aviso o scan devolve um score plausível de um serviço em baixo, e
+        # quem estiver a degradar a configuração para ver o score mexer conclui
+        # que é o CASPAR que não reage. `running` é None quando não há systemd
+        # (containers) — aí a pergunta não se põe e não avisamos.
+        if resolved.metadata.get("running") is False:
+            click.echo(click.style(
+                "  ⚠ O serviço não está a correr — a configuração em disco foi "
+                "lida na mesma.\n"
+                "    O score é da configuração, não de um serviço activo. Um "
+                "`reload` falhado\n"
+                "    significa que estas alterações ainda não estão em vigor.",
+                fg="yellow"), err=True)
         click.echo()
     elif resolved.mode == "docker":
         click.echo(click.style(f"  Image: {resolved.metadata.get('image', '')}", fg="cyan"))
@@ -365,6 +379,17 @@ def watch(ctx, input_path, live, service_version, interval, env_profile,
         name = resolved.metadata.get("service") or input_path
         click.echo(click.style(
             f"  Service: {name}  ({resolved.path})", fg="cyan"))
+        # Vale ainda mais aqui do que no `scan`: quem põe um watch a correr está
+        # à espera de ver o score mexer quando altera a configuração. Com o
+        # serviço parado o watch funciona — vigia os ficheiros — mas um `reload`
+        # falhado não põe nada em vigor, e a leitura fácil é que o watch está
+        # avariado.
+        if resolved.metadata.get("running") is False:
+            click.echo(click.style(
+                "  ⚠ O serviço não está a correr. O watch segue as alterações "
+                "aos ficheiros na mesma,\n"
+                "    mas o que fores medindo não está em vigor até o serviço "
+                "arrancar.", fg="yellow"), err=True)
     else:
         name = Path(resolved.path).name
 

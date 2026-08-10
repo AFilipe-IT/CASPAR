@@ -78,3 +78,71 @@ def test_aliases_route_to_same_plugin():
     assert ir._LIVE_SERVICE_MAP["sshd"][0] == ir._LIVE_SERVICE_MAP["ssh"][0]
     assert ir._LIVE_SERVICE_MAP["mariadb"][0] == ir._LIVE_SERVICE_MAP["mysql"][0]
     assert ir._LIVE_SERVICE_MAP["apache"][0] == ir._LIVE_SERVICE_MAP["apache2"][0]
+
+
+# ------------------------------------------------------------------ #
+# Estado do serviço (informativo, nunca condiciona o scan)             #
+# ------------------------------------------------------------------ #
+
+class TestServiceRunningState:
+    """`--live` lê a configuração em disco e funciona com o serviço parado —
+    é intencional. O que faltava era dizê-lo: um Apache em `failed` produzia
+    um score normal (7.1, medido) sem uma palavra, e quem estava a degradar a
+    configuração para ver o score mexer concluía que era o CASPAR que não
+    reagia. Daí `metadata["running"]`, que a CLI usa para avisar.
+
+    Os três valores têm significados distintos e a distinção interessa:
+    True/False só quando há resposta do systemd, None quando a pergunta não se
+    pode fazer — e None nunca deve gerar aviso.
+    """
+
+    def test_active_service_reports_true(self, monkeypatch):
+        import subprocess as sp
+        monkeypatch.setattr(ir.shutil, "which", lambda _: "/bin/systemctl",
+                            raising=False)
+        monkeypatch.setattr(
+            ir.subprocess, "run",
+            lambda *a, **k: sp.CompletedProcess(a[0], 0, "active\n", ""))
+        assert ir._service_is_running("apache2") is True
+
+    @pytest.mark.parametrize("state", ["inactive", "failed"])
+    def test_stopped_service_reports_false(self, state, monkeypatch):
+        """Uma unidade real parada dá exit code 3."""
+        import subprocess as sp
+        monkeypatch.setattr(ir.shutil, "which", lambda _: "/bin/systemctl",
+                            raising=False)
+        monkeypatch.setattr(
+            ir.subprocess, "run",
+            lambda *a, **k: sp.CompletedProcess(a[0], 3, f"{state}\n", ""))
+        assert ir._service_is_running("apache2") is False
+
+    def test_unknown_unit_reports_none_not_false(self, monkeypatch):
+        """Uma unidade inexistente também diz "inactive", mas com exit code 4.
+
+        Sem esta distinção, `--live mysql` numa máquina onde o MySQL não é uma
+        unidade systemd dava o aviso "não está a correr" — enganador, porque o
+        que não existe é a unidade.
+        """
+        import subprocess as sp
+        monkeypatch.setattr(ir.shutil, "which", lambda _: "/bin/systemctl",
+                            raising=False)
+        monkeypatch.setattr(
+            ir.subprocess, "run",
+            lambda *a, **k: sp.CompletedProcess(a[0], 4, "inactive\n", ""))
+        assert ir._service_is_running("mysql") is None
+
+    def test_without_systemctl_reports_none(self, monkeypatch):
+        """Dentro de um container não há systemd — a pergunta não se põe."""
+        monkeypatch.setattr(ir.shutil, "which", lambda _: None, raising=False)
+        assert ir._service_is_running("apache2") is None
+
+    def test_resolution_carries_the_flag(self, tmp_path, monkeypatch):
+        """O metadata tem de chegar a quem chama — é o que a CLI lê para avisar."""
+        etc = tmp_path / "etc" / "nginx"
+        etc.mkdir(parents=True)
+        (etc / "nginx.conf").write_text("worker_processes 1;\n")
+        monkeypatch.setitem(ir._LIVE_SERVICE_MAP, "nginx", ("nginx", str(etc)))
+        monkeypatch.setattr(ir, "_service_is_running", lambda _: False)
+
+        resolved = resolve_live_service("nginx")
+        assert resolved.metadata["running"] is False
