@@ -43,6 +43,25 @@ describe("WatchEventDetail — achados de um evento", () => {
     });
   });
 
+  it("mostra o score de cada achado, não só a severidade", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(detail), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    })));
+
+    renderDetail();
+
+    // Doze achados "Medium" liam-se todos iguais: o que distingue as linhas —
+    // e explica qual fixa o score global — é o número.
+    const issues = (detail as { issues: { temporal_score: number }[] }).issues;
+    const worst = Math.max(...issues.map((i) => i.temporal_score));
+    const firstRow = await waitFor(() => {
+      const row = document.querySelector("tbody tr");
+      expect(row).not.toBeNull();
+      return row!;
+    });
+    expect(firstRow.textContent).toContain(worst.toFixed(1));
+  });
+
   it("põe o achado de maior score na primeira linha", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(detail), {
       status: 200, headers: { "Content-Type": "application/json" },

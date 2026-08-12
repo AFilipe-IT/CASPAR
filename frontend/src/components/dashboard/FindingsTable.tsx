@@ -58,6 +58,18 @@ export function FindingsTable({ rows }: { rows: FindingRow[] }) {
         </span>
       ),
     },
+    // A severidade sozinha não distingue as linhas: doze achados "Medium"
+    // ficavam todos iguais, quando o que responde a "qual é que fixa o score
+    // global?" é o número — o global é o pior temporal individual, e sem ele
+    // a lista ordenada por peso não mostrava por que peso estava ordenada.
+    {
+      key: "score",
+      header: "Score",
+      width: "80px",
+      render: (r) => (
+        <span className={styles.score}>{r.finding.temporal_score.toFixed(1)}</span>
+      ),
+    },
     { key: "service", header: "Service", render: (r) => r.service },
   ];
 

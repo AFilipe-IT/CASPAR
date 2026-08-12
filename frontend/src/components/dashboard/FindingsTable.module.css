@@ -4,6 +4,13 @@
   gap: var(--sp-2);
 }
 
+/* Tabulares para os números alinharem na vertical: a lista está ordenada por
+   este valor, e com dígitos de largura variável a ordem não se lê de relance. */
+.score {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
 /* Discreto de propósito: assinala que há uma referência publicada por trás
    do achado sem competir com a severidade, que é a coluna que ordena. */
 .cveTag {
