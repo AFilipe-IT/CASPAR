@@ -138,7 +138,12 @@ fi
 # NOTA: NÃO montar /usr do host — mascararia o binário caspar da imagem
 # (/usr/local/bin/caspar) e o container deixaria de arrancar.
 # A deteção de versão recorre, neste modo, ao texto da configuração.
-if echo "$*" | grep -qE "(\-\-live|(^| )watch( |$))"; then
+# 'serve' entra na mesma lista: a consola web oferece scan --live e watch sobre
+# os serviços instalados, mas quem os corre é o processo dentro do container.
+# Sem /etc montado, o container só via o seu próprio sistema de ficheiros e a
+# consola respondia "service not found" para serviços que existem mesmo no
+# host — o pedido nunca chegava a sair do container.
+if echo "$*" | grep -qE "(\-\-live|(^| )watch( |$)|(^| )serve( |$))"; then
     MOUNT_ARGS="$MOUNT_ARGS -v /etc:/etc:ro"
 fi
 

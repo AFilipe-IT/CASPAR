@@ -87,6 +87,29 @@ export function useScanChains(scanId: string | undefined) {
   });
 }
 
+/**
+ * Apagar uma avaliação da base de dados.
+ *
+ * As avaliações acumulam-se: cada scan fica guardado, e num uso continuado a
+ * base cresce sem limite e sem forma de a limpar pela consola. Isto remove a
+ * linha de vez.
+ *
+ * Invalida também `hosts` e `trends` porque o mesmo scan alimenta os números
+ * da Home e as tendências — deixá-los em cache faria a Home continuar a
+ * contar um scan que já não existe.
+ */
+export function useDeleteScan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (scanId: string) => api.delete<void>(`/scans/${scanId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["scans"] });
+      qc.invalidateQueries({ queryKey: ["hosts"] });
+      qc.invalidateQueries({ queryKey: ["trends"] });
+    },
+  });
+}
+
 // Server-path / --live mode — mirrors `caspar scan CONFIG [--live]`.
 export function useRunScan() {
   const qc = useQueryClient();

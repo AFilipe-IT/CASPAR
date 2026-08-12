@@ -4,13 +4,15 @@ import { Button } from "@/components/ui/Button";
 import { Table, type Column } from "@/components/ui/Table";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { ScanListItem } from "@/api/types";
-import { Eye, Download } from "lucide-react";
+import { Eye, Download, Trash2 } from "lucide-react";
 
 interface ReportListProps {
   scans: ScanListItem[];
   onPreview: (scan: ScanListItem) => void;
   onDownload: (scan: ScanListItem) => void;
+  onDelete: (scan: ScanListItem) => void;
   downloadingId: string | null;
+  deletingId: string | null;
 }
 
 function formatTimestamp(ts: string): string {
@@ -27,7 +29,9 @@ function formatTimestamp(ts: string): string {
   }
 }
 
-export function ReportList({ scans, onPreview, onDownload, downloadingId }: ReportListProps) {
+export function ReportList({
+  scans, onPreview, onDownload, onDelete, downloadingId, deletingId,
+}: ReportListProps) {
   if (scans.length === 0) {
     return (
       <EmptyState
@@ -52,7 +56,7 @@ export function ReportList({ scans, onPreview, onDownload, downloadingId }: Repo
     {
       key: "actions",
       header: "",
-      width: "140px",
+      width: "210px",
       render: (s) => (
         <div style={{ display: "flex", gap: "8px" }}>
           <Button variant="ghost" icon={<Eye size={14} />} onClick={() => onPreview(s)}>
@@ -65,6 +69,24 @@ export function ReportList({ scans, onPreview, onDownload, downloadingId }: Repo
             onClick={() => onDownload(s)}
           >
             {downloadingId === s.id ? "…" : "HTML"}
+          </Button>
+          {/* Apagar é irreversível e a linha não diz que a avaliação também
+              alimenta a Home e as tendências — daí a confirmação nomear o que
+              desaparece, em vez de perguntar só "tem a certeza?". */}
+          <Button
+            variant="ghost"
+            icon={<Trash2 size={14} />}
+            disabled={deletingId === s.id}
+            title="Delete this assessment from the database"
+            onClick={() => {
+              if (window.confirm(
+                `Delete the ${s.target_name} assessment of ${s.input_path}?\n\n`
+                + "It is removed from the database for good, and stops "
+                + "counting in the Home totals and the trends.",
+              )) onDelete(s);
+            }}
+          >
+            {deletingId === s.id ? "…" : "Delete"}
           </Button>
         </div>
       ),
