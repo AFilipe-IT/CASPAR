@@ -116,6 +116,11 @@ CREATE TABLE IF NOT EXISTS scan_results (
     total_chains            INTEGER NOT NULL DEFAULT 0,
     issues_json             TEXT    NOT NULL DEFAULT '[]',
     chains_json             TEXT    NOT NULL DEFAULT '[]',
+    -- Manifesto de reprodutibilidade (core/manifest.py): versão do código e
+    -- sha256 do conteúdo da base que produziram estes scores. Sem ele gravado,
+    -- um resultado relido da base não se pode auditar — e é essa auditoria a
+    -- afirmação que a metodologia faz.
+    manifest_json           TEXT    NOT NULL DEFAULT '{}',
     timestamp               TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 

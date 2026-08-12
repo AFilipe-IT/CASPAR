@@ -10,16 +10,26 @@ import styles from "./StatusFooter.module.css";
  * diferentes são indistinguíveis de um que mudou — e é essa a pergunta a
  * seguir a "está mau?".
  *
- * O mockup tem aqui um quarto campo, "Reproducible", com o SHA256 da base e o
- * manifesto do scan. Fica de fora de propósito: o `manifest` vem vazio nos
- * scans gravados e não há endpoint que dê o hash da base. Inventar um número
- * de reprodutibilidade era precisamente o que não se pode fazer.
+ * O campo "Reproducible" mostra o manifesto do scan — versão do código e
+ * sha256 do conteúdo da base que produziram estes scores. Dois scans com o
+ * mesmo manifesto e o mesmo input têm de dar o mesmo resultado; é o que torna
+ * um número auditável em vez de uma afirmação. Só aparece quando o scan o
+ * traz: os scans anteriores à coluna `manifest_json` não o têm, e escrever
+ * ali um hash inventado destruía exactamente a garantia que o campo dá.
  */
 interface StatusFooterProps {
   lastScan?: ScanListItem;
   settings?: ServerSettings;
   /** Directivas avaliadas na leitura actual — o tamanho do que foi coberto. */
   directives?: number;
+  /** Manifesto do último scan (`core/manifest.py`), vazio nos scans antigos. */
+  manifest?: Record<string, unknown>;
+}
+
+/** O sha256 da base, cortado como o CLI o corta — 12 caracteres chegam para
+ *  comparar dois scans ao olho, e o valor completo fica no `title`. */
+function shortHash(v: unknown): string | null {
+  return typeof v === "string" && v.length >= 12 ? v.slice(0, 12) : null;
 }
 
 function formatWhen(ts: string): string {
@@ -33,7 +43,10 @@ function formatWhen(ts: string): string {
   }
 }
 
-export function StatusFooter({ lastScan, settings, directives }: StatusFooterProps) {
+export function StatusFooter({
+  lastScan, settings, directives, manifest,
+}: StatusFooterProps) {
+  const kbHash = shortHash(manifest?.db_sha256);
   return (
     <div className={styles.bar}>
       <div className={styles.item}>
@@ -52,8 +65,25 @@ export function StatusFooter({ lastScan, settings, directives }: StatusFooterPro
         <div className={styles.body}>
           <span className={styles.label}>Knowledge base</span>
           <span className={styles.value}>{settings?.db_path ?? "—"}</span>
+          {/* O hash identifica a base melhor do que o nome do ficheiro: dois
+              `ccss.db` com regras diferentes dão scores diferentes e só isto
+              os distingue. Ao lado das directivas porque é a mesma pergunta —
+              contra o quê é que isto foi avaliado. */}
           {directives !== undefined && (
-            <span className={styles.meta}>{directives} directives assessed</span>
+            <span className={styles.meta}>
+              {directives} directives assessed
+              {kbHash && (
+                <>
+                  {" · "}
+                  <code
+                    className={styles.hash}
+                    title={`sha256 ${String(manifest?.db_sha256)}`}
+                  >
+                    {kbHash}
+                  </code>
+                </>
+              )}
+            </span>
           )}
         </div>
       </div>
@@ -74,8 +104,13 @@ export function StatusFooter({ lastScan, settings, directives }: StatusFooterPro
         <div className={styles.body}>
           <span className={styles.label}>Engine</span>
           <span className={styles.value}>CVM v{settings?.caspar_version ?? "—"}</span>
+          {/* Com manifesto, o resultado é auditável: quem o quiser confirmar
+              tem a versão e a base com que foi produzido. Sem manifesto não se
+              afirma o contrário — afirma-se que não se sabe, que é diferente. */}
           <span className={styles.meta}>
-            {settings?.api_key_required ? "API key enforced" : "API key not enforced"}
+            {kbHash
+              ? "Reproducible · manifest recorded"
+              : "No manifest on this scan"}
           </span>
         </div>
       </div>

@@ -155,6 +155,12 @@ class Database:
              "ALTER TABLE scan_results ADD COLUMN watch_session TEXT"),
             ("watch_interval",
              "ALTER TABLE scan_results ADD COLUMN watch_interval REAL"),
+            # As bases já existentes têm scans gravados sem manifesto: ficam com
+            # '{}' e é o valor honesto — foram produzidos por código que não o
+            # gravava, e não há como reconstruir a posteriori o sha256 da base
+            # nessa altura. Os scans novos passam a trazê-lo.
+            ("manifest_json",
+             "ALTER TABLE scan_results ADD COLUMN manifest_json TEXT NOT NULL DEFAULT '{}'"),
         ]
         for col_name, sql in simple_migrations:
             try:
@@ -696,14 +702,14 @@ class Database:
                 profile_av, profile_au,
                 global_base_score, global_temporal_score, severity,
                 total_directives, total_issues, total_chains,
-                issues_json, chains_json, host_id,
+                issues_json, chains_json, manifest_json, host_id,
                 watch_session, watch_interval
             ) VALUES (
                 :id, :target_name, :input_path, :input_hash,
                 :profile_av, :profile_au,
                 :global_base_score, :global_temporal_score, :severity,
                 :total_directives, :total_issues, :total_chains,
-                :issues_json, :chains_json, :host_id,
+                :issues_json, :chains_json, :manifest_json, :host_id,
                 :watch_session, :watch_interval
             )
             """,
@@ -722,12 +728,33 @@ class Database:
                 "total_chains": result.total_chains_detected,
                 "issues_json": json.dumps([i.model_dump() for i in result.issues], default=str),
                 "chains_json": json.dumps([c.model_dump() for c in result.chains], default=str),
+                "manifest_json": json.dumps(result.manifest, default=str),
                 "host_id": host_id,
                 "watch_session": watch_session,
                 "watch_interval": watch_interval,
             },
         )
         self._conn.commit()
+
+    @staticmethod
+    def _manifest_of(row) -> dict:
+        """O manifesto gravado, ou `{}` para os scans anteriores à coluna.
+
+        Defensivo de propósito: uma base por migrar não tem a coluna, e um scan
+        antigo tem-na vazia. Nos dois casos a resposta certa é "não há
+        manifesto" — nunca inventar um, que é o que tornaria a auditoria
+        impossível sem se dar por isso.
+        """
+        try:
+            raw = row["manifest_json"]
+        except (IndexError, KeyError):
+            return {}
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw)
+        except (ValueError, TypeError):
+            return {}
 
     def get_scan_result(self, scan_id: str) -> ScanResult | None:
         cur = self._conn.execute(
@@ -750,6 +777,7 @@ class Database:
             total_chains_detected=row["total_chains"],
             issues=json.loads(row["issues_json"]),
             chains=json.loads(row["chains_json"]),
+            manifest=self._manifest_of(row),
         )
 
     def get_scan_history(self, input_path: str | None = None,

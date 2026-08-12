@@ -179,3 +179,86 @@ def test_scan_result_carries_manifest(tmp_path):
     # The manifest must survive the JSON report (that's where auditors read it).
     import json
     assert json.loads(result.model_dump_json())["manifest"] == man
+
+
+def test_manifest_survives_the_database(tmp_path):
+    """The manifest must survive save→load, not just the JSON report.
+
+    This is the gap the manifest fell through for a while: it was built in
+    memory and printed by the CLI, but `save_scan_result` never wrote it, so
+    every result read back from the database — which is what the API and the
+    console serve — carried `manifest={}`. A reproducibility record that only
+    exists in the process that produced it cannot be audited by anyone.
+    """
+    from config_assessment.core.db.database import Database
+    from config_assessment.core.models import ScanResult
+
+    dbf = tmp_path / "rt.db"
+    manifest = {
+        "caspar_version": "1.0.0",
+        "python": "3.12.3",
+        "db_file": "rt.db",
+        "db_sha256": "f" * 64,
+        "target": "nginx",
+        "rules_for_target": 18,
+    }
+    result = ScanResult(
+        scan_id="round-trip-1",
+        target_name="nginx",
+        input_path="/etc/nginx/nginx.conf",
+        input_hash="abc123",
+        profile={"av": "N", "au": "N"},
+        manifest=manifest,
+    )
+
+    with Database(str(dbf)) as db:
+        db.save_scan_result(result)
+        back = db.get_scan_result("round-trip-1")
+
+    assert back is not None
+    assert back.manifest == manifest, "manifest lost on the database round-trip"
+
+
+def test_scans_predating_the_column_read_as_empty(tmp_path):
+    """A scan saved before `manifest_json` existed reads back as `{}`.
+
+    Old rows genuinely have no manifest and there is no way to reconstruct one
+    after the fact — the knowledge base has moved on. `{}` is the honest answer
+    and the UI keys off it to say so; anything invented here would be a
+    reproducibility claim nobody can check.
+    """
+    import sqlite3 as _sq
+
+    from config_assessment.core.db.database import Database
+
+    dbf = tmp_path / "old.db"
+    with Database(str(dbf)) as db:
+        db.save_scan_result(
+            ScanResultFactory(scan_id="pre-column", manifest={"db_sha256": "x" * 64})
+        )
+    # Simula a base antiga: apaga o valor gravado, como se a coluna nunca lá
+    # tivesse estado quando a linha foi escrita.
+    conn = _sq.connect(dbf)
+    conn.execute("UPDATE scan_results SET manifest_json = '' WHERE id = 'pre-column'")
+    conn.commit()
+    conn.close()
+
+    with Database(str(dbf)) as db:
+        back = db.get_scan_result("pre-column")
+
+    assert back is not None
+    assert back.manifest == {}
+
+
+def ScanResultFactory(**kw):
+    """Minimal ScanResult for persistence tests."""
+    from config_assessment.core.models import ScanResult
+
+    base = {
+        "target_name": "nginx",
+        "input_path": "/etc/nginx/nginx.conf",
+        "input_hash": "abc123",
+        "profile": {"av": "N", "au": "N"},
+    }
+    base.update(kw)
+    return ScanResult(**base)

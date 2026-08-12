@@ -10,6 +10,7 @@ import {
   Settings,
   ShieldCheck,
 } from "lucide-react";
+import { useSettings } from "@/api/manage";
 import styles from "./Sidebar.module.css";
 
 /* Os mesmos 8 destinos de sempre, agora agrupados pelo que a pessoa está a
@@ -45,6 +46,8 @@ const NAV_GROUPS = [
 ];
 
 export function Sidebar() {
+  const { data: settings } = useSettings();
+  const version = settings?.caspar_version;
   return (
     <aside className={styles.sidebar}>
       <div className={styles.brand}>
@@ -79,7 +82,11 @@ export function Sidebar() {
       </nav>
 
       <div className={styles.footer}>
-        <span className={styles.version}>v0.1.0</span>
+        {/* Vinda do servidor, não escrita à mão: fixa no código, ficava a
+            contradizer o rodapé do painel à primeira versão que saísse. */}
+        <span className={styles.version}>
+          {version ? `v${version}` : ""}
+        </span>
       </div>
     </aside>
   );

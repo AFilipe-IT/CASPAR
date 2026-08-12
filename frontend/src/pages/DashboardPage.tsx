@@ -245,10 +245,14 @@ export function DashboardPage() {
 
       {/* Fecha a página com a proveniência dos números: de quando são, contra
           que base, com que cobertura. */}
+      {/* O manifesto vem do scan completo, não da listagem: a lista traz só o
+          resumo. `details` está ordenado pelos mesmos ids, portanto o do alvo
+          mais recente é o que corresponde à última avaliação mostrada ao lado. */}
       <StatusFooter
         lastScan={(scans ?? [])[0]}
         settings={settings}
         directives={totalDirectives}
+        manifest={details.find((d) => d.scan_id === (scans ?? [])[0]?.id)?.manifest}
       />
     </>
   );

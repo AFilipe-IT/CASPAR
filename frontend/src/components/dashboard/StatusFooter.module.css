@@ -64,6 +64,14 @@
   white-space: nowrap;
 }
 
+/* Monoespaçado porque é um hash e lê-se caractere a caractere — comparar dois
+   scans é comparar estas doze letras. */
+.hash {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: -0.01em;
+}
+
 /* Abaixo dos 1400px quatro colunas deixavam cada campo com ~200px e os
    caminhos ficavam todos cortados; passa a duas linhas de dois. */
 @media (max-width: 1400px) {
