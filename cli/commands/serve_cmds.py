@@ -17,7 +17,7 @@ import click
 @click.command("serve")
 @click.option("--host", default="127.0.0.1", show_default=True,
               help="Bind address. Use 0.0.0.0 to expose beyond localhost.")
-@click.option("--port", default=8000, show_default=True, type=int)
+@click.option("--port", default=2027, show_default=True, type=int)
 @click.option("--reload", is_flag=True, default=False,
               help="Auto-reload on source changes (development only).")
 @click.pass_context
@@ -25,8 +25,8 @@ def serve(ctx: click.Context, host: str, port: int, reload: bool) -> None:
     """Serve the REST API + CVM Console (same CVM Core as `caspar scan`).
 
     \b
-    Swagger UI:   http://127.0.0.1:8000/docs
-    CVM Console:  http://127.0.0.1:8000/app
+    Swagger UI:   http://127.0.0.1:2027/docs
+    CVM Console:  http://127.0.0.1:2027/app
     """
     # As dependências do servidor são um extra opcional: quem só usa a CLI não
     # precisa de instalar fastapi/uvicorn. Sem esta captura, um `pip install -e .`

@@ -3,7 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
-// CVM console dev server. Backend (caspar serve) runs on :8000 and owns
+// CVM console dev server. Backend (caspar serve) runs on :2027 and owns
 // /api/v1; the build output is mounted there at /app in production, so
 // base is relative and the dev proxy mirrors the same path prefix.
 export default defineConfig({
@@ -17,7 +17,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:8000",
+      "/api": "http://127.0.0.1:2027",
     },
   },
   build: {

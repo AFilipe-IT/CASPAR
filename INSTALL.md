@@ -367,7 +367,7 @@ comparação contra Trivy e OpenSCAP, está em
 | Reproduzir os resultados da dissertação | [docs/04_AVALIACAO_FUNCIONAL.md](docs/04_AVALIACAO_FUNCIONAL.md) |
 | Protocolo de medições e validação | [docs/06_VALIDACAO.md](docs/06_VALIDACAO.md) |
 | Arquitectura interna | [docs/05_GUIA_TECNICO.md](docs/05_GUIA_TECNICO.md) |
-| Consola web (React) | `caspar serve`, depois `http://127.0.0.1:8000/app` |
+| Consola web (React) | `caspar serve`, depois `http://127.0.0.1:2027/app` |
 
 ---
 

@@ -220,9 +220,14 @@ fi
 # dentro do container, portanto a publicação da porta não bastaria.
 PORT_ARGS=""
 if echo "$*" | grep -qE "(^| )serve( |$)"; then
-    # Respeita um --port escolhido pelo utilizador; senão usa o default da CLI.
+    # Precedência: --port explícito > CASPAR_PORT > 2027. A porta publicada tem
+    # de ser a mesma em que o servidor escuta, senão o browser bate numa porta
+    # aberta sem ninguém do outro lado — falha silenciosa e difícil de ler.
     _port=$(echo "$*" | sed -n 's/.*--port[= ]*\([0-9]\{1,\}\).*/\1/p' | head -n1)
-    [ -n "$_port" ] || _port=8000
+    if [ -z "$_port" ]; then
+        _port="${CASPAR_PORT:-2027}"
+        set -- "$@" --port "$_port"
+    fi
     PORT_ARGS="-p $_port:$_port"
     if ! echo "$*" | grep -q "\-\-host"; then
         set -- "$@" --host 0.0.0.0
