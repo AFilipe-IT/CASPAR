@@ -72,6 +72,9 @@ class ResolvedInput:
 #   2. binário do serviço no PATH (httpd -v, nginx -v, sshd -V, mysql --version)
 #   3. texto dos ficheiros de configuração (raramente expõe a versão no Apache,
 #      mas alguns serviços/cabeçalhos sim)
+#   4. base de dados de pacotes (/var/lib/dpkg/status) — só leitura de ficheiro,
+#      e é a única que funciona dentro do contentor, onde o `/etc` do host está
+#      montado mas o binário do serviço não existe
 # Devolve None quando nenhuma fonte revela uma versão fiável — nesse caso o
 # scan corre na mesma, apenas sem painel de exploits.
 
@@ -93,6 +96,81 @@ _VERSION_IN_CONFIG: dict[str, str] = {
     "ssh":          r"OpenSSH[_/](\d+\.\d+)",
     "mysql":        r"(?:MySQL|Ver)\s+(\d+\.\d+\.\d+)",
 }
+
+# Nomes de pacote por produto, por ordem de preferência. Existem variantes por
+# distribuição (nginx-core/nginx-full) e pacotes com a versão no próprio nome
+# (mysql-server-8.0), daí uma lista em vez de um nome só.
+_VERSION_PACKAGES: dict[str, list[str]] = {
+    "apache-httpd": ["apache2", "httpd", "apache2-bin"],
+    "nginx":        ["nginx-core", "nginx-full", "nginx-light", "nginx"],
+    "ssh":          ["openssh-server", "openssh"],
+    "mysql":        ["mysql-server-8.0", "mysql-server", "mariadb-server",
+                     "mysql-server-8.4"],
+}
+
+# Caminho da base de dados de pacotes dpkg. Constante de módulo para os testes
+# a poderem redireccionar sem escrever em /var.
+_DPKG_STATUS = "/var/lib/dpkg/status"
+
+
+def _clean_package_version(raw: str) -> str | None:
+    """A versão upstream a partir da versão de pacote da distribuição.
+
+    `2.4.58-1ubuntu8.15` → `2.4.58`, `1:9.6p1-3ubuntu13.18` → `9.6`. O epoch
+    (`1:`) e a revisão da distribuição (`-1ubuntu…`) são da embalagem, não do
+    produto, e o cruzamento com exploits é feito pela versão upstream — deixar
+    a revisão lá dentro não daria correspondência nenhuma.
+    """
+    raw = raw.strip()
+    if ":" in raw:                       # epoch — pertence ao dpkg, não ao produto
+        raw = raw.split(":", 1)[1]
+    raw = raw.split("-", 1)[0]           # revisão da distribuição
+    m = re.match(r"(\d+(?:\.\d+){1,2})", raw)
+    return m.group(1) if m else None
+
+
+def _version_from_package_db(target_id: str) -> str | None:
+    """Versão a partir da base de dados de pacotes, sem executar o binário.
+
+    Existe por causa do contentor: o CASPAR corre com `/etc` montado do host,
+    mas sem o `apache2` instalado — `apache2 -v` não existe lá, e a detecção
+    caía para None. Sem versão não há evidência de exploits, e o mesmo
+    `ServerTokens` que a CLI pontua 7.1 no host passava a 6.0 no servidor, o
+    que se lia como "o watch não reage às alterações".
+
+    Só lê ficheiros: um `status` do dpkg é texto e está montado com o resto do
+    sistema de ficheiros. Best-effort e offline, como o resto da cadeia.
+    """
+    names = _VERSION_PACKAGES.get(target_id)
+    if not names:
+        return None
+    try:
+        text = Path(_DPKG_STATUS).read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return None
+
+    # Um pacote removido-mas-não-purgado mantém a entrada e a versão. Reportá-lo
+    # daria a versão de algo que já não está instalado, por isso exige-se o
+    # estado "installed".
+    versions: dict[str, str] = {}
+    for block in text.split("\n\n"):
+        m = re.search(r"^Package:\s*(\S+)\s*$", block, re.MULTILINE)
+        if not m or m.group(1) not in names:
+            continue
+        if not re.search(r"^Status:.*\binstalled\b", block, re.MULTILINE):
+            continue
+        v = re.search(r"^Version:\s*(\S+)\s*$", block, re.MULTILINE)
+        if v:
+            versions[m.group(1)] = v.group(1)
+
+    # Pela ordem de _VERSION_PACKAGES, não pela ordem do ficheiro: numa máquina
+    # com nginx-core e nginx instalados, a preferência é nossa, não do dpkg.
+    for name in names:
+        if name in versions:
+            cleaned = _clean_package_version(versions[name])
+            if cleaned:
+                return cleaned
+    return None
 
 
 def version_from_docker_tag(image: str) -> str | None:
@@ -145,6 +223,13 @@ def detect_version(target_id: str, config_path: str,
     v = _version_from_config_text(target_id, config_path)
     if v:
         logger.info("[version] from config text: %s", v)
+        return v
+    # Último recurso: a base de dados de pacotes. Depois do binário porque o
+    # binário é o que está mesmo a correr; o pacote é o que está instalado —
+    # quase sempre o mesmo, mas o binário ganha quando ambos respondem.
+    v = _version_from_package_db(target_id)
+    if v:
+        logger.info("[version] from package database: %s", v)
         return v
     return None
 

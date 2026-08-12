@@ -137,14 +137,23 @@ fi
 # por isso o 'watch' deteta edições feitas no host em tempo real.
 # NOTA: NÃO montar /usr do host — mascararia o binário caspar da imagem
 # (/usr/local/bin/caspar) e o container deixaria de arrancar.
-# A deteção de versão recorre, neste modo, ao texto da configuração.
 # 'serve' entra na mesma lista: a consola web oferece scan --live e watch sobre
 # os serviços instalados, mas quem os corre é o processo dentro do container.
 # Sem /etc montado, o container só via o seu próprio sistema de ficheiros e a
 # consola respondia "service not found" para serviços que existem mesmo no
 # host — o pedido nunca chegava a sair do container.
+#
+# Junto com /etc vai a base de dados de pacotes do dpkg, em leitura: como não
+# montamos /usr, o binário do serviço não existe dentro do container e
+# `apache2 -v` não responde. Sem versão não há cruzamento com exploits, e o
+# mesmo ServerTokens que a CLI pontua 7.1 no host era pontuado 6.0 pelo
+# servidor — lia-se como se o watch não reagisse às alterações. O ficheiro do
+# dpkg é texto e dá a versão sem executar nada.
 if echo "$*" | grep -qE "(\-\-live|(^| )watch( |$)|(^| )serve( |$))"; then
     MOUNT_ARGS="$MOUNT_ARGS -v /etc:/etc:ro"
+    if [ -f /var/lib/dpkg/status ]; then
+        MOUNT_ARGS="$MOUNT_ARGS -v /var/lib/dpkg/status:/var/lib/dpkg/status:ro"
+    fi
 fi
 
 # --notify: para o 'wall' de dentro do container alcançar os terminais do HOST,
