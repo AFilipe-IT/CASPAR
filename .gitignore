@@ -80,3 +80,6 @@ tese-pt/
 
 # WSL: Windows "downloaded from the internet" metadata streams
 *:Zone.Identifier
+
+# Cache do Vite se algum comando npm/npx correr fora de frontend/
+node_modules/

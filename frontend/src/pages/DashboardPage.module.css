@@ -1,0 +1,29 @@
+/* Hora da última leitura, no canto do cabeçalho: discreta o suficiente para não
+   competir com os números, presente o suficiente para se poder confirmar que a
+   página não está congelada. */
+.freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+  color: var(--accent);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
+}

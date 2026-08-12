@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "./client";
+import { api, overviewQueryOptions } from "./client";
 import type { HostRollup } from "./types";
 
 // A resposta de GET /hosts é o rollup tal e qual. Havia aqui um `scans: number`
@@ -10,6 +10,7 @@ export function useHostsRollup() {
   return useQuery({
     queryKey: ["hosts", "rollup"],
     queryFn: () => api.get<HostsRollupResponse>("/hosts"),
+    ...overviewQueryOptions,
   });
 }
 

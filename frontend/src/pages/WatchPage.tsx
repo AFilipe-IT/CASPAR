@@ -533,16 +533,33 @@ export function WatchPage() {
                 title="Events"
                 subtitle="Every re-scan, newest first — open one to see the directives behind its score."
               >
+                {/* Um evento sem `scan_id` não abre, e antes não dizia porquê:
+                    a linha ficava apagada e sem reacção, indistinguível de
+                    uma avaria. Acontece com sessões gravadas por uma versão
+                    anterior, que não guardava a ligação ao scan — a única
+                    saída é começar uma sessão nova, e mais vale dizê-lo. */}
+                {detail.events.some((e) => !e.scan_id) && (
+                  <p className={styles.notice}>
+                    <Info size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>
+                      Some events were recorded by an older version that didn't
+                      link them to their scan, so their findings can't be opened.
+                      Start a new session to get the full detail.
+                    </span>
+                  </p>
+                )}
                 {detail.events.map((e, i) => (
                   // Um botão, não uma <div> com onClick: cada evento abre um
                   // detalhe, portanto é accionável por teclado e anuncia-se
-                  // como tal. Eventos antigos, gravados antes de o `scan_id`
-                  // ir na resposta, ficam sem detalhe — daí o disabled.
+                  // como tal.
                   <button
                     key={e.scan_id ?? i}
                     type="button"
                     className={styles.eventRow}
                     disabled={!e.scan_id}
+                    title={e.scan_id
+                      ? "Open the directives behind this score"
+                      : "Recorded before events were linked to their scan"}
                     onClick={() => e.scan_id && setOpenEvent(e)}
                   >
                     <span className={styles.eventTime}>{fmtTime(e.timestamp)}</span>

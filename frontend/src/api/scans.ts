@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError } from "./client";
+import { api, ApiError, overviewQueryOptions } from "./client";
 import type { AttackChain, ScanListItem, ScanResponse, ScanResult } from "./types";
 
 interface ListScansParams {
@@ -58,10 +58,16 @@ function toQuery(params: ListScansParams): string {
   return qs ? `?${qs}` : "";
 }
 
-export function useScans(params: ListScansParams = {}) {
+/**
+ * @param live mantém a lista a acompanhar o sistema (a Home). Opcional porque
+ *   o Assessment usa a mesma hook para um histórico que o utilizador está a
+ *   filtrar à mão — aí recarregar por baixo dos pés seria pior que útil.
+ */
+export function useScans(params: ListScansParams = {}, live = false) {
   return useQuery({
     queryKey: ["scans", params],
     queryFn: () => api.get<ScanListItem[]>(`/scans${toQuery(params)}`),
+    ...(live ? overviewQueryOptions : {}),
   });
 }
 

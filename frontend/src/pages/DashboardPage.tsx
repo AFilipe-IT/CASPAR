@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { ShieldAlert, Layers, FileWarning, Siren, Bug } from "lucide-react";
+import { ShieldAlert, Layers, FileWarning, Siren, Bug, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
@@ -16,9 +16,35 @@ import { useScans } from "@/api/scans";
 import { useHostsRollup } from "@/api/hosts";
 import { api } from "@/api/client";
 import type { ScanResult } from "@/api/types";
+import styles from "./DashboardPage.module.css";
+
+/**
+ * Quando é que estes números foram lidos.
+ *
+ * Um painel que se actualiza sozinho e não o diz é indistinguível de um que
+ * não se actualiza: os números são os mesmos enquanto nada muda, e quem olha
+ * não tem como saber se está a ver o sistema ou uma fotografia antiga. Daí a
+ * hora, e não uma barra de progresso.
+ */
+function Freshness({ at, isFetching }: { at: number; isFetching: boolean }) {
+  if (!at) return null;
+  const time = new Date(at).toLocaleTimeString();
+  return (
+    <span className={styles.freshness} aria-live="polite">
+      <RefreshCw
+        size={12}
+        className={isFetching ? styles.spinning : undefined}
+        aria-hidden
+      />
+      {isFetching ? "Updating…" : `Updated ${time}`}
+    </span>
+  );
+}
 
 export function DashboardPage() {
-  const { data: scans, isLoading: scansLoading } = useScans({ limit: 50 });
+  const {
+    data: scans, isLoading: scansLoading, dataUpdatedAt, isFetching,
+  } = useScans({ limit: 50 }, true);
   const { data: rollup, isLoading: rollupLoading } = useHostsRollup();
 
   // One scan per input_path (most recent) — the same "latest per target"
@@ -32,11 +58,16 @@ export function DashboardPage() {
     return [...map.values()];
   }, [scans]);
 
+  // Sem poll, de propósito: um scan gravado é imutável, portanto voltar a
+  // pedi-lo daria sempre o mesmo. O que muda com o tempo é *quais* scans são
+  // os mais recentes, e isso vem da lista acima — quando ela traz um id novo,
+  // aparece aqui uma query nova e os totais acompanham.
   const scanDetailQueries = useQueries({
     queries: latestByInput.map((id) => ({
       queryKey: ["scan", id],
       queryFn: () => api.get<ScanResult>(`/scans/${id}`),
       enabled: !!id,
+      staleTime: Infinity,
     })),
   });
 
@@ -61,6 +92,7 @@ export function DashboardPage() {
       <PageHeader
         title="Home / Overview"
         description="Overall configuration vulnerability posture across every assessed service."
+        actions={<Freshness at={dataUpdatedAt} isFetching={isFetching} />}
       />
 
       <div className="grid-kpi">
