@@ -94,14 +94,20 @@
 
 /* ── State pill ───────────────────────────────────────────────────── */
 
+/* Em pílula, como os outros indicadores de estado da consola: "LIVE" é a
+   informação que se procura primeiro nesta página e em texto solto perdia-se
+   entre o nome da sessão e a hora. */
 .state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 3px var(--sp-2);
+  border-radius: var(--radius-pill);
+  background: var(--panel-alt);
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   white-space: nowrap;
 }
 
@@ -113,17 +119,31 @@
   background: var(--text-faint);
 }
 
+/* A pílula acompanha o ponto: a cor vem do estado, e o texto ao lado diz o
+   mesmo — nunca é só a cor a carregar o significado. */
 .dotLive {
   background: var(--ok);
   animation: pulse 2s ease-in-out infinite;
+}
+.state:has(.dotLive) {
+  background: var(--ok-soft);
+  color: var(--ok);
 }
 
 .dotPaused {
   background: var(--sev-medium);
 }
+.state:has(.dotPaused) {
+  background: var(--sev-medium-soft);
+  color: var(--sev-medium);
+}
 
 .dotFailed {
   background: var(--sev-critical);
+}
+.state:has(.dotFailed) {
+  background: var(--sev-critical-soft);
+  color: var(--sev-critical);
 }
 
 /* A razão da avaria, por baixo da sessão. Sem ela ficava só "Failed", que
@@ -177,17 +197,16 @@
 }
 
 .bigScore {
-  font-size: 2.4rem;
+  font-size: var(--fs-2xl);
   font-weight: 700;
   line-height: 1;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
 .scoreCaption {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .stat {

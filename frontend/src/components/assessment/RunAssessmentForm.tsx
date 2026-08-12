@@ -223,7 +223,12 @@ export function RunAssessmentForm({ onResult }: RunAssessmentFormProps) {
 
       {error && <p className={styles.error}>{error.message}</p>}
 
-      <Button type="submit" variant="primary" disabled={!canSubmit || busy}>
+      <Button
+        type="submit"
+        variant="primary"
+        className={styles.submit}
+        disabled={!canSubmit || busy}
+      >
         {busy ? "Running assessment…" : "Run assessment"}
       </Button>
     </form>

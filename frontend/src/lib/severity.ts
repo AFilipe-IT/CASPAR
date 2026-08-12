@@ -8,12 +8,17 @@ const COLORS: Record<Severity, string> = {
   None: "var(--sev-none)",
 };
 
+// Os mesmos valores dos tokens, em literal: SVG e Recharts não resolvem
+// `var(--...)` em todos os atributos. Têm de acompanhar tokens.css à mão —
+// `#F59E08` e `#10B981` tinham ficado para trás de uma passagem anterior e
+// pintavam o gauge com um laranja e um verde que não existiam em mais lado
+// nenhum da consola.
 const RESOLVED_COLORS: Record<Severity, string> = {
   Critical: "#EF4444",
-  High: "#F59E08",
+  High: "#F59E0B",
   Medium: "#EAB308",
-  Low: "#10B981",
-  None: "#5B6472",
+  Low: "#22C55E",
+  None: "#9CA3AF",
 };
 
 export function severityColor(sev: string): string {

@@ -1,0 +1,24 @@
+.wrap {
+  width: 100%;
+  min-width: 0;
+}
+
+.tooltip {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.tooltipDate {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.tooltipValue {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}

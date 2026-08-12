@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Card } from "@/components/ui/Card";
 import { RunAssessmentForm } from "@/components/assessment/RunAssessmentForm";
 import { ScanResultView } from "@/components/assessment/ScanResultView";
 import { HistoryView } from "@/components/assessment/HistoryView";
@@ -48,20 +49,37 @@ export function AssessmentPage() {
         </button>
       </div>
 
+      {/* Cada separador dentro de um cartão: sem ele o formulário assentava
+          directamente no fundo da página, sem nada a delimitar onde começava
+          e acabava — o único ecrã da consola em que isso acontecia. */}
       {tab === "run" && (
         <>
-          <RunAssessmentForm onResult={setLastResult} />
+          <Card title="New assessment">
+            <RunAssessmentForm onResult={setLastResult} />
+          </Card>
           {lastResult && (
-            <div style={{ marginTop: "var(--sp-6)" }}>
+            <Card title="Result">
               <ScanResultView result={lastResult} />
-            </div>
+            </Card>
           )}
         </>
       )}
 
-      {tab === "history" && <HistoryView />}
-      {tab === "compare" && <CompareView />}
-      {tab === "remediate" && <RemediateView />}
+      {tab === "history" && (
+        <Card title="Assessment history">
+          <HistoryView />
+        </Card>
+      )}
+      {tab === "compare" && (
+        <Card title="Compare assessments">
+          <CompareView />
+        </Card>
+      )}
+      {tab === "remediate" && (
+        <Card title="Remediation">
+          <RemediateView />
+        </Card>
+      )}
     </>
   );
 }

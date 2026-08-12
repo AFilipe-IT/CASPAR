@@ -78,8 +78,11 @@ describe("Dashboard com o payload real de /hosts", () => {
     // `total_issues` do rollup soma o histórico todo (aqui 9999); o KPI tem de
     // descrever o estado actual, vindo dos scans mais recentes.
     renderApp();
+    // O KPI passou a chamar-se "Open findings" na passagem ao novo desenho —
+    // é o mesmo número e a mesma regra, e "finding" é o termo que o resto da
+    // consola usa. O que este teste guarda continua a ser o 9999.
     await waitFor(() => {
-      expect(screen.getByText("Open issues")).toBeInTheDocument();
+      expect(screen.getAllByText("Open findings").length).toBeGreaterThan(0);
     });
     expect(screen.queryByText("9999")).not.toBeInTheDocument();
   });

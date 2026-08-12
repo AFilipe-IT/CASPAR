@@ -1,10 +1,15 @@
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { ShieldAlert, Layers, FileWarning, Siren, Bug, RefreshCw } from "lucide-react";
+import {
+  ShieldAlert, Layers, FileWarning, Siren, Bug, RefreshCw, Link2, ListChecks,
+} from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
 import { ScoreGauge } from "@/components/dashboard/ScoreGauge";
+import { ScoreTrendChart } from "@/components/dashboard/ScoreTrendChart";
+import { SeverityDonut } from "@/components/dashboard/SeverityDonut";
+import { StatRow } from "@/components/dashboard/StatRow";
 import { ServiceScoreList } from "@/components/dashboard/ServiceScoreList";
 import { FindingsTable } from "@/components/dashboard/FindingsTable";
 import { AttackChainsList } from "@/components/dashboard/AttackChainsList";
@@ -14,6 +19,7 @@ import { KpiTile } from "@/components/dashboard/KpiTile";
 import { summarise } from "@/lib/dashboard";
 import { useScans } from "@/api/scans";
 import { useHostsRollup } from "@/api/hosts";
+import { useTrends } from "@/api/trends";
 import { api } from "@/api/client";
 import type { ScanResult } from "@/api/types";
 import styles from "./DashboardPage.module.css";
@@ -46,6 +52,7 @@ export function DashboardPage() {
     data: scans, isLoading: scansLoading, dataUpdatedAt, isFetching,
   } = useScans({ limit: 50 }, true);
   const { data: rollup, isLoading: rollupLoading } = useHostsRollup();
+  const { data: trends, isLoading: trendsLoading } = useTrends();
 
   // One scan per input_path (most recent) — the same "latest per target"
   // rule the Jinja2 overview uses — fetched in full for per-service scores,
@@ -87,6 +94,18 @@ export function DashboardPage() {
 
   const isLoading = scansLoading || rollupLoading || detailsLoading;
 
+  // Variação do pior score desde a avaliação anterior. `TrendSeries.delta` é
+  // por `input_path`; a postura global segue o alvo que fixa o score actual —
+  // é a série desse alvo que explica porque é que o gauge está onde está.
+  const worstDelta = useMemo(() => {
+    if (!trends?.length) return undefined;
+    const worstSeries = [...trends].sort((a, b) => b.last - a.last)[0];
+    // Uma leitura só não tem variação: `delta` vinha 0 e lia-se como
+    // "estável", quando ainda não há termo de comparação nenhum.
+    if (worstSeries.scores.length < 2) return undefined;
+    return worstSeries.delta;
+  }, [trends]);
+
   return (
     <>
       <PageHeader
@@ -95,14 +114,56 @@ export function DashboardPage() {
         actions={<Freshness at={dataUpdatedAt} isFetching={isFetching} />}
       />
 
+      {/* A faixa de topo responde à pergunta principal — "qual é o risco, e
+          está a melhorar?" — antes de qualquer detalhe: o score em grande, o
+          que mudou desde a última avaliação, e a curva no tempo. */}
+      <div className={styles.scoreBand}>
+        <Card title="Configuration Vulnerability Score" className={styles.gaugeCard}>
+          {isLoading ? <SkeletonBlock rows={4} /> : <ScoreGauge score={worstScore} />}
+        </Card>
+
+        <Card title="Since last assessment">
+          {isLoading ? (
+            <SkeletonBlock rows={3} />
+          ) : (
+            <>
+              <StatRow
+                label="Score change"
+                hint="Worst-scoring target"
+                icon={<ShieldAlert size={17} />}
+                value={worstScore.toFixed(1)}
+                delta={worstDelta}
+              />
+              <StatRow
+                label="Open findings"
+                hint="Current state, all targets"
+                icon={<ListChecks size={17} />}
+                value={openIssues}
+              />
+              <StatRow
+                label="Attack chains"
+                hint="Findings that compound"
+                icon={<Link2 size={17} />}
+                value={allChains.length}
+              />
+            </>
+          )}
+        </Card>
+
+        <Card title="Score over time" subtitle="Highest-scoring target, across its assessments">
+          {trendsLoading ? <SkeletonBlock rows={5} /> : <ScoreTrendChart trends={trends ?? []} />}
+        </Card>
+      </div>
+
       <div className="grid-kpi">
         <KpiTile label="Services assessed" value={details.length} icon={<Layers size={18} />} />
         <KpiTile label="Directives scanned" value={totalDirectives} icon={<FileWarning size={18} />} />
         <KpiTile
-          label="Open issues"
+          label="Open findings"
           value={openIssues}
           icon={<ShieldAlert size={18} />}
         />
+        <KpiTile label="Attack chains" value={allChains.length} icon={<Link2 size={18} />} />
         {/* Contava dentro de `topFindings`, que já está cortado nos 5 primeiros
             — o máximo possível era 5, e dava 0 mesmo com um scan Critical 10.0
             na base de dados. Tem de varrer todos os problemas em aberto. */}
@@ -117,23 +178,6 @@ export function DashboardPage() {
           icon={<Siren size={18} />}
           tone="critical"
         />
-      </div>
-
-      <div className="grid-2">
-        <Card title="Overall Configuration Vulnerability Score">
-          {isLoading ? <SkeletonBlock rows={4} /> : <ScoreGauge score={worstScore} />}
-        </Card>
-        <Card title="Score by Service (Top 5)">
-          {isLoading ? (
-            <SkeletonBlock rows={5} />
-          ) : services.length === 0 ? (
-            <span style={{ color: "var(--text-muted)", fontSize: "var(--fs-sm)" }}>
-              No assessments recorded yet.
-            </span>
-          ) : (
-            <ServiceScoreList services={services} />
-          )}
-        </Card>
       </div>
 
       {/* Painel próprio, e não mais linhas nas Top Findings: os achados com
@@ -154,18 +198,44 @@ export function DashboardPage() {
           {isLoading ? <SkeletonBlock rows={5} /> : <FindingsTable rows={topFindings} />}
         </Card>
         <Card title="Attack Chains (Top Risk)">
-          {isLoading ? <SkeletonBlock rows={3} /> : <AttackChainsList chains={allChains} findings={allIssues} />}
+          {isLoading ? (
+            <SkeletonBlock rows={3} />
+          ) : (
+            /* Seis, para emparelhar com as seis Top Findings ao lado — os dois
+               cartões partilham a linha e crescer só um deixava o outro a
+               olhar para um vazio de mil pixels. */
+            <AttackChainsList chains={allChains} findings={allIssues} limit={6} />
+          )}
         </Card>
       </div>
 
-      <div className="grid-2">
-        <Card title="Recent Assessments">
-          {scansLoading ? <SkeletonBlock rows={5} /> : <RecentAssessmentsList scans={(scans ?? []).slice(0, 6)} />}
+      <div className="grid-bottom">
+        <Card title="Top risk services" subtitle="Highest scoring targets">
+          {isLoading ? (
+            <SkeletonBlock rows={5} />
+          ) : services.length === 0 ? (
+            <span className={styles.placeholder}>No assessments recorded yet.</span>
+          ) : (
+            <ServiceScoreList services={services} />
+          )}
         </Card>
-        <Card title="Quick Actions">
-          <QuickActions />
+        <Card title="Severity distribution" subtitle="Open findings by severity">
+          {isLoading ? <SkeletonBlock rows={4} /> : <SeverityDonut issues={allIssues} />}
+        </Card>
+        <Card title="Recent assessments">
+          {scansLoading ? (
+            <SkeletonBlock rows={5} />
+          ) : (
+            <RecentAssessmentsList scans={(scans ?? []).slice(0, 6)} />
+          )}
         </Card>
       </div>
+
+      {/* Recent Assessments está agora na faixa de baixo, junto aos outros dois
+          resumos — aparecia aqui uma segunda vez com exactamente a mesma lista. */}
+      <Card title="Quick actions">
+        <QuickActions />
+      </Card>
     </>
   );
 }

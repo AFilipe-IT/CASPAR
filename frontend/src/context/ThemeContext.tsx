@@ -2,7 +2,12 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 type Theme = "dark" | "light";
 
-const STORAGE_KEY = "cvm.theme";
+// A chave mudou de "cvm.theme" com a passagem para o tema claro por defeito.
+// Quem já tinha usado a consola tinha "dark" gravado, e essa preferência —
+// guardada quando o escuro era o único default — teria mantido a app escura
+// para toda a gente, sem ninguém ter escolhido nada. Chave nova = todos
+// começam no claro, e a partir daqui a escolha é mesmo uma escolha.
+const STORAGE_KEY = "cvm.theme.v2";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -14,7 +19,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 function readInitialTheme(): Theme {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored === "dark" || stored === "light") return stored;
-  return "dark";
+  return "light";
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

@@ -1,27 +1,46 @@
+/* A tabela pode ser mais larga que o cartão (Watch tem 4 colunas + score):
+   rola aqui dentro, nunca empurra a página para o lado. */
 .wrap {
   overflow-x: auto;
+}
+
+/* Altura máxima opcional, para as listas que não têm tecto natural: os
+   Relatórios trazem 100 avaliações e a página passava dos 7000px, com o
+   cabeçalho e tudo o resto fora do ecrã a partir da terceira linha. */
+.wrapCapped {
+  overflow-y: auto;
+  max-height: 560px;
+}
+
+/* Com a tabela a rolar, o cabeçalho tem de ficar: sem isto perdiam-se os
+   nomes das colunas à primeira rolagem. */
+.wrapCapped .table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
 }
 
 .table th {
   text-align: left;
   padding: var(--sp-2) var(--sp-3);
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-weight: 600;
-  font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  /* Em caixa de frase, como o resto da consola: as versaletes eram a última
+     coisa que ainda lia como painel de administração genérico. */
+  font-size: var(--fs-sm);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  background: var(--panel);
 }
 
 .table td {
-  padding: var(--sp-3);
+  padding: var(--sp-4) var(--sp-3);
   border-bottom: 1px solid var(--border);
   color: var(--text);
   vertical-align: middle;
@@ -36,5 +55,5 @@
   transition: background var(--transition);
 }
 .clickable:hover {
-  background: var(--panel-alt);
+  background: var(--panel-hover);
 }

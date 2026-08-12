@@ -1,16 +1,24 @@
 @import "./tokens.css";
 
+/* Inter quando existir na máquina; caso contrário a stack do sistema, que em
+   Windows/macOS já dá um grotesco humanista próximo. Sem URL externa: a
+   consola é servida pelo próprio CASPAR e tem de abrir sem rede. */
 @font-face {
   font-family: "Inter";
-  src: local("Inter"), local("Inter Variable");
+  src: local("Inter"), local("Inter Variable"), local("Inter-Regular");
   font-weight: 100 900;
+  font-display: swap;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
 }
 
@@ -22,43 +30,43 @@ body {
   font-size: var(--fs-base);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4 {
   margin: 0;
   font-weight: 600;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
-p {
-  margin: 0;
+p { margin: 0; }
+a { color: inherit; }
+button { font-family: inherit; }
+
+/* Foco visível e consistente em tudo o que é focável — o anel é o mesmo token
+   em toda a consola, para o teclado ter sempre a mesma pista. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
-a {
-  color: inherit;
-}
+::selection { background: var(--accent-soft); }
 
-button {
-  font-family: inherit;
-}
-
-::selection {
-  background: var(--accent-soft);
-}
-
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-pill);
   border: 2px solid transparent;
   background-clip: content-box;
 }
+::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--text-faint); }
+
+/* ---------------------------------------------------------------------- */
+/* Esqueleto                                                               */
+/* ---------------------------------------------------------------------- */
 
 .app-shell {
   display: grid;
@@ -74,12 +82,22 @@ button {
 
 .app-content {
   flex: 1;
-  padding: var(--sp-6);
+  padding: var(--sp-8);
   display: flex;
   flex-direction: column;
   gap: var(--sp-6);
   min-width: 0;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Grelhas                                                                 */
+/*                                                                         */
+/* `gap` em vez de margens nos filhos: são irmãos num contentor, e margens  */
+/* colapsariam ou duplicavam conforme o que estivesse à volta.             */
+/* ---------------------------------------------------------------------- */
 
 .grid-2 {
   display: grid;
@@ -93,21 +111,55 @@ button {
   gap: var(--sp-6);
 }
 
+/* Seis KPIs numa linha aos 1920/1600px, como no mockup. `auto-fit` com um
+   mínimo largo desce para 3+3 e depois 2+2+2 sem nunca espremer o número. */
 .grid-kpi {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(6, 1fr);
   gap: var(--sp-4);
 }
 
+/* A faixa do fundo do Dashboard: Top Risk / Severity / Recent Findings.
+   A do meio é mais estreita — é uma rosca, não uma tabela. */
+.grid-bottom {
+  display: grid;
+  grid-template-columns: 1.05fr 0.9fr 1.25fr;
+  gap: var(--sp-6);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Responsivo — 1920 / 1600 / 1440 / 1366 sem quebras                      */
+/* ---------------------------------------------------------------------- */
+
+@media (max-width: 1500px) {
+  .grid-kpi { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 1400px) {
+  .app-content { padding: var(--sp-6); }
+  .grid-bottom { grid-template-columns: 1fr 1fr; }
+  /* O terceiro cartão passa a ocupar a linha inteira em vez de encolher para
+     uma coluna ilegível. */
+  .grid-bottom > :last-child { grid-column: 1 / -1; }
+}
+
 @media (max-width: 1100px) {
-  .grid-2, .grid-3 {
-    grid-template-columns: 1fr;
-  }
+  .grid-2,
+  .grid-3,
+  .grid-bottom { grid-template-columns: 1fr; }
+  .grid-bottom > :last-child { grid-column: auto; }
+  .grid-kpi { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .app-content { padding: var(--sp-4); }
+  .grid-kpi { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

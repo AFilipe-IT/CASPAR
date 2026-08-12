@@ -30,5 +30,5 @@ export function RuleTable({ rules, onSelect }: RuleTableProps) {
     { key: "cis_section", header: "CIS section", width: "120px", render: (r) => r.cis_section || "—" },
   ];
 
-  return <Table columns={columns} rows={rules} rowKey={(r) => r.id} onRowClick={onSelect} />;
+  return <Table columns={columns} rows={rules} rowKey={(r) => r.id} onRowClick={onSelect} capped />;
 }

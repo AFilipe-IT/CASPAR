@@ -8,12 +8,15 @@
 
 .title {
   font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .description {
-  margin-top: var(--sp-1);
+  margin-top: var(--sp-2);
   color: var(--text-muted);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
+  max-width: 70ch;
 }
 
 .actions {

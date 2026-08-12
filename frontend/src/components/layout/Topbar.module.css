@@ -3,45 +3,75 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--sp-6);
+  gap: var(--sp-4);
+  padding: 0 var(--sp-8);
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--panel);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
+/* O estado da API é o único indicador sempre presente — em pílula, para se ler
+   como estado e não como texto solto no cabeçalho. */
 .status {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  height: 32px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
   font-size: var(--fs-sm);
+}
+
+.statusOk {
+  background: var(--ok-soft);
+  border-color: transparent;
+}
+
+.statusDown {
+  background: var(--sev-critical-soft);
+  border-color: transparent;
 }
 
 .statusText {
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .statusMeta {
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
-.themeToggle {
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.iconButton {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text-muted);
   cursor: pointer;
-  transition: background var(--transition), color var(--transition);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 
-.themeToggle:hover {
+.iconButton:hover {
   background: var(--panel-alt);
   color: var(--text);
+  border-color: var(--border-strong);
+}
+
+@media (max-width: 720px) {
+  .topbar { padding: 0 var(--sp-4); }
+  .statusMeta { display: none; }
 }

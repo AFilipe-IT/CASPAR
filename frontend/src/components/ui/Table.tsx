@@ -15,11 +15,15 @@ interface TableProps<T> {
    *  a nota em FindingsTable, onde o id é o da regra e não o da ocorrência. */
   rowKey: (row: T, index: number) => string;
   onRowClick?: (row: T) => void;
+  /** Limita a altura e rola dentro do cartão, com o cabeçalho fixo. Para as
+   *  listas sem tecto natural — os Relatórios trazem 100 avaliações, as regras
+   *  de um benchmark chegam às 220. */
+  capped?: boolean;
 }
 
-export function Table<T>({ columns, rows, rowKey, onRowClick }: TableProps<T>) {
+export function Table<T>({ columns, rows, rowKey, onRowClick, capped }: TableProps<T>) {
   return (
-    <div className={styles.wrap}>
+    <div className={[styles.wrap, capped ? styles.wrapCapped : ""].join(" ").trim()}>
       <table className={styles.table}>
         <thead>
           <tr>

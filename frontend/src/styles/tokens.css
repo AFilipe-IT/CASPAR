@@ -1,51 +1,72 @@
+/**
+ * Design tokens da consola CVM.
+ *
+ * O tema CLARO é o principal — é a direcção visual do produto (fundo frio,
+ * cartões brancos, sombras subtis) e o que a app mostra por defeito. O escuro
+ * existe a par e é redefinido token a token mais abaixo.
+ *
+ * Regra: um componente nunca escreve uma cor literal nem se estiliza dentro de
+ * um bloco de tema. Estiliza-se pelos tokens, e é só aqui que os temas
+ * divergem — é o que impede o escuro de ficar para trás quando o claro muda.
+ */
+
 :root {
-  /* Surfaces */
-  --bg: #0D1117;
-  --bg-elevated: #10151d;
-  --panel: #161B22;
-  --panel-alt: #1F2937;
-  --border: #262e3a;
-  --border-strong: #333d4d;
+  /* ---- Superfícies -------------------------------------------------- */
+  --bg: #F6F8FB;             /* fundo da aplicação */
+  --bg-elevated: #FFFFFF;
+  --panel: #FFFFFF;          /* cartões */
+  --panel-alt: #F3F5F9;      /* zonas de apoio dentro de um cartão */
+  --panel-hover: #F8FAFC;
+  --border: #E5E7EB;
+  --border-strong: #D3D8E0;
 
-  /* Text */
-  --text: #E6EDF3;
-  --text-muted: #8B96A5;
-  --text-faint: #5B6472;
+  /* ---- Texto -------------------------------------------------------- */
+  --text: #111827;
+  --text-muted: #6B7280;
+  --text-faint: #9CA3AF;
 
-  /* Accent */
-  --accent: #2563EB;
-  --accent-hover: #3B74F0;
-  --accent-soft: rgba(37, 99, 235, 0.15);
-  --accent-2: #2203EE;
+  /* ---- Acento ------------------------------------------------------- */
+  --accent: #3B82F6;
+  --accent-hover: #2563EB;
+  --accent-soft: rgba(59, 130, 246, 0.10);
+  --accent-ink: #FFFFFF;     /* texto sobre o acento */
+  --accent-2: #6366F1;
 
-  /* Semantic severity */
+  /* ---- Severidade ---------------------------------------------------- */
+  /* Reservadas para estado. Nunca reutilizadas como "cor de série" num
+     gráfico — é o que mantém "vermelho = crítico" a significar sempre o
+     mesmo em toda a consola. */
   --sev-critical: #EF4444;
-  --sev-critical-soft: rgba(239, 68, 68, 0.15);
-  --sev-high: #F59E08;
-  --sev-high-soft: rgba(245, 158, 8, 0.15);
+  --sev-critical-soft: rgba(239, 68, 68, 0.10);
+  --sev-high: #F59E0B;
+  --sev-high-soft: rgba(245, 158, 11, 0.12);
   --sev-medium: #EAB308;
-  --sev-medium-soft: rgba(234, 179, 8, 0.15);
-  --sev-low: #10B981;
-  --sev-low-soft: rgba(16, 185, 129, 0.15);
-  --sev-none: #5B6472;
+  --sev-medium-soft: rgba(234, 179, 8, 0.14);
+  --sev-low: #22C55E;
+  --sev-low-soft: rgba(34, 197, 94, 0.12);
+  --sev-none: #9CA3AF;
+  --sev-none-soft: rgba(156, 163, 175, 0.14);
 
-  --ok: #10B981;
-  --info: #A78BFA;
+  --ok: #22C55E;
+  --ok-soft: rgba(34, 197, 94, 0.12);
+  --info: #6366F1;
+  --info-soft: rgba(99, 102, 241, 0.12);
 
-  /* Type */
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* ---- Tipografia ---------------------------------------------------- */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 
-  /* Scale */
-  --fs-xs: 0.75rem;
-  --fs-sm: 0.8125rem;
-  --fs-base: 0.9375rem;
-  --fs-md: 1.0625rem;
-  --fs-lg: 1.25rem;
-  --fs-xl: 1.75rem;
-  --fs-2xl: 2.5rem;
+  /* Escala fixa: fora desta lista não há tamanhos. */
+  --fs-xs: 0.6875rem;   /* 11px — etiquetas em maiúsculas */
+  --fs-sm: 0.75rem;     /* 12px — meta, legendas */
+  --fs-base: 0.875rem;  /* 14px — corpo, tabelas, campos */
+  --fs-md: 1rem;        /* 16px — título de cartão */
+  --fs-lg: 1.25rem;     /* 20px — título de secção */
+  --fs-xl: 1.875rem;    /* 30px — título de página */
+  --fs-2xl: 2rem;       /* 32px — números de KPI */
+  --fs-3xl: 4rem;       /* 64px — o score, e só ele */
 
-  /* Space */
+  /* ---- Espaço (8px de base) ------------------------------------------ */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -53,59 +74,122 @@
   --sp-5: 20px;
   --sp-6: 24px;
   --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
 
-  /* Radius */
-  --radius-sm: 6px;
+  /* ---- Raio ---------------------------------------------------------- */
+  --radius-sm: 8px;
   --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-lg: 14px;    /* cartões */
+  --radius-xl: 16px;
+  --radius-pill: 999px;
 
-  /* Shadow */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
-  --shadow-glow: 0 0 0 1px var(--accent-soft), 0 4px 20px rgba(37, 99, 235, 0.2);
+  /* ---- Sombra --------------------------------------------------------- */
+  /* Subtis de propósito: o que separa um cartão do fundo é sobretudo o
+     branco contra o cinza-azulado, não a sombra. */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.03);
+  --shadow-md: 0 2px 4px rgba(16, 24, 40, 0.04), 0 4px 12px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 8px 24px rgba(16, 24, 40, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(59, 130, 246, 0.18);
 
-  --sidebar-w: 240px;
-  --topbar-h: 60px;
+  /* ---- Estrutura ------------------------------------------------------ */
+  --sidebar-w: 248px;
+  --topbar-h: 64px;
+  --content-max: 1600px;
 
-  --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 240ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-:root[data-theme="light"] {
-  --bg: #F5F7FA;
-  --bg-elevated: #FFFFFF;
-  --panel: #FFFFFF;
-  --panel-alt: #F0F2F5;
-  --border: #E2E6EB;
-  --border-strong: #CBD2DA;
+/* ---------------------------------------------------------------------- */
+/* Tema escuro                                                             */
+/*                                                                         */
+/* Redefine tokens, nunca componentes. Não é uma inversão do claro: as      */
+/* superfícies sobem de preto para cinza-azul e as cores de severidade      */
+/* clareiam, senão perdiam contraste contra o fundo escuro.                 */
+/* ---------------------------------------------------------------------- */
 
-  --text: #101828;
-  --text-muted: #5B6472;
-  --text-faint: #98A2AF;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0B0F16;
+    --bg-elevated: #11161F;
+    --panel: #151B25;
+    --panel-alt: #1B2230;
+    --panel-hover: #1B2230;
+    --border: #232B38;
+    --border-strong: #313B4B;
 
-  --accent-soft: rgba(37, 99, 235, 0.1);
+    --text: #E9EEF5;
+    --text-muted: #9AA5B4;
+    --text-faint: #6B7686;
 
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.08);
-  --shadow-glow: 0 0 0 1px var(--accent-soft), 0 4px 20px rgba(37, 99, 235, 0.12);
-}
+    --accent: #60A5FA;
+    --accent-hover: #7DB6FB;
+    --accent-soft: rgba(96, 165, 250, 0.16);
+    --accent-ink: #0B0F16;
 
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #F5F7FA;
-    --bg-elevated: #FFFFFF;
-    --panel: #FFFFFF;
-    --panel-alt: #F0F2F5;
-    --border: #E2E6EB;
-    --border-strong: #CBD2DA;
+    --sev-critical: #F87171;
+    --sev-critical-soft: rgba(248, 113, 113, 0.16);
+    --sev-high: #FBBF24;
+    --sev-high-soft: rgba(251, 191, 36, 0.16);
+    --sev-medium: #FACC15;
+    --sev-medium-soft: rgba(250, 204, 21, 0.16);
+    --sev-low: #4ADE80;
+    --sev-low-soft: rgba(74, 222, 128, 0.16);
+    --sev-none: #6B7686;
+    --sev-none-soft: rgba(107, 118, 134, 0.18);
 
-    --text: #101828;
-    --text-muted: #5B6472;
-    --text-faint: #98A2AF;
+    --ok: #4ADE80;
+    --ok-soft: rgba(74, 222, 128, 0.16);
+    --info: #818CF8;
+    --info-soft: rgba(129, 140, 248, 0.16);
 
-    --accent-soft: rgba(37, 99, 235, 0.1);
-
-    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-    --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.08);
-    --shadow-glow: 0 0 0 1px var(--accent-soft), 0 4px 20px rgba(37, 99, 235, 0.12);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
+    --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.34), 0 8px 20px rgba(0, 0, 0, 0.26);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.42);
+    --shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.28);
   }
+}
+
+/* O toggle explícito tem de ganhar ao sistema nos dois sentidos, daí repetir
+   o bloco escuro para [data-theme="dark"] — sem isto, escolher "escuro" numa
+   máquina em modo claro não fazia nada. */
+:root[data-theme="dark"] {
+  --bg: #0B0F16;
+  --bg-elevated: #11161F;
+  --panel: #151B25;
+  --panel-alt: #1B2230;
+  --panel-hover: #1B2230;
+  --border: #232B38;
+  --border-strong: #313B4B;
+
+  --text: #E9EEF5;
+  --text-muted: #9AA5B4;
+  --text-faint: #6B7686;
+
+  --accent: #60A5FA;
+  --accent-hover: #7DB6FB;
+  --accent-soft: rgba(96, 165, 250, 0.16);
+  --accent-ink: #0B0F16;
+
+  --sev-critical: #F87171;
+  --sev-critical-soft: rgba(248, 113, 113, 0.16);
+  --sev-high: #FBBF24;
+  --sev-high-soft: rgba(251, 191, 36, 0.16);
+  --sev-medium: #FACC15;
+  --sev-medium-soft: rgba(250, 204, 21, 0.16);
+  --sev-low: #4ADE80;
+  --sev-low-soft: rgba(74, 222, 128, 0.16);
+  --sev-none: #6B7686;
+  --sev-none-soft: rgba(107, 118, 134, 0.18);
+
+  --ok: #4ADE80;
+  --ok-soft: rgba(74, 222, 128, 0.16);
+  --info: #818CF8;
+  --info-soft: rgba(129, 140, 248, 0.16);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.34), 0 8px 20px rgba(0, 0, 0, 0.26);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.42);
+  --shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.28);
 }

@@ -93,5 +93,5 @@ export function ReportList({
     },
   ];
 
-  return <Table columns={columns} rows={scans} rowKey={(s) => s.id} />;
+  return <Table columns={columns} rows={scans} rowKey={(s) => s.id} capped />;
 }

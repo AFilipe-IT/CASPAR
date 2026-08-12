@@ -16,11 +16,9 @@
 }
 
 .label {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  color: var(--text);
 }
 
 .hint {
@@ -29,21 +27,26 @@
   line-height: 1.5;
 }
 
+/* Mesma altura e mesmo anel de foco dos campos da Avaliação — as três
+   superfícies de escrita da consola partilham a mesma métrica. */
 .input,
 .select {
-  background: var(--panel-alt);
+  height: 40px;
+  background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  padding: 0 var(--sp-3);
   font-size: var(--fs-base);
   color: var(--text);
   font-family: var(--font-sans);
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .input:focus,
 .select:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: var(--shadow-focus);
 }
 
 .row2 {
@@ -120,32 +123,41 @@
   gap: var(--sp-2);
 }
 
+/* Os mesmos separadores da Avaliação, em grupo segmentado: dois desenhos de
+   separadores na mesma consola liam-se como duas aplicações. */
 .tabs {
   display: flex;
   gap: var(--sp-1);
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-1);
+  width: fit-content;
   margin-bottom: var(--sp-5);
-  border-bottom: 1px solid var(--border);
 }
 
 .tab {
-  background: none;
+  height: 34px;
+  padding: 0 var(--sp-4);
   border: none;
-  border-bottom: 2px solid transparent;
-  padding: var(--sp-3) var(--sp-4);
-  font-size: var(--fs-sm);
-  font-weight: 500;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-base);
+  font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
   font-family: var(--font-sans);
+  transition: background var(--transition), color var(--transition), box-shadow var(--transition);
 }
 
-.tab:hover {
+.tab:hover:not(.tabActive) {
   color: var(--text);
 }
 
 .tabActive {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
 }
 
 .jobRow {
@@ -182,11 +194,12 @@
 }
 
 .modeBtn {
-  padding: 8px 14px;
+  height: 40px;
+  padding: 0 var(--sp-4);
   border: 1px solid var(--border);
-  background: var(--panel-alt);
+  background: var(--panel);
   border-radius: var(--radius-md);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;

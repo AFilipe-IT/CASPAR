@@ -1,6 +1,6 @@
 .sidebar {
   width: var(--sidebar-w);
-  background: var(--bg-elevated);
+  background: var(--panel);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -13,15 +13,20 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  padding: 0 var(--sp-5);
+  /* Alinha exactamente com a barra de topo: a linha da marca e a linha do
+     estado da API ficam à mesma altura, e as duas fronteiras encontram-se. */
+  height: var(--topbar-h);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .brandIcon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #fff;
@@ -32,6 +37,7 @@
   font-size: var(--fs-md);
   font-weight: 700;
   letter-spacing: 0.02em;
+  line-height: 1.2;
 }
 
 .brandSub {
@@ -45,9 +51,24 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--sp-2) var(--sp-3);
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-3);
   overflow-y: auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.groupLabel {
+  padding: 0 var(--sp-3) var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
 }
 
 .navItem {
@@ -55,10 +76,11 @@
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-3);
+  height: 38px;
   border-radius: var(--radius-md);
   color: var(--text-muted);
   text-decoration: none;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
   font-weight: 500;
   transition: background var(--transition), color var(--transition);
 }
@@ -68,9 +90,11 @@
   color: var(--text);
 }
 
-.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+.active,
+.active:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
 }
 
 .footer {

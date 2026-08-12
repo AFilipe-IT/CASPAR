@@ -2,13 +2,28 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
 }
 
 .chart {
   position: relative;
-  width: 200px;
-  height: 140px;
+  width: 280px;
+  height: 162px;
+}
+
+.svg {
+  display: block;
+}
+
+/* O arco cresce da esquerda quando o score muda entre avaliações. */
+.valueArc {
+  transition: d var(--transition-slow), stroke var(--transition-slow);
+}
+
+.tick {
+  font-size: 10px;
+  fill: var(--text-faint);
+  font-variant-numeric: tabular-nums;
 }
 
 .value {
@@ -17,19 +32,24 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 14px;
+  /* Assente na linha de base do arco, não centrado na caixa: o semicírculo
+     tem o peso todo em baixo. */
+  padding-bottom: 6px;
+  pointer-events: none;
 }
 
 .number {
-  font-size: var(--fs-2xl);
+  font-size: var(--fs-3xl);
   font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
 
 .label {
   font-size: var(--fs-sm);
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
 .scale {

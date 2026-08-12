@@ -1,7 +1,10 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  /* Mais leve que o escuro pedia: sobre um fundo claro, 60% de preto lia-se
+     como um apagão em vez de um plano de fundo recuado. */
+  background: rgba(17, 24, 39, 0.45);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -14,8 +17,8 @@
   max-height: min(80vh, 100%);
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;

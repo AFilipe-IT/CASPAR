@@ -1,3 +1,36 @@
+/* A faixa do score: gauge, o que mudou, e a curva. A do meio é a mais estreita
+   — são três linhas de texto — e a curva leva o resto porque precisa de largura
+   para o eixo do tempo se ler. */
+.scoreBand {
+  display: grid;
+  grid-template-columns: 340px 1fr 1.4fr;
+  gap: var(--sp-6);
+}
+
+/* O gauge é a única coisa do cartão e fica centrado nele. */
+.gaugeCard > :last-child {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder {
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+}
+
+@media (max-width: 1400px) {
+  /* O gauge e as estatísticas partilham a primeira linha; a curva passa a
+     ocupar a largura toda, que é onde ela ganha em ser lida. */
+  .scoreBand { grid-template-columns: 320px 1fr; }
+  .scoreBand > :last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 1100px) {
+  .scoreBand { grid-template-columns: 1fr; }
+  .scoreBand > :last-child { grid-column: auto; }
+}
+
 /* Hora da última leitura, no canto do cabeçalho: discreta o suficiente para não
    competir com os números, presente o suficiente para se poder confirmar que a
    página não está congelada. */

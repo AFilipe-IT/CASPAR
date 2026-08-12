@@ -11,11 +11,17 @@ import styles from "./AttackChainsList.module.css";
 export function AttackChainsList({
   chains,
   findings = [],
+  limit,
 }: {
   chains: AttackChain[];
   /** Achados do mesmo scan, para o detalhe ligar cada directiva da cadeia ao
    *  problema concreto. Opcional: sem eles a cadeia mostra-se à mesma. */
   findings?: Misconfiguration[];
+  /** Quantas mostrar. Sem limite no detalhe de um scan, onde a lista completa
+   *  é o assunto da página; com limite no painel, onde 50 cadeias — muitas
+   *  delas o mesmo padrão repetido por vários alvos — empurravam o resto da
+   *  página para fora do ecrã e deixavam meio painel em branco ao lado. */
+  limit?: number;
 }) {
   const [selected, setSelected] = useState<AttackChain | null>(null);
   const active = chains.filter((c) => c.active).sort((a, b) => b.amplified_score - a.amplified_score);
@@ -24,10 +30,13 @@ export function AttackChainsList({
     return <EmptyState icon={<Link2Off size={22} />} title="No active attack chains detected" />;
   }
 
+  const shown = limit ? active.slice(0, limit) : active;
+  const hidden = active.length - shown.length;
+
   return (
     <>
       <ul className={styles.list}>
-        {active.map((chain) => {
+        {shown.map((chain) => {
           const sev = scoreToSeverity(chain.amplified_score);
           return (
             <li key={chain.chain_id} className={styles.item}>
@@ -45,6 +54,14 @@ export function AttackChainsList({
           );
         })}
       </ul>
+
+      {/* Dizer quantas ficaram de fora: sem isto a lista cortada era
+          indistinguível de uma lista completa. */}
+      {hidden > 0 && (
+        <p className={styles.more}>
+          {hidden} more active {hidden === 1 ? "chain" : "chains"} — open a scan for the full list.
+        </p>
+      )}
 
       {selected && (
         <Modal onClose={() => setSelected(null)} title="Attack chain">
