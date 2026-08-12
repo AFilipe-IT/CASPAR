@@ -63,6 +63,17 @@ def start_watch(body: WatchStartRequest, request: Request,
     if version == "unknown":
         version = None
 
+    # Já há uma a vigiar este caminho: devolve-se essa em vez de abrir uma
+    # segunda. Duas sessões sobre o mesmo ficheiro produzem dois históricos
+    # concorrentes do mesmo alvo, e a consola mostrava a mais recente — que
+    # nasce sem histórico nenhum. Idempotente é o comportamento certo aqui:
+    # quem carrega em "Start watching" quer *estar a vigiar aquilo*, não
+    # necessariamente uma sessão nova.
+    existing = watch_runner.existing_session_for(resolved.path)
+    if existing is not None:
+        return {"watch_session": existing, "path": resolved.path,
+                "interval": body.interval}
+
     session_id = watch_runner.start_watch(
         request.app.state.db_path, path=resolved.path, label=label,
         interval=body.interval, version=version,

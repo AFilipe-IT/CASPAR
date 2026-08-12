@@ -6,11 +6,17 @@ import type { RunnerState, WatchDetail, WatchSession } from "./types";
 // polling on, so the cadence is constant while the page is open.
 const POLL_MS = 3000;
 
+// Nota, porque é um engano fácil: o `staleTime` global (10s) é maior que este
+// intervalo, mas não o trava — o `refetchInterval` dispara à mesma. Foi
+// medido, não deduzido. Não vale a pena pôr aqui `staleTime: 0` a pensar que
+// desbloqueia o poll.
+const LIVE = { refetchInterval: POLL_MS } as const;
+
 export function useWatchSessions() {
   return useQuery({
     queryKey: ["watch"],
     queryFn: () => api.get<WatchSession[]>("/watch"),
-    refetchInterval: POLL_MS,
+    ...LIVE,
   });
 }
 
@@ -19,7 +25,7 @@ export function useWatchSession(sessionId: string | undefined) {
     queryKey: ["watch", sessionId],
     queryFn: () => api.get<WatchDetail>(`/watch/${sessionId}`),
     enabled: !!sessionId,
-    refetchInterval: POLL_MS,
+    ...LIVE,
   });
 }
 

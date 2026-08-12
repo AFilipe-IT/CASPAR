@@ -54,6 +54,24 @@ _SESSIONS: dict[str, _Session] = {}
 _LOCK = threading.Lock()
 
 
+def existing_session_for(path: str) -> str | None:
+    """A sessão viva que já vigia *path* neste processo, se houver.
+
+    Carregar em "Start watching" duas vezes no mesmo serviço criava duas
+    sessões a scanear o mesmo ficheiro, e a página passava a mostrar a mais
+    recente — que começa com um único evento e sem histórico. Com várias
+    dessas acumuladas, a vista saltava entre sessões que dizem coisas
+    diferentes sobre a mesma configuração, e o score parecia não acompanhar
+    as edições. Uma configuração só precisa de um observador.
+    """
+    with _LOCK:
+        sessions = list(_SESSIONS.values())
+    for s in sessions:
+        if s.path == path and runner_state(s.session_id) in {"running", "paused"}:
+            return s.session_id
+    return None
+
+
 def start_watch(db_path: str, *, path: str, label: str, interval: float,
                  version: str | None = None, env_profile: str | None = None,
                  host_label: str | None = None) -> str:

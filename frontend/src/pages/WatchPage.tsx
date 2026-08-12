@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -44,6 +44,38 @@ export function stateOf(s: Pick<WatchSession, "live" | "runner_state">) {
   return { label: "Stopped", dot: styles.dot };
 }
 
+/** Viva = a scanear agora, ou em pausa (que também está viva, deliberadamente
+ *  parada). Uma sessão que o servidor já não controla ainda pode estar viva
+ *  pelo batimento — é o caso de um `caspar watch` no terminal. */
+export function isAliveSession(s: Pick<WatchSession, "live" | "runner_state">) {
+  const label = stateOf(s).label;
+  return label === "Live" || label === "Paused";
+}
+
+/**
+ * Qual a sessão que o painel mostra.
+ *
+ * Exportada e pura para ser testável directamente: é aqui que estava o bug de
+ * o watch "não reagir". A escolha tem de ser *revista* sempre que a lista
+ * muda — era feita uma só vez e nunca mais, portanto uma sessão que morresse
+ * deixava a vista presa num score congelado enquanto a viva ao lado ia
+ * actualizando.
+ *
+ * @param pinned o utilizador clicou numa linha. Uma escolha explícita
+ *   respeita-se mesmo numa sessão parada (ver o histórico de uma antiga é
+ *   legítimo); só a selecção automática salta para a viva.
+ */
+export function pickSession(
+  sessions: WatchSession[] | undefined,
+  selected: string | undefined,
+  pinned: boolean,
+): string | undefined {
+  if (!sessions || sessions.length === 0) return undefined;
+  const current = sessions.find((s) => s.watch_session === selected);
+  if (current && (pinned || isAliveSession(current))) return selected;
+  return (sessions.find(isAliveSession) ?? sessions[0]).watch_session;
+}
+
 function StatePill({ session }: { session: Pick<WatchSession, "live" | "runner_state"> }) {
   const { label, dot } = stateOf(session);
   return (
@@ -68,6 +100,9 @@ export function WatchPage() {
   const [path, setPath] = useState("");
   const [interval, setIntervalValue] = useState(2);
   const [selected, setSelected] = useState<string | undefined>();
+  // Distingue "a página escolheu por mim" de "eu cliquei nesta". Só a
+  // primeira é que a selecção automática pode substituir.
+  const [pinned, setPinned] = useState(false);
   // O evento aberto no detalhe: as directivas que produziram aquele score.
   const [openEvent, setOpenEvent] = useState<WatchEvent | null>(null);
 
@@ -79,24 +114,31 @@ export function WatchPage() {
   const canStart = mode === "service" ? !!service : !!path;
 
   const { data: sessions, isLoading } = useWatchSessions();
-  const { data: detail } = useWatchSession(selected);
+
+  // Qual a sessão que o painel mostra. Derivada no render, não guardada por um
+  // efeito: um efeito só chamaria `setSelected` depois do primeiro render, e o
+  // pedido do detalhe ficaria um ciclo atrás da lista — a página aparecia
+  // vazia antes de se preencher.
+  //
+  // Mostrar a sessão VIVA, não a primeira da lista: num ambiente já usado as
+  // primeiras são sessões antigas e paradas, e a página abria num cemitério.
+  // E, sobretudo, a escolha é *revista* a cada actualização da lista. Antes
+  // era feita uma vez ("se ainda não escolhi nenhuma") e nunca mais: bastava
+  // a sessão escolhida morrer — parada, ou órfã de um reinício do servidor —
+  // para a vista ficar presa num score congelado enquanto a viva ao lado ia
+  // actualizando. Era esta a razão de "só vejo mudança quando clico em start
+  // watching": esse clique era a única coisa que reescrevia a selecção.
+  //
+  // `pinned` = o utilizador clicou numa linha. Uma escolha explícita respeita-
+  // se mesmo numa sessão parada (ver o histórico de uma antiga é legítimo);
+  // só a selecção automática é que salta para a viva.
+  const picked = pickSession(sessions, selected, pinned);
+
+  const { data: detail } = useWatchSession(picked);
   const startWatch = useStartWatch();
   const control = useWatchControl();
   const deleteSession = useDeleteWatchSession();
   const clearSessions = useClearWatchSessions();
-
-  // Abrir na sessão VIVA, não na primeira da lista. A lista vem ordenada por
-  // histórico, e num ambiente já usado as primeiras são sessões antigas e
-  // paradas — a página abria num cemitério de sessões e parecia que o watch
-  // nunca mexia. Uma sessão a correr (ou em pausa, que também está viva) é
-  // sempre a que interessa ver.
-  useEffect(() => {
-    if (selected || !sessions || sessions.length === 0) return;
-    const alive = sessions.find(
-      (s) => s.runner_state === "running" || s.runner_state === "paused" || s.live,
-    );
-    setSelected((alive ?? sessions[0]).watch_session);
-  }, [sessions, selected]);
 
   const latest = detail?.latest;
   const owned = latest?.runner_state != null && latest.runner_state !== "stopped";
@@ -113,8 +155,11 @@ export function WatchPage() {
     }));
 
   function act(action: "pause" | "resume" | "stop") {
-    if (!selected) return;
-    control.mutate({ sessionId: selected, action });
+    // `picked`, não `selected`: os botões têm de agir sobre a sessão que o
+    // painel está a mostrar. Enquanto a selecção é automática, `selected`
+    // ainda é undefined e pausar/parar não faria nada.
+    if (!picked) return;
+    control.mutate({ sessionId: picked, action });
   }
 
   /** Apagar uma sessão. Deselecciona-a antes: sem isso a página ficava a
@@ -122,7 +167,10 @@ export function WatchPage() {
   function removeSession(sessionId: string) {
     deleteSession.mutate(sessionId, {
       onSuccess: () => {
-        if (sessionId === selected) setSelected(undefined);
+        if (sessionId === picked) {
+          setSelected(undefined);
+          setPinned(false);   // volta a seguir a sessão viva
+        }
       },
     });
   }
@@ -235,7 +283,14 @@ export function WatchPage() {
                   mode === "service"
                     ? { path: service, live: true, interval }
                     : { path, interval },
-                  { onSuccess: (r) => setSelected(r.watch_session) },
+                  {
+                    onSuccess: (r) => {
+                      // Acabou de a arrancar: é nela que quer estar, e é uma
+                      // escolha tão explícita como clicar na linha.
+                      setSelected(r.watch_session);
+                      setPinned(true);
+                    },
+                  },
                 )
               }
             >
@@ -285,9 +340,12 @@ export function WatchPage() {
                   key={s.watch_session}
                   className={[
                     styles.sessionRow,
-                    s.watch_session === selected ? styles.sessionRowActive : "",
+                    s.watch_session === picked ? styles.sessionRowActive : "",
                   ].join(" ")}
-                  onClick={() => setSelected(s.watch_session)}
+                  onClick={() => {
+                    setSelected(s.watch_session);
+                    setPinned(true);
+                  }}
                 >
                   <div className={styles.sessionTop}>
                     <span className={styles.sessionName}>

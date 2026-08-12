@@ -240,6 +240,47 @@ class TestWatchStart:
         sessions = client.get("/api/v1/watch").json()
         assert session_id in [s["watch_session"] for s in sessions]
 
+    def test_starting_the_same_path_twice_reuses_the_session(
+            self, client, config_file):
+        """Carregar em "Start watching" outra vez não abre um segundo
+        observador do mesmo ficheiro.
+
+        Duas sessões sobre a mesma configuração produzem dois históricos
+        concorrentes do mesmo alvo, e a consola mostra a mais recente — que
+        nasce com um evento só e sem histórico. Na prática isso lia-se como o
+        watch a perder o fio às edições, quando o que havia era a vista a
+        saltar entre sessões que discordam.
+        """
+        first = client.post(
+            "/api/v1/watch", json={"path": config_file, "interval": INTERVAL},
+        ).json()["watch_session"]
+        second = client.post(
+            "/api/v1/watch", json={"path": config_file, "interval": INTERVAL},
+        ).json()["watch_session"]
+
+        assert second == first
+        # Só depois do primeiro evento: a sessão aparece na lista quando
+        # tiver escrito um resultado, e ler antes disso mede a corrida, não
+        # o comportamento.
+        _wait_for_events(client, first, 1)
+        rows = [s for s in client.get("/api/v1/watch").json()
+                if s["input_path"] == config_file]
+        assert len(rows) == 1
+
+    def test_a_stopped_path_can_be_watched_again(self, client, config_file):
+        """A reutilização é só de sessões vivas: parar e recomeçar tem de
+        dar uma sessão nova, senão o botão deixava de funcionar depois de se
+        parar uma."""
+        first = client.post(
+            "/api/v1/watch", json={"path": config_file, "interval": INTERVAL},
+        ).json()["watch_session"]
+        client.post(f"/api/v1/watch/{first}/stop")
+
+        second = client.post(
+            "/api/v1/watch", json={"path": config_file, "interval": INTERVAL},
+        ).json()["watch_session"]
+        assert second != first
+
 
 class TestWatchLifecycle:
 

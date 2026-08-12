@@ -108,7 +108,13 @@ describe("WatchPage", () => {
     renderWatch();
     // A linha do evento é o único sítio onde o score aparece com a severidade
     // ao lado; abri-la tem de trazer as directivas concretas.
-    const row = await screen.findByRole("button", { name: /12 issues/ });
+    // Timeout explícito: a linha do evento só aparece depois de a lista de
+    // sessões e o detalhe da escolhida chegarem, e o default de 1s do
+    // testing-library não chega numa máquina carregada — falhava aqui com a
+    // página a funcionar. É espera a mais, não asserção a menos.
+    const row = await screen.findByRole(
+      "button", { name: /12 issues/ }, { timeout: 5000 },
+    );
     await userEvent.click(row);
 
     await waitFor(() => {
