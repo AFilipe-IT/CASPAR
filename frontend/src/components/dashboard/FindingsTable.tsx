@@ -63,10 +63,16 @@ export function FindingsTable({ rows }: { rows: FindingRow[] }) {
 
   return (
     <>
+      {/* O `id` é o da regra, não o da ocorrência: a mesma directiva mal posta
+          em dois sítios chega duas vezes com o mesmo id (num scan real do
+          apache2.conf são 10 ids para 12 achados). Como chave de React isso
+          são chaves repetidas, que o React avisa e cujo resultado é
+          explicitamente indefinido — pode omitir linhas. A posição desempata
+          sem inventar identidade nenhuma. */}
       <Table
         columns={columns}
         rows={rows}
-        rowKey={(r) => r.finding.id}
+        rowKey={(r, i) => `${r.finding.id}:${i}`}
         onRowClick={(r) => setSelected(r)}
       />
       {selected && (

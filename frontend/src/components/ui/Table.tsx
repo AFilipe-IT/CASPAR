@@ -11,7 +11,9 @@ export interface Column<T> {
 interface TableProps<T> {
   columns: Column<T>[];
   rows: T[];
-  rowKey: (row: T) => string;
+  /** O índice serve para desempatar linhas cuja identidade não é única — ver
+   *  a nota em FindingsTable, onde o id é o da regra e não o da ocorrência. */
+  rowKey: (row: T, index: number) => string;
   onRowClick?: (row: T) => void;
 }
 
@@ -29,9 +31,9 @@ export function Table<T>({ columns, rows, rowKey, onRowClick }: TableProps<T>) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <tr
-              key={rowKey(row)}
+              key={rowKey(row, index)}
               className={onRowClick ? styles.clickable : undefined}
               onClick={() => onRowClick?.(row)}
             >
