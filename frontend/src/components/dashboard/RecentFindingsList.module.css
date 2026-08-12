@@ -1,0 +1,56 @@
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Achado · serviço · severidade. Separadas por linha, não por espaço: são
+   registos de uma tabela, e o traço é o que as mantém alinhadas ao olho. */
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--fs-base);
+  color: var(--text);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* O valor inseguro não é o nome da directiva — fica em peso normal para a
+   linha se ler como "X está a Y", e não como um identificador só. */
+.value {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.impact {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.service {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}

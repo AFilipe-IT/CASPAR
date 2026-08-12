@@ -52,6 +52,35 @@
   --info: #6366F1;
   --info-soft: rgba(99, 102, 241, 0.12);
 
+  /* ---- Ícones de KPI -------------------------------------------------- */
+  /* Identidade, não estado: dão a cada indicador uma cor própria para se
+     encontrar de relance na linha de seis. Ficam separadas das de severidade
+     de propósito — se o ícone de "Cadeias de ataque" fosse vermelho, lia-se
+     como um alarme em vez de uma etiqueta. As críticas são a excepção, e
+     essas usam mesmo o token de severidade.
+     `-bg` é o que o quadrado veste: aqui o próprio cheio, com o glifo a
+     branco por cima; no escuro passa a um véu translúcido. */
+  --kpi-blue: #3B82F6;
+  --kpi-blue-bg: #3B82F6;
+  --kpi-teal: #14B8A6;
+  --kpi-teal-bg: #14B8A6;
+  --kpi-orange: #F97316;
+  --kpi-orange-bg: #F97316;
+  --kpi-purple: #A855F7;
+  --kpi-purple-bg: #A855F7;
+  --kpi-red: #EF4444;
+  --kpi-red-bg: #EF4444;
+  --kpi-amber: #F59E0B;
+  --kpi-amber-bg: #F59E0B;
+  /* A tinta do glifo: branco sobre o quadrado cheio. No escuro o quadrado é
+     só um véu, e lá esta passa à própria cor — ver os blocos escuros. */
+  --kpi-ink-blue: #FFFFFF;
+  --kpi-ink-teal: #FFFFFF;
+  --kpi-ink-orange: #FFFFFF;
+  --kpi-ink-purple: #FFFFFF;
+  --kpi-ink-red: #FFFFFF;
+  --kpi-ink-amber: #FFFFFF;
+
   /* ---- Tipografia ---------------------------------------------------- */
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
@@ -144,6 +173,29 @@
     --info: #818CF8;
     --info-soft: rgba(129, 140, 248, 0.16);
 
+    /* No escuro os quadrados dos ícones deixam de ser pastéis opacos — a
+       #DBEAFE sobre #0B0F16 acendia-se como uma lâmpada. Passam a um véu da
+       própria cor sobre o painel, e o glifo passa a colorido em vez de branco:
+       branco sobre o cheio ficava a gritar num fundo escuro. */
+    --kpi-blue: #60A5FA;
+    --kpi-blue-bg: rgba(96, 165, 250, 0.16);
+    --kpi-teal: #2DD4BF;
+    --kpi-teal-bg: rgba(45, 212, 191, 0.16);
+    --kpi-orange: #FB923C;
+    --kpi-orange-bg: rgba(251, 146, 60, 0.16);
+    --kpi-purple: #C084FC;
+    --kpi-purple-bg: rgba(192, 132, 252, 0.16);
+    --kpi-red: #F87171;
+    --kpi-red-bg: rgba(248, 113, 113, 0.16);
+    --kpi-amber: #FBBF24;
+    --kpi-amber-bg: rgba(251, 191, 36, 0.16);
+    --kpi-ink-blue: #60A5FA;
+    --kpi-ink-teal: #2DD4BF;
+    --kpi-ink-orange: #FB923C;
+    --kpi-ink-purple: #C084FC;
+    --kpi-ink-red: #F87171;
+    --kpi-ink-amber: #FBBF24;
+
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
     --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.34), 0 8px 20px rgba(0, 0, 0, 0.26);
     --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.42);
@@ -187,6 +239,29 @@
   --ok-soft: rgba(74, 222, 128, 0.16);
   --info: #818CF8;
   --info-soft: rgba(129, 140, 248, 0.16);
+
+  /* No escuro os quadrados dos ícones deixam de ser pastéis opacos — a
+     #DBEAFE sobre #0B0F16 acendia-se como uma lâmpada. Passam a um véu da
+     própria cor sobre o painel, e o glifo passa a colorido em vez de branco:
+     branco sobre o cheio ficava a gritar num fundo escuro. */
+  --kpi-blue: #60A5FA;
+  --kpi-blue-bg: rgba(96, 165, 250, 0.16);
+  --kpi-teal: #2DD4BF;
+  --kpi-teal-bg: rgba(45, 212, 191, 0.16);
+  --kpi-orange: #FB923C;
+  --kpi-orange-bg: rgba(251, 146, 60, 0.16);
+  --kpi-purple: #C084FC;
+  --kpi-purple-bg: rgba(192, 132, 252, 0.16);
+  --kpi-red: #F87171;
+  --kpi-red-bg: rgba(248, 113, 113, 0.16);
+  --kpi-amber: #FBBF24;
+  --kpi-amber-bg: rgba(251, 191, 36, 0.16);
+  --kpi-ink-blue: #60A5FA;
+  --kpi-ink-teal: #2DD4BF;
+  --kpi-ink-orange: #FB923C;
+  --kpi-ink-purple: #C084FC;
+  --kpi-ink-red: #F87171;
+  --kpi-ink-amber: #FBBF24;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
   --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.34), 0 8px 20px rgba(0, 0, 0, 0.26);

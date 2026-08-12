@@ -1,7 +1,9 @@
+/* Ícone à esquerda do número, não por cima: é o que aproxima a linha de seis
+   do mockup e o que deixa o valor e a etiqueta lerem-se como um bloco só. */
 .tile {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
+  align-items: center;
+  gap: var(--sp-4);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -16,22 +18,25 @@
   border-color: var(--border-strong);
 }
 
+/* Quadrado cheio com o glifo a branco, uma cor por indicador. Os contornos
+   monocromáticos que aqui estavam antes tornavam os seis cartões
+   indistinguíveis de relance — a cor é o que dá a cada um identidade. */
 .icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-md);
-  background: var(--accent-soft);
-  color: var(--accent);
   flex-shrink: 0;
 }
 
-.icon.critical {
-  background: var(--sev-critical-soft);
-  color: var(--sev-critical);
-}
+.blue   { background: var(--kpi-blue-bg);   color: var(--kpi-ink-blue); }
+.teal   { background: var(--kpi-teal-bg);   color: var(--kpi-ink-teal); }
+.orange { background: var(--kpi-orange-bg); color: var(--kpi-ink-orange); }
+.purple { background: var(--kpi-purple-bg); color: var(--kpi-ink-purple); }
+.red    { background: var(--kpi-red-bg);    color: var(--kpi-ink-red); }
+.amber  { background: var(--kpi-amber-bg);  color: var(--kpi-ink-amber); }
 
 .body {
   display: flex;

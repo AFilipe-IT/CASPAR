@@ -1,0 +1,78 @@
+/* Uma faixa, não quatro cartões: é contexto de rodapé e não deve competir com
+   os indicadores em cima. Daí o fundo do painel sem sombra e os quatro campos
+   separados por linha vertical. */
+.bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-6);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5) var(--sp-6);
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.item + .item {
+  border-left: 1px solid var(--border);
+  padding-left: var(--sp-6);
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--panel-alt);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.value {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Abaixo dos 1400px quatro colunas deixavam cada campo com ~200px e os
+   caminhos ficavam todos cortados; passa a duas linhas de dois. */
+@media (max-width: 1400px) {
+  .bar {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-5);
+  }
+  .item:nth-child(odd) {
+    border-left: none;
+    padding-left: 0;
+  }
+}

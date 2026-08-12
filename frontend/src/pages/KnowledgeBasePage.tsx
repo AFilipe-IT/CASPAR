@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Database } from "lucide-react";
+import { Library, ListChecks, Fingerprint, Link2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
@@ -38,10 +38,12 @@ export function KnowledgeBasePage() {
       <PageHeader title="Knowledge Base" description="Explore benchmarks, rules, and CCSS vectors — read-only." />
 
       <div className="grid-kpi">
-        <KpiTile label="Benchmarks" value={benchmarks?.length ?? 0} icon={<Database size={18} />} />
-        <KpiTile label="Rules in view" value={rules?.length ?? 0} icon={<Database size={18} />} />
-        <KpiTile label="Distinct CCSS vectors" value={ccssVectorCount} icon={<Database size={18} />} />
-        <KpiTile label="Attack chains" value={chains?.length ?? 0} icon={<Database size={18} />} />
+        {/* Quatro ícones iguais não distinguiam nada: cada indicador leva
+            agora o seu glifo e a sua cor, como no painel. */}
+        <KpiTile label="Benchmarks" value={benchmarks?.length ?? 0} icon={<Library size={20} />} tone="blue" />
+        <KpiTile label="Rules in view" value={rules?.length ?? 0} icon={<ListChecks size={20} />} tone="teal" />
+        <KpiTile label="Distinct CCSS vectors" value={ccssVectorCount} icon={<Fingerprint size={20} />} tone="orange" />
+        <KpiTile label="Attack chains" value={chains?.length ?? 0} icon={<Link2 size={20} />} tone="purple" />
       </div>
 
       <div className={styles.layout}>

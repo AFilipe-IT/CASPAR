@@ -1,12 +1,13 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-4);
 }
 
+/* Ícone · nome · barra · pastilha. */
 .row {
   display: grid;
-  grid-template-columns: minmax(140px, 34%) 1fr 40px;
+  grid-template-columns: 28px minmax(120px, 30%) 1fr 46px;
   align-items: center;
   gap: var(--sp-3);
 }
@@ -31,7 +32,8 @@
 }
 
 .track {
-  height: 8px;
+  height: 10px;
+  min-width: 60px;
   border-radius: 999px;
   background: var(--panel-alt);
   overflow: hidden;
@@ -47,5 +49,7 @@
   font-size: var(--fs-sm);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: center;
+  padding: 3px 0;
+  border-radius: var(--radius-pill);
 }

@@ -1,0 +1,74 @@
+/* Quadrado arredondado com o glifo da tecnologia. As cores são um véu da cor
+   de marca sobre o painel — o mesmo peso visual nos dois temas, sem os pastéis
+   opacos que no escuro se acendiam. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Acompanha o glifo: o mesmo componente serve o quadrado de 28px da lista
+     de serviços e a marca pequena ao lado do nome nos achados. */
+  width: calc(var(--glyph, 16px) + 12px);
+  height: calc(var(--glyph, 16px) + 12px);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.apache { color: #D22128; background: rgba(210, 33, 40, 0.12); }
+.nginx { color: #009639; background: rgba(0, 150, 57, 0.12); }
+.docker { color: #2496ED; background: rgba(36, 150, 237, 0.12); }
+.kubernetes { color: #326CE5; background: rgba(50, 108, 229, 0.12); }
+.mysql { color: #00758F; background: rgba(0, 117, 143, 0.12); }
+.postgres { color: #336791; background: rgba(51, 103, 145, 0.14); }
+.redis { color: #DC382D; background: rgba(220, 56, 45, 0.12); }
+.ssh { color: #4B5563; background: rgba(75, 85, 99, 0.14); }
+.ubuntu { color: #E95420; background: rgba(233, 84, 32, 0.12); }
+.tomcat { color: #F8DC75; background: rgba(191, 150, 0, 0.16); }
+.azure { color: #0078D4; background: rgba(0, 120, 212, 0.12); }
+/* Famílias do catálogo — cobrem os alvos por instalar sem uma linha por cada. */
+.redhat { color: #EE0000; background: rgba(238, 0, 0, 0.10); }
+.windows { color: #0078D4; background: rgba(0, 120, 212, 0.12); }
+.apple { color: #52525B; background: rgba(82, 82, 91, 0.12); }
+.unix { color: #6D28D9; background: rgba(109, 40, 217, 0.12); }
+.db { color: #0F766E; background: rgba(15, 118, 110, 0.12); }
+.network { color: #B45309; background: rgba(180, 83, 9, 0.12); }
+.generic { color: var(--text-muted); background: var(--panel-alt); }
+
+/* No escuro os azuis e verdes de marca ficam abaixo do contraste mínimo
+   contra o painel — clareiam, mantendo a mesma identidade. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .apache { color: #F87171; }
+  :root:not([data-theme="light"]) .nginx { color: #4ADE80; }
+  :root:not([data-theme="light"]) .docker { color: #60A5FA; }
+  :root:not([data-theme="light"]) .kubernetes { color: #818CF8; }
+  :root:not([data-theme="light"]) .mysql { color: #22D3EE; }
+  :root:not([data-theme="light"]) .postgres { color: #7DD3FC; }
+  :root:not([data-theme="light"]) .redis { color: #FB7185; }
+  :root:not([data-theme="light"]) .ssh { color: #9AA5B4; }
+  :root:not([data-theme="light"]) .ubuntu { color: #FB923C; }
+  :root:not([data-theme="light"]) .tomcat { color: #FCD34D; }
+  :root:not([data-theme="light"]) .azure { color: #38BDF8; }
+  :root:not([data-theme="light"]) .redhat { color: #F87171; }
+  :root:not([data-theme="light"]) .windows { color: #38BDF8; }
+  :root:not([data-theme="light"]) .apple { color: #A1A1AA; }
+  :root:not([data-theme="light"]) .unix { color: #C4B5FD; }
+  :root:not([data-theme="light"]) .db { color: #5EEAD4; }
+  :root:not([data-theme="light"]) .network { color: #FBBF24; }
+}
+
+:root[data-theme="dark"] .apache { color: #F87171; }
+:root[data-theme="dark"] .nginx { color: #4ADE80; }
+:root[data-theme="dark"] .docker { color: #60A5FA; }
+:root[data-theme="dark"] .kubernetes { color: #818CF8; }
+:root[data-theme="dark"] .mysql { color: #22D3EE; }
+:root[data-theme="dark"] .postgres { color: #7DD3FC; }
+:root[data-theme="dark"] .redis { color: #FB7185; }
+:root[data-theme="dark"] .ssh { color: #9AA5B4; }
+:root[data-theme="dark"] .ubuntu { color: #FB923C; }
+:root[data-theme="dark"] .tomcat { color: #FCD34D; }
+:root[data-theme="dark"] .azure { color: #38BDF8; }
+:root[data-theme="dark"] .redhat { color: #F87171; }
+:root[data-theme="dark"] .windows { color: #38BDF8; }
+:root[data-theme="dark"] .apple { color: #A1A1AA; }
+:root[data-theme="dark"] .unix { color: #C4B5FD; }
+:root[data-theme="dark"] .db { color: #5EEAD4; }
+:root[data-theme="dark"] .network { color: #FBBF24; }

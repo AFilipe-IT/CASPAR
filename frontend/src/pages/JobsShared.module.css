@@ -102,10 +102,22 @@
   background: var(--panel-alt);
 }
 
+/* Glifo e nome na mesma linha, alinhados ao centro: o ícone identifica a
+   tecnologia de relance e o nome confirma-a. */
+.pluginHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
 .pluginName {
   font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text);
+  /* Nomes como "Ubuntu OS hardening (sysctl, login.defs)" partem para duas
+     linhas; sem isto, empurravam o glifo para fora do cartão. */
+  min-width: 0;
 }
 
 .pluginMeta {

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
 import { JobConsole } from "@/components/jobs/JobConsole";
+import { ServiceIcon } from "@/components/dashboard/ServiceIcon";
 import { useInstallPlugin, useInvalidateAfterJob, usePlugins } from "@/api/jobs";
 import styles from "./JobsShared.module.css";
 
@@ -79,7 +80,13 @@ export function PluginsPage() {
             <div className={styles.pluginGrid}>
               {installed.map((p) => (
                 <div key={p.name} className={styles.pluginCard}>
-                  <span className={styles.pluginName}>{p.display_name}</span>
+                  {/* O mesmo glifo com que a tecnologia aparece no painel: sem
+                      ele, treze cartões de texto liam-se todos iguais e era
+                      preciso ler o nome para distinguir um do outro. */}
+                  <div className={styles.pluginHead}>
+                    <ServiceIcon name={p.name} size={18} />
+                    <span className={styles.pluginName}>{p.display_name}</span>
+                  </div>
                   <span className={styles.pluginMeta}>{p.benchmark_source}</span>
                   <div className={styles.pluginFoot}>
                     <code className={styles.pluginMeta}>{p.name}</code>
@@ -105,7 +112,10 @@ export function PluginsPage() {
             <div className={styles.pluginGrid}>
               {available.map((p) => (
                 <div key={p.service} className={styles.pluginCard}>
-                  <span className={styles.pluginName}>{p.service_name}</span>
+                  <div className={styles.pluginHead}>
+                    <ServiceIcon name={p.service} size={18} />
+                    <span className={styles.pluginName}>{p.service_name}</span>
+                  </div>
                   <span className={styles.pluginMeta}>
                     {p.sources.map((s) => s.type).join(", ") || "no source"}
                   </span>

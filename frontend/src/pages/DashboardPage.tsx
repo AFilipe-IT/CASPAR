@@ -13,13 +13,15 @@ import { StatRow } from "@/components/dashboard/StatRow";
 import { ServiceScoreList } from "@/components/dashboard/ServiceScoreList";
 import { FindingsTable } from "@/components/dashboard/FindingsTable";
 import { AttackChainsList } from "@/components/dashboard/AttackChainsList";
-import { RecentAssessmentsList } from "@/components/dashboard/RecentAssessmentsList";
+import { RecentFindingsList } from "@/components/dashboard/RecentFindingsList";
+import { StatusFooter } from "@/components/dashboard/StatusFooter";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { KpiTile } from "@/components/dashboard/KpiTile";
 import { summarise } from "@/lib/dashboard";
 import { useScans } from "@/api/scans";
 import { useHostsRollup } from "@/api/hosts";
 import { useTrends } from "@/api/trends";
+import { useSettings } from "@/api/manage";
 import { api } from "@/api/client";
 import type { ScanResult } from "@/api/types";
 import styles from "./DashboardPage.module.css";
@@ -53,6 +55,7 @@ export function DashboardPage() {
   } = useScans({ limit: 50 }, true);
   const { data: rollup, isLoading: rollupLoading } = useHostsRollup();
   const { data: trends, isLoading: trendsLoading } = useTrends();
+  const { data: settings } = useSettings();
 
   // One scan per input_path (most recent) — the same "latest per target"
   // rule the Jinja2 overview uses — fetched in full for per-service scores,
@@ -156,14 +159,15 @@ export function DashboardPage() {
       </div>
 
       <div className="grid-kpi">
-        <KpiTile label="Services assessed" value={details.length} icon={<Layers size={18} />} />
-        <KpiTile label="Directives scanned" value={totalDirectives} icon={<FileWarning size={18} />} />
+        <KpiTile label="Services assessed" value={details.length} icon={<Layers size={20} />} tone="blue" />
+        <KpiTile label="Directives scanned" value={totalDirectives} icon={<FileWarning size={20} />} tone="teal" />
         <KpiTile
           label="Open findings"
           value={openIssues}
-          icon={<ShieldAlert size={18} />}
+          icon={<ShieldAlert size={20} />}
+          tone="orange"
         />
-        <KpiTile label="Attack chains" value={allChains.length} icon={<Link2 size={18} />} />
+        <KpiTile label="Attack chains" value={allChains.length} icon={<Link2 size={20} />} tone="purple" />
         {/* Contava dentro de `topFindings`, que já está cortado nos 5 primeiros
             — o máximo possível era 5, e dava 0 mesmo com um scan Critical 10.0
             na base de dados. Tem de varrer todos os problemas em aberto. */}
@@ -171,12 +175,12 @@ export function DashboardPage() {
             resposta e não tinham onde aparecer; e como quase só as directivas
             de TLS os trazem, ficavam fora do corte por score das Top Findings
             e não havia sinal nenhum de que existiam. */}
-        <KpiTile label="Related CVEs" value={cveCount} icon={<Bug size={18} />} />
+        <KpiTile label="Related CVEs" value={cveCount} icon={<Bug size={20} />} tone="red" />
         <KpiTile
           label="Critical findings"
           value={criticalFindings}
-          icon={<Siren size={18} />}
-          tone="critical"
+          icon={<Siren size={20} />}
+          tone="amber"
         />
       </div>
 
@@ -222,20 +226,30 @@ export function DashboardPage() {
         <Card title="Severity distribution" subtitle="Open findings by severity">
           {isLoading ? <SkeletonBlock rows={4} /> : <SeverityDonut issues={allIssues} />}
         </Card>
-        <Card title="Recent assessments">
-          {scansLoading ? (
+        {/* Achados, não avaliações: a lista de carimbos temporais dizia
+            *quando* se avaliou e nunca *o que* se encontrou — para chegar ao
+            problema era preciso abrir um scan. Aqui a linha traz já a
+            directiva, o impacto, o serviço e a severidade. */}
+        <Card title="Recent findings">
+          {isLoading ? (
             <SkeletonBlock rows={5} />
           ) : (
-            <RecentAssessmentsList scans={(scans ?? []).slice(0, 6)} />
+            <RecentFindingsList findings={topFindings} />
           )}
         </Card>
       </div>
 
-      {/* Recent Assessments está agora na faixa de baixo, junto aos outros dois
-          resumos — aparecia aqui uma segunda vez com exactamente a mesma lista. */}
       <Card title="Quick actions">
         <QuickActions />
       </Card>
+
+      {/* Fecha a página com a proveniência dos números: de quando são, contra
+          que base, com que cobertura. */}
+      <StatusFooter
+        lastScan={(scans ?? [])[0]}
+        settings={settings}
+        directives={totalDirectives}
+      />
     </>
   );
 }

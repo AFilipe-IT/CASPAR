@@ -1,4 +1,5 @@
 import { scoreToHex } from "@/lib/severity";
+import { ServiceIcon } from "./ServiceIcon";
 import styles from "./ServiceScoreList.module.css";
 
 export interface ServiceScore {
@@ -28,6 +29,7 @@ export function ServiceScoreList({ services, max = 10 }: { services: ServiceScor
           // A chave inclui o caminho: com `name` sozinho, alvos homónimos
           // colidiam e o React reordenava linhas erradas entre actualizações.
           <div key={`${svc.name}:${svc.input ?? ""}`} className={styles.row}>
+            <ServiceIcon name={svc.name} />
             <span className={styles.name}>
               {svc.name}
               {svc.input && (
@@ -39,7 +41,9 @@ export function ServiceScoreList({ services, max = 10 }: { services: ServiceScor
             <div className={styles.track}>
               <div className={styles.fill} style={{ width: `${pct}%`, background: color }} />
             </div>
-            <span className={styles.score} style={{ color }}>
+            {/* Pastilha em vez de número solto: com a barra ao lado, o valor
+                precisa de uma caixa própria para não se ler como o fim dela. */}
+            <span className={styles.score} style={{ color, background: `${color}1F` }}>
               {svc.score.toFixed(1)}
             </span>
           </div>

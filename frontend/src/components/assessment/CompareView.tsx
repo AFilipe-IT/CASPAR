@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, GitCompare } from "lucide-react";
+import { ArrowRight, GitCompare, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { KpiTile } from "@/components/dashboard/KpiTile";
@@ -58,15 +58,18 @@ export function CompareView() {
 
       {diff.data && (
         <div className={styles.diffGrid} style={{ marginTop: "var(--sp-5)" }}>
+          {/* Aqui a cor não é identidade, é resultado: piorar pinta de
+              vermelho, resolver pinta de verde. Daí variar com os dados,
+              ao contrário dos indicadores do painel. */}
           <KpiTile label="Score change" value={`${diff.data.old_score.toFixed(1)} → ${diff.data.new_score.toFixed(1)}`}
-            icon={<GitCompare size={18} />}
+            icon={<GitCompare size={20} />}
             delta={diff.data.score_delta}
             deltaLabel="pts"
-            tone={diff.data.score_delta > 0 ? "critical" : "neutral"}
+            tone={diff.data.score_delta > 0 ? "red" : "teal"}
           />
-          <KpiTile label="Resolved issues" value={(diff.data.resolved ?? []).length} icon={<GitCompare size={18} />} />
-          <KpiTile label="New issues" value={(diff.data.new_issues ?? []).length} icon={<GitCompare size={18} />}
-            tone={(diff.data.new_issues ?? []).length > 0 ? "critical" : "neutral"} />
+          <KpiTile label="Resolved issues" value={(diff.data.resolved ?? []).length} icon={<ShieldCheck size={20} />} tone="teal" />
+          <KpiTile label="New issues" value={(diff.data.new_issues ?? []).length} icon={<ShieldAlert size={20} />}
+            tone={(diff.data.new_issues ?? []).length > 0 ? "red" : "teal"} />
         </div>
       )}
 
