@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "caspar"
-version = "0.1.0"
+version = "1.0.0"
 description = "CASPAR — Configuration Vulnerability Meter (CVM) reference implementation, CCSS-based (NISTIR 7502)"
 requires-python = ">=3.10"
 dependencies = [
