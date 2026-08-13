@@ -223,3 +223,72 @@ Every chart needs a hover tooltip. Charts get a legend when they carry more than
 - The footer provenance strip is a real feature, not decoration: it proves the numbers are reproducible (engine version + knowledge base hash + scoring model version).
 
 Build the full console with realistic mock data across all pages. Make it look like a product a security team would pay for.
+
+---
+
+# Iteration prompt — send this AFTER the first generation
+
+Copiar o bloco abaixo (a partir de "The current build is functionally correct…")
+como segunda instrução ao Lovable, com a **imagem de referência anexada**.
+
+O registo mudou de propósito: a primeira ronda foi um brief de design e o
+resultado foi um redesenho. Esta é uma lista de correcções — instruções, não
+inspiração.
+
+---
+
+The current build is functionally correct: the score semantics, the `not_assessed` state, the attack-chain composition view and the provenance footer are all right. **Keep all of that behaviour exactly as it is.** This iteration is about layout density and about matching the attached reference image. Do not redesign anything.
+
+## Rule for this iteration
+
+The attached image is a **specification, not inspiration**. Match its visual hierarchy, card sizes, spacing, information density and chart choices. Where this instruction and your own design judgement disagree, follow the instruction. Do not simplify components, do not increase whitespace, do not substitute chart types, and do not "clean up" the layout.
+
+The current build reads as a generic SaaS dashboard: large cards, wide spacing, few elements per screen. The target is a **technical security console**: compact, dense, many values visible without scrolling. Think of a monitoring console an operator keeps open all day, not a marketing dashboard.
+
+## 1. Density — the main change
+
+Reduce vertical space so the Overview fits roughly one and a half screens instead of three.
+
+- Card padding: reduce by about a third. Section headers small, uppercase, letter-spaced, tight against their content.
+- KPI row: compact tiles in a single row — label, number, one line of sub-text. No sparkline inside the KPI tiles.
+- Dimension rows: one line each. Icon, name, score, severity badge, weight, delta, sparkline — all on the same row, vertically centred. No sub-lines wrapping underneath, no full-width progress bar dominating the row.
+- Remove the standalone "Coverage" card. Coverage belongs in the footer strip, which already carries it.
+- The "Primary driver" block becomes one compact line inside the overall-risk card, not a separate panel.
+- Tables: tighter row height, smaller type, more rows visible.
+
+## 2. Add the radar chart — it is missing
+
+The reference image has a **radar / spider chart** ("Postura de Segurança" / "Security posture") showing all six dimensions on one polygon. The current build does not have it and it must be added to the Overview, beside the dimension list.
+
+- One axis per dimension, in this order clockwise from top: Configuration, Secrets, Network Exposure, Platform Hardening, Software & Patch, Permissions.
+- Scale 0 at the centre to 10 at the outer ring, with rings labelled 0 / 2.5 / 5 / 7.5 / 10.
+- A single filled polygon: red/orange stroke, same colour at low opacity as fill.
+- Dimensions that are `not_assessed` have no value — the polygon does not pass through them at zero, because zero would read as "clean". Break the polygon there, or draw those axes greyed with an explicit "not assessed" marker. **Never plot a not-assessed dimension as 0.**
+
+## 3. Score-over-time chart — shrink it
+
+The scoring-model boundary is currently a full-width chart with its own explanatory subtitle and a two-colour split series. That is far too much space for an edge case.
+
+- Make it a normal single-series line chart, same compact size as the other Overview panels.
+- Keep the rule that points from different scoring models are never joined by a line — but express it as a thin dashed vertical marker with a small label, nothing more. No subtitle explaining the concept, no separate legend for the two model segments.
+
+## 4. Fix the mock-data inconsistencies
+
+The same numbers must agree across every screen:
+
+- Overview says `OPEN FINDINGS 42` and `CRITICAL 3`; the Findings page says `24 open` with 4 critical; the severity donut says 24. Pick one set and use it everywhere: **24 open findings, 4 critical**.
+- The Attack Chains page header says `HIGHEST CHAIN RISK 9.1` but lists a 9.5 chain first. Make it **9.5**.
+- Dimension label: use **"Configuration"** everywhere (not "Configuration Security").
+- Targets: the twelve are exactly `apache-httpd`, `nginx`, `ssh`, `mysql`, `postgresql`, `redis`, `tomcat`, `docker`, `dockerfile`, `kubernetes`, `azure-iac`, `ubuntu`. The Dockerfile benchmark is a curated CIS ruleset, not "CVM Container Build Rules".
+
+## 5. What must not change
+
+Do not touch any of this — it is already correct:
+
+- Higher score = worse; the severity bands and their legend.
+- `not_assessed` as a distinct state, with its explanation text and "What it would measure" link. Never rendered as 0 or green.
+- `delta: null` shown as "—", distinct from `0.0` "no change".
+- The attack-chain composition view: steps as cards with dimension, technology, score and role; the amplification; and the closing sentence comparing the worst step to the chain score.
+- The provenance footer strip on every page.
+- Evidence rendered per kind: config directive with file and line, listening socket with process, file metadata with mode and owner.
+- The brand colours and glyphs for the twelve technologies.
