@@ -76,28 +76,41 @@ class TestTemporalScore:
     """Verify TemporalScore formula."""
 
     def test_nd_gel_grl_returns_same_as_base(self):
-        bs = base_score("N", "N", "L", "P", "P", "P")
-        ts = temporal_score(bs, "ND", "ND")
-        # ND weights are 1.0 for both, so ts == bs
-        assert ts == bs
+        vec = ("N", "N", "L", "P", "P", "P")
+        # ND weights are 1.0 for both, so the exploitability term is unchanged
+        assert temporal_score(*vec, "ND", "ND") == base_score(*vec)
 
     def test_none_gel_reduces_score(self):
-        bs = base_score("N", "N", "L", "P", "P", "P")
-        ts_none = temporal_score(bs, "N", "H")
-        ts_high = temporal_score(bs, "H", "H")
-        assert ts_none < ts_high
+        vec = ("N", "N", "L", "P", "P", "P")
+        assert temporal_score(*vec, "N", "H") < temporal_score(*vec, "H", "H")
 
-    def test_temporal_never_exceeds_base(self):
-        bs = base_score("N", "N", "L", "C", "C", "C")
-        for gel in ("N", "L", "M", "H", "ND"):
-            for grl in ("U", "W", "H", "ND"):
-                ts = temporal_score(bs, gel, grl)
-                assert ts <= bs + 0.05, f"Temporal {ts} exceeded base {bs}"
+    def test_gel_is_monotonic(self):
+        vec = ("L", "N", "M", "P", "P", "P")
+        scores = [temporal_score(*vec, gel, "H") for gel in ("N", "L", "M", "H")]
+        assert scores == sorted(scores)
+        assert scores[0] < scores[-1]
+
+    def test_high_gel_may_exceed_base(self):
+        """NISTIR 7502 §3.2.2: GEL High is 1.2, an amplifier. A frequently
+        exploited misconfiguration scores above its base value."""
+        vec = ("L", "N", "L", "P", "P", "P")
+        assert temporal_score(*vec, "H", "H") > base_score(*vec)
+
+    def test_grl_labels_are_score_neutral(self):
+        """CASPAR's GRL records remediation availability, not remediation
+        applied; every label resolves to the norm's None (1.0)."""
+        vec = ("N", "N", "L", "C", "C", "C")
+        scores = {temporal_score(*vec, "M", grl) for grl in ("U", "W", "H", "ND")}
+        assert len(scores) == 1
 
     def test_temporal_score_bounded(self):
-        bs = 10.0
-        ts = temporal_score(bs, "H", "H")
-        assert 0.0 <= ts <= 10.0
+        for gel in ("N", "L", "M", "H", "ND"):
+            for grl in ("U", "W", "H", "ND"):
+                ts = temporal_score("N", "N", "L", "C", "C", "C", gel, grl)
+                assert 0.0 <= ts <= 10.0
+
+    def test_zero_impact_stays_zero(self):
+        assert temporal_score("N", "N", "L", "N", "N", "N", "H", "H") == 0.0
 
 
 class TestWorstCase:

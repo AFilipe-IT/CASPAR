@@ -17,8 +17,21 @@ Derived from the CVSS v2 lineage, as specified in CCSS:
   Au  : Multiple=0.450, Single=0.560, None=0.704
   AC  : High=0.350, Medium=0.610, Low=0.710
   C/I/A: None=0.000, Partial=0.275, Complete=0.660
-  GEL : None=0.900, Low=0.930, Medium=1.000, High=1.000, ND=1.000
-  GRL : Unavailable=0.900, Workaround=0.950, High=1.000, ND=1.000
+  GEL : None=0.600, Low=0.800, Medium=1.000, High=1.200, ND=1.000
+  GRL : None=1.000, Low=0.800, Medium=0.600, High=0.400, ND=1.000
+
+GRL vocabulary note
+-------------------
+NISTIR 7502 defines GeneralRemediationLevel as the degree to which a
+remediation has *already been applied* across the population of affected
+systems -- an environment-level fact.  CASPAR records a different fact in
+its ``grl`` column: whether a remediation is *available* at all
+(H = official fix documented, W = workaround only, U = no viable remedy).
+A file-level assessment cannot observe deployed mitigations, so the
+conservative and honest reading is that no general remediation has been
+applied: every stored label maps to the norm's ``None`` (coefficient
+1.000).  The column is retained as report metadata -- it tells the reader
+whether a fix exists -- but it no longer modulates the score.
 """
 
 from __future__ import annotations
@@ -62,24 +75,51 @@ _CIA: dict[CIAValue, float] = {
 }
 
 _GEL: dict[GELValue, float] = {
-    "N":  0.900,  # None
-    "L":  0.930,  # Low
-    "M":  1.000,  # Medium
-    "H":  1.000,  # High  (same weight — High is already worst case)
-    "ND": 1.000,  # Not Defined → defaults to Medium (NISTIR §2.2.1)
+    "N":  0.600,  # None    — exploitation not observed
+    "L":  0.800,  # Low     — rarely exploited
+    "M":  1.000,  # Medium  — occasionally exploited
+    "H":  1.200,  # High    — frequently exploited
+    "ND": 1.000,  # Not Defined → neutral (NISTIR §3.2.2)
+}
+
+# The norm's own GeneralRemediationLevel table (NISTIR 7502 §3.2.2).
+_GRL_NORM: dict[str, float] = {
+    "N":  1.000,  # None    — no general remediation applied
+    "L":  0.800,  # Low     — marginal remediation applied
+    "M":  0.600,  # Medium  — partial remediation applied
+    "H":  0.400,  # High    — effective remediation widely applied
+    "ND": 1.000,  # Not Defined → neutral
+}
+
+# CASPAR's stored vocabulary answers "is a fix available?", not "has a fix
+# been applied?".  See the GRL vocabulary note in the module docstring: a
+# configuration file carries no evidence of deployed mitigations, so every
+# label resolves to the norm's None.
+_GRL_APPLIED: dict[GRLValue, str] = {
+    "U":  "N",    # Unavailable — no viable remedy
+    "W":  "N",    # Workaround  — partial contour documented
+    "H":  "N",    # High        — official fix documented
+    "ND": "N",    # Not Defined
 }
 
 _GRL: dict[GRLValue, float] = {
-    "U":  0.900,  # Unavailable
-    "W":  0.950,  # Workaround
-    "H":  1.000,  # High (official remediation documented)
-    "ND": 1.000,  # Not Defined → defaults to High (NISTIR §2.2.2)
+    label: _GRL_NORM[applied] for label, applied in _GRL_APPLIED.items()
 }
 
 
 # ------------------------------------------------------------------ #
 # Base Score  (NISTIR 7502 §3.2.1)                                     #
 # ------------------------------------------------------------------ #
+
+def impact(c: CIAValue, i: CIAValue, a: CIAValue) -> float:
+    """Impact sub-score (NISTIR 7502 §3.2.1), unrounded."""
+    return 10.41 * (1 - (1 - _CIA[c]) * (1 - _CIA[i]) * (1 - _CIA[a]))
+
+
+def exploitability(av: AVValue, au: AuValue, ac: ACValue) -> float:
+    """Exploitability sub-score (NISTIR 7502 §3.2.1), unrounded."""
+    return 20 * _AV[av] * _AU[au] * _AC[ac]
+
 
 def base_score(
     av: AVValue,
@@ -94,18 +134,18 @@ def base_score(
 
     Formula (NISTIR 7502, eq. 1 and 2):
 
-        f_impact  = 10.41 * (1 - (1-C[c]) * (1-C[i]) * (1-C[a]))
-        f_exploit = 20 * AV[av] * AU[au] * AC[ac]
+        Impact         = 10.41 * (1 - (1-C[c]) * (1-C[i]) * (1-C[a]))
+        Exploitability = 20 * AV[av] * AU[au] * AC[ac]
 
-        if f_impact == 0:
-            BaseScore = 0.0
-        else:
-            BaseScore = round(((0.6 * f_impact) + (0.4 * f_exploit) - 1.5) * 1.176, 1)
+        f(Impact) = 0 if Impact == 0 else 1.176
+
+        BaseScore = round(((0.6 * Impact) + (0.4 * Exploitability) - 1.5)
+                          * f(Impact), 1)
 
     Returns a float in [0.0, 10.0], rounded to one decimal place.
     """
-    f_impact = 10.41 * (1 - (1 - _CIA[c]) * (1 - _CIA[i]) * (1 - _CIA[a]))
-    f_exploit = 20 * _AV[av] * _AU[au] * _AC[ac]
+    f_impact = impact(c, i, a)
+    f_exploit = exploitability(av, au, ac)
 
     if f_impact == 0.0:
         return 0.0
@@ -118,16 +158,43 @@ def base_score(
 # Temporal Score  (NISTIR 7502 §3.2.2)                                 #
 # ------------------------------------------------------------------ #
 
-def temporal_score(bs: float, gel: GELValue, grl: GRLValue) -> float:
+def temporal_score(
+    av: AVValue,
+    au: AuValue,
+    ac: ACValue,
+    c: CIAValue,
+    i: CIAValue,
+    a: CIAValue,
+    gel: GELValue = "ND",
+    grl: GRLValue = "ND",
+) -> float:
     """
-    Compute the CCSS Temporal Score.
+    Compute the CCSS Temporal Score exactly as NISTIR 7502 §3.2.2 specifies.
 
-    Formula:
-        TemporalScore = round(BaseScore * GEL[gel] * GRL[grl], 1)
+    The temporal metrics modify the *Exploitability* component only; the
+    Impact component is carried over unchanged from the base equation:
+
+        TemporalExploitability = min(10, Exploitability * GEL * GRL)
+
+        TemporalScore = round(((0.6 * Impact)
+                               + (0.4 * TemporalExploitability)
+                               - 1.5) * f(Impact), 1)
+
+    Because GEL[high] = 1.200, a temporal score may legitimately exceed the
+    base score: frequently exploited misconfigurations are scored upward,
+    which is the behaviour the norm intends.
 
     Returns a float in [0.0, 10.0], rounded to one decimal place.
     """
-    return round(bs * _GEL[gel] * _GRL[grl], 1)
+    f_impact = impact(c, i, a)
+    if f_impact == 0.0:
+        return 0.0
+
+    f_exploit = exploitability(av, au, ac)
+    temporal_exploit = min(10.0, f_exploit * _GEL[gel] * _GRL[grl])
+
+    raw = (0.6 * f_impact) + (0.4 * temporal_exploit) - 1.5
+    return round(raw * 1.176, 1)
 
 
 # ------------------------------------------------------------------ #
@@ -270,5 +337,5 @@ def full_score(
     Useful for validation scripts and tests.
     """
     bs = base_score(av, au, ac, c, i, a)
-    ts = temporal_score(bs, gel, grl)
+    ts = temporal_score(av, au, ac, c, i, a, gel, grl)
     return bs, ts

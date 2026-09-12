@@ -229,5 +229,7 @@ def score_issues(
         issue.av = adj_av
         issue.au = adj_au
         issue.base_score = scoring.base_score(adj_av, adj_au, issue.ac, issue.c, issue.i, issue.a)
-        issue.temporal_score = scoring.temporal_score(issue.base_score, issue.gel, issue.grl)
+        issue.temporal_score = scoring.temporal_score(
+            adj_av, adj_au, issue.ac, issue.c, issue.i, issue.a, issue.gel, issue.grl
+        )
     return issues

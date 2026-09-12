@@ -293,7 +293,7 @@ def promote_to_misconfiguration(u: "UnknownDirective", *, target_name: str):
     c, i, a = _parse_impact(u.llm_impact)
     av, au, ac = "N", "N", "L"
     bs = ccss.base_score(av, au, ac, c, i, a)
-    ts = ccss.temporal_score(bs, "ND", "ND")
+    ts = ccss.temporal_score(av, au, ac, c, i, a, "ND", "ND")
 
     return Misconfiguration(
         target_name=target_name,

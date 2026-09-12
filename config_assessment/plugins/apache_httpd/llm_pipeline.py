@@ -549,8 +549,10 @@ class LLMBuildPipeline:
             def _score_with(value: str) -> float:
                 trial = dict(winning_values)
                 trial[field] = value
-                bs = base_score("N", "N", trial["ac"], trial["c"], trial["i"], trial["a"])
-                return temporal_score(bs, trial["gel"], trial["grl"])
+                return temporal_score(
+                    "N", "N", trial["ac"], trial["c"], trial["i"], trial["a"],
+                    trial["gel"], trial["grl"],
+                )
             winning_values[field] = max(candidates, key=_score_with)
 
         confidence = min(agreement_rates)
@@ -634,7 +636,10 @@ class LLMBuildPipeline:
             metrics = self._call_llm(section, entry)
 
         bs = base_score("N", "N", metrics.ac, metrics.c, metrics.i, metrics.a)
-        ts = temporal_score(bs, metrics.gel, metrics.grl)
+        ts = temporal_score(
+            "N", "N", metrics.ac, metrics.c, metrics.i, metrics.a,
+            metrics.gel, metrics.grl,
+        )
 
         return Misconfiguration(
             target_name=entry.target_name,

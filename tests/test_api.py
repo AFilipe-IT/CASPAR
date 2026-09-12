@@ -53,7 +53,7 @@ def db_path():
     database.upsert_target(meta)
 
     bs = base_score("N", "N", "L", "P", "P", "P")
-    ts = temporal_score(bs, "M", "H")
+    ts = temporal_score("N", "N", "L", "P", "P", "P", "M", "H")
     database.upsert_misconfiguration(Misconfiguration(
         target_name="dummy", directive="DangerousOption", bad_value="on",
         good_value="off", av="N", au="N", ac="L", c="P", i="P", a="P",

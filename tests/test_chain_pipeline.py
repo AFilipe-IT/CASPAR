@@ -39,7 +39,7 @@ _APACHE_JSON = Path(__file__).resolve().parents[1] / "config_assessment" / "plug
 
 def _make_misconfig(directive, bad_value, ac, c, i, a, gel="M", grl="H") -> Misconfiguration:
     bs = base_score("N", "N", ac, c, i, a)
-    ts = temporal_score(bs, gel, grl)
+    ts = temporal_score("N", "N", ac, c, i, a, gel, grl)
     return Misconfiguration(
         target_name="apache-httpd",
         directive=directive,

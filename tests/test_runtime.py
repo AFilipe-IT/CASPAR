@@ -57,7 +57,7 @@ def db():
 
     # Add one misconfiguration
     bs = base_score("N", "N", "L", "P", "P", "P")
-    ts = temporal_score(bs, "M", "H")
+    ts = temporal_score("N", "N", "L", "P", "P", "P", "M", "H")
     m = Misconfiguration(
         target_name="dummy",
         directive="DangerousOption",
@@ -252,7 +252,7 @@ class TestDatabase:
         count_before = len(rows_before)
 
         bs = base_score("N", "N", "L", "P", "P", "P")
-        ts = temporal_score(bs, "M", "H")
+        ts = temporal_score("N", "N", "L", "P", "P", "P", "M", "H")
         m = Misconfiguration(
             target_name="dummy",
             directive="DangerousOption",

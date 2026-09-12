@@ -68,12 +68,17 @@ def correctness_mae() -> dict:
     if not xls:
         return {"skipped": "CCE ground-truth XLSX not present"}
     from config_assessment.plugins.apache_httpd.validate_mae import validate
-    r = validate(DB, xls[0])
-    if "error" in r:
-        return {"skipped": r["error"]}
-    return {k: r[k] for k in ("total_cce_entries", "scored", "matched",
-                              "mismatched", "unknown", "mismatch_rate",
-                              "gate_pass")}
+    keys = ("total_cce_entries", "scored", "matched", "mismatched",
+            "unknown", "mismatch_rate", "gate_pass")
+    out = {}
+    for kind in ("base", "temporal"):
+        r = validate(DB, xls[0], score=kind)
+        if "error" in r:
+            return {"skipped": r["error"]}
+        out[kind] = {k: r[k] for k in keys}
+    # The base comparison is the primary result: a DISA CAT judges the
+    # misconfiguration, not the current threat landscape.
+    return {**out["base"], "by_score": out}
 
 
 # ── 3. Detection — recall on the vulnerable fixtures ───────────────────
@@ -319,11 +324,15 @@ def main() -> None:
     if "skipped" in mae:
         print(f"  skipped: {mae['skipped']}")
     else:
-        print(f"  CCE entries: {mae['total_cce_entries']} · scored: {mae['scored']}")
-        print(f"  matched (in DISA range): {mae['matched']}")
-        print(f"  mismatched: {mae['mismatched']}  ·  unknown: {mae['unknown']}")
-        print(f"  mismatch rate: {mae['mismatch_rate']:.1%}  ·  "
-              f"gate: {'PASS' if mae['gate_pass'] else 'FAIL'}")
+        print(f"  CCE entries: {mae['total_cce_entries']} · scored: {mae['scored']}"
+              f"  ·  unknown: {mae['unknown']}")
+        for kind, label in (("base", "base score (primary)"),
+                            ("temporal", "temporal score (secondary)")):
+            m = mae["by_score"][kind]
+            print(f"  {label:<28} matched {m['matched']:>2}/{m['scored']}"
+                  f"  ·  mismatched {m['mismatched']}"
+                  f"  ·  rate {m['mismatch_rate']:.1%}"
+                  f"  ·  gate: {'PASS' if m['gate_pass'] else 'FAIL'}")
 
     det = report["detection_recall"]
     _hr("3. DETECTION — RECALL ON VULNERABLE FIXTURES")

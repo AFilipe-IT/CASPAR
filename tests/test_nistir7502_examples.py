@@ -13,10 +13,11 @@ Each case asserts three published numbers:
   - base score           (via base_score(), the code under test)
 
 The temporal example in §4.12 (GEL:L/GRL:M → 1.9 / 3.7) is replicated with
-the OFFICIAL temporal equation (§3.2.2) implemented locally, because
-CASPAR's temporal_score() deliberately uses a simplified model
-(BaseScore × GEL × GRL with a reduced value set) — see the note in
-TestTemporalExample412.
+a local, verbatim transcription of the official temporal equation (§3.2.2).
+CASPAR's own temporal_score() implements that same equation; the only
+difference is the GRL vocabulary, which CASPAR uses to record remediation
+*availability* rather than remediation *applied*, and which therefore always
+resolves to the norm's None. TestTemporalExample412 asserts both facts.
 """
 
 import pytest
@@ -89,12 +90,11 @@ class TestTemporalExample412:
     §4.12 (CCE-2776-3): base AV:L/AC:L/Au:N/C:P/I:P/A:P with GEL:L/GRL:M
     → temporal exploitability 1.9, temporal score 3.7.
 
-    NOTE: this validates the OFFICIAL equation, not CASPAR's
-    temporal_score(). CASPAR intentionally uses a simplified temporal
-    model (BaseScore × GEL × GRL, GRL values U/W/H/ND) whose multipliers
-    stay in [0.81, 1.0] — a conservative deviation from the spec, which
-    scales only the exploitability term with multipliers down to 0.4.
-    The deviation is documented in docs/VALIDACAO.md §7 (tradeoffs).
+    The published pair is reproduced by the local transcription of the
+    official equation. CASPAR's production temporal_score() implements the
+    same equation and is asserted to agree with it for every GEL value; the
+    two differ only in the GRL vocabulary, which CASPAR reads as remediation
+    availability and therefore resolves to the norm's None (1.0).
     """
 
     def test_official_equation_reproduces_published_values(self):
@@ -109,4 +109,26 @@ class TestTemporalExample412:
         _, t_score = _official_temporal(
             "L", "L", "N", "P", "P", "P", gel="ND", grl="ND")
         assert t_score == base_score("L", "N", "L", "P", "P", "P") == 4.6
-        assert temporal_score(4.6, "ND", "ND") == 4.6
+        assert temporal_score("L", "N", "L", "P", "P", "P", "ND", "ND") == 4.6
+
+    @pytest.mark.parametrize("gel", ["N", "L", "M", "H", "ND"])
+    @pytest.mark.parametrize("grl", ["U", "W", "H", "ND"])
+    def test_caspar_implements_the_official_equation(self, gel, grl):
+        """CASPAR's temporal_score() equals the norm's equation evaluated
+        with GRL:None, for every GEL value and every stored GRL label."""
+        from config_assessment.core.ccss import temporal_score
+        for av, ac, au, c, i, a in [
+            ("L", "L", "N", "P", "P", "P"),
+            ("N", "L", "N", "P", "N", "N"),
+            ("N", "M", "N", "C", "C", "C"),
+            ("A", "H", "S", "N", "P", "C"),
+        ]:
+            _, official = _official_temporal(av, ac, au, c, i, a, gel, "N")
+            assert temporal_score(av, au, ac, c, i, a, gel, grl) == official
+
+    def test_high_exploit_level_can_exceed_the_base_score(self):
+        """GEL:High is an amplifier (1.2) in the norm, unlike the previous
+        CASPAR model where no coefficient exceeded 1.0."""
+        from config_assessment.core.ccss import temporal_score
+        vec = ("L", "N", "L", "P", "P", "P")
+        assert temporal_score(*vec, "H", "H") > base_score(*vec)

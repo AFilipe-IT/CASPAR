@@ -111,7 +111,9 @@ def refresh_cve(
                 m.gel = result.gel
                 m.grl = result.grl
                 m.cves = result.cve_ids
-                m.temporal_score = temporal_score(m.base_score, m.gel, m.grl)
+                m.temporal_score = temporal_score(
+                    m.av, m.au, m.ac, m.c, m.i, m.a, m.gel, m.grl
+                )
                 db.upsert_misconfiguration(m)
         logger.info("Database updated: %d misconfigurations refreshed", len(misconfigs))
 

@@ -45,7 +45,8 @@ def run_curated_build(*, meta: TargetMetadata, entries: list, absence_rules: lis
             db.upsert_misconfiguration(Misconfiguration(
                 target_name=meta.name, directive=directive, bad_value=bad,
                 good_value=good, ac=ac, c=c, i=i, a=a,
-                base_score=bs, temporal_score=ccss.temporal_score(bs, "ND", "ND"),
+                base_score=bs,
+                temporal_score=ccss.temporal_score("N", "N", ac, c, i, a, "ND", "ND"),
                 gel="ND", grl="ND", cis_section=section,
                 justification=just, recommendation=rec, rule_type=rule_type,
             ))

@@ -531,9 +531,10 @@ class TestConsensusVoting:
         aggregated, _ = LLMBuildPipeline._vote(samples)
         from config_assessment.core.ccss import base_score, temporal_score
         bs = base_score("N", "N", aggregated.ac, aggregated.c, aggregated.i, aggregated.a)
-        ts_u = temporal_score(bs, aggregated.gel, "U")
-        ts_w = temporal_score(bs, aggregated.gel, "W")
-        winner_score = temporal_score(bs, aggregated.gel, aggregated.grl)
+        vec = ("N", "N", aggregated.ac, aggregated.c, aggregated.i, aggregated.a)
+        ts_u = temporal_score(*vec, aggregated.gel, "U")
+        ts_w = temporal_score(*vec, aggregated.gel, "W")
+        winner_score = temporal_score(*vec, aggregated.gel, aggregated.grl)
         assert winner_score == max(ts_u, ts_w)
 
     def test_free_text_taken_from_winning_sample(self):

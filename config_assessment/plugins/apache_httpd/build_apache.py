@@ -658,7 +658,10 @@ def build_apache_db(db_path: str, cce_xls_path: str = "", dry_run: bool = False)
                 i=entry["i"],
                 a=entry["a"],
             )
-            ts = temporal_score(bs, entry["gel"], entry["grl"])
+            ts = temporal_score(
+                "N", "N", entry["ac"], entry["c"], entry["i"], entry["a"],
+                entry["gel"], entry["grl"],
+            )
 
             m = Misconfiguration(
                 target_name=meta.name,

@@ -138,12 +138,24 @@ _SEVERITY_RANGES = {
 # Validation                                                           #
 # ------------------------------------------------------------------ #
 
-def validate(db_path: str, cce_xls_path: str) -> dict:
+def validate(db_path: str, cce_xls_path: str, score: str = "base") -> dict:
     """
     Compare DB scores against CCE XLS ground truth.
 
+    ``score`` selects which of the two CCSS scores is compared against the
+    DISA category.  The default is ``"base"``, and the choice is a
+    methodological one rather than a convenience: a DISA CAT is a judgement
+    about the misconfiguration itself, not about the current threat
+    landscape, so the base score is the comparable quantity.  Passing
+    ``"temporal"`` runs the same comparison against the threat-adjusted
+    score, which is reported in the dissertation as a deliberately
+    unfavourable secondary reading.
+
     Returns {total, matched, mismatched, unknown, mae_equivalent, pass}.
     """
+    if score not in ("base", "temporal"):
+        raise ValueError(f"score must be 'base' or 'temporal', got {score!r}")
+    pick = (lambda m: m.base_score) if score == "base" else (lambda m: m.temporal_score)
     cce_entries = _parse_cce_xls(cce_xls_path)
     if not cce_entries:
         return {"error": "Could not parse CCE XLS"}
@@ -157,10 +169,10 @@ def validate(db_path: str, cce_xls_path: str) -> dict:
     cce_id_to_scores: dict = defaultdict(list)
     for m in db_misconfigs:
         if m.cce_id:
-            cce_id_to_scores[m.cce_id].append(m.temporal_score)
+            cce_id_to_scores[m.cce_id].append(pick(m))
     directive_to_scores: dict = defaultdict(list)
     for m in db_misconfigs:
-        directive_to_scores[m.directive].append(m.temporal_score)
+        directive_to_scores[m.directive].append(pick(m))
 
     results = []
     for entry in cce_entries:
@@ -204,6 +216,7 @@ def validate(db_path: str, cce_xls_path: str) -> dict:
     gate_pass = pseudo_mae <= 0.20  # ≤20% mismatches → phase gate passes
 
     return {
+        "score_kind": score,
         "total_cce_entries": total,
         "scored": scored,
         "matched": matched,

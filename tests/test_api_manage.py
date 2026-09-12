@@ -55,7 +55,7 @@ def db_path():
     database.upsert_misconfiguration(Misconfiguration(
         target_name="dummy", directive="DangerousOption", bad_value="on",
         good_value="off", av="N", au="N", ac="L", c="P", i="P", a="P",
-        base_score=bs, temporal_score=temporal_score(bs, "M", "H"),
+        base_score=bs, temporal_score=temporal_score("N", "N", "L", "P", "P", "P", "M", "H"),
         gel="M", grl="H", cves=["CVE-2023-00001"], cce_id="CCE-TEST-001",
         cis_section="1.1",
         justification="DangerousOption=on exposes the system.",
@@ -231,7 +231,7 @@ class TestPromote:
             db.upsert_misconfiguration(Misconfiguration(
                 target_name="dummy", directive="LearnedFlag", bad_value="on",
                 good_value="", av="N", au="N", ac="L", c="P", i="P", a="P",
-                base_score=bs, temporal_score=temporal_score(bs, "M", "H"),
+                base_score=bs, temporal_score=temporal_score("N", "N", "L", "P", "P", "P", "M", "H"),
                 gel="M", grl="H",
                 justification="promoted from unknown-directive assessment",
             ))
