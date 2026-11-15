@@ -71,7 +71,7 @@ fi
 if [ -n "${CASPAR_DEMO:-}" ]; then
     CVM_HOME="$HOME/cvm"
 
-    echo "📦 Pulling the demo image (Apache 2.4.49 included)..."
+    echo "📦 Pulling the demo image..."
     docker pull alfilipe/caspar:demo \
       || { echo "❌ Failed to pull alfilipe/caspar:demo."; exit 1; }
 
