@@ -99,7 +99,10 @@ if [ -n "${CASPAR_DEMO:-}" ]; then
 IMAGE="alfilipe/caspar:demo"
 CVM_HOME="$HOME/cvm"
 
-if [ ! -d "$CVM_HOME/apache-conf" ]; then
+# Sem httpd.conf não há nada para avaliar, e o erro que o scan daria seria
+# "Service 'apache2' not found" — enganador, porque sugere que falta instalar
+# alguma coisa quando o que falta é a árvore extraída.
+if [ ! -f "$CVM_HOME/apache-conf/httpd.conf" ]; then
     echo "A configuração do Apache não está em $CVM_HOME/apache-conf." >&2
     echo "Corre 'caspar-demo-reset' para a repor." >&2
     exit 1
@@ -160,10 +163,51 @@ DEMO_DET_EOF
     # ---- caspar-demo-reset ----------------------------------------------
     cat > "$INSTALL_DIR/caspar-demo-reset" << 'DEMO_RESET_EOF'
 #!/usr/bin/env bash
-# Repõe a configuração vulnerável de origem — entre tomadas, fora de câmara.
+# Sem argumentos: repõe a configuração vulnerável de origem, entre tomadas.
+# Com --all: apaga tudo — imagem, ~/cvm e os comandos — para voltar a correr
+# o processo inteiro desde o 'docker pull'.
 set -e
 IMAGE="alfilipe/caspar:demo"
 CVM_HOME="$HOME/cvm"
+BIN="$(cd "$(dirname "$0")" && pwd)"
+
+if [ "${1:-}" = "--all" ]; then
+    echo "Isto apaga a imagem ($IMAGE), $CVM_HOME e os comandos instalados."
+    echo "A imagem volta a ser descarregada na próxima instalação (~635 MB)."
+    printf "Continuar? [s/N] "
+    read -r resposta < /dev/tty
+    case "$resposta" in
+        s|S|y|Y) ;;
+        *) echo "Nada foi apagado."; exit 0 ;;
+    esac
+
+    # Containers parados que tenham ficado para trás (as execuções usam --rm,
+    # mas uma que falhe a arrancar pode deixar um).
+    restos=$(docker ps -aq --filter "ancestor=$IMAGE" 2>/dev/null || true)
+    if [ -n "$restos" ]; then
+        docker rm -f $restos >/dev/null 2>&1 || true
+        echo "  removidos: containers parados desta imagem"
+    fi
+
+    docker rmi "$IMAGE" >/dev/null 2>&1 \
+      && echo "  removida: a imagem $IMAGE" \
+      || echo "  a imagem $IMAGE já não estava presente"
+
+    rm -rf "$CVM_HOME"
+    echo "  removido: $CVM_HOME (configuração e relatórios)"
+
+    rm -f "$BIN/caspar" "$BIN/apache2ctl" "$BIN/determinismo.py"
+    echo "  removidos: caspar, apache2ctl, determinismo.py"
+    echo ""
+    echo "Limpo. Para recomeçar do princípio:"
+    echo "  curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | CASPAR_DEMO=1 sh"
+    echo ""
+    echo "(A linha do PATH em ~/.bashrc fica — é a pasta normal de binários"
+    echo " do utilizador e outras coisas podem depender dela.)"
+    rm -f "$0"
+    exit 0
+fi
+
 mkdir -p "$CVM_HOME"
 rm -rf "$CVM_HOME/apache-conf"
 cid=$(docker create "$IMAGE")
@@ -171,6 +215,8 @@ docker cp "$cid:/usr/local/apache2/conf" "$CVM_HOME/apache-conf" >/dev/null
 docker rm "$cid" >/dev/null
 echo "Configuração reposta: $CVM_HOME/apache-conf"
 echo "O próximo 'caspar scan apache2 --live' volta a dar 8.5 / 10 HIGH."
+echo ""
+echo "Para apagar tudo (imagem incluída) e recomeçar: caspar-demo-reset --all"
 DEMO_RESET_EOF
     chmod +x "$INSTALL_DIR/caspar-demo-reset"
 

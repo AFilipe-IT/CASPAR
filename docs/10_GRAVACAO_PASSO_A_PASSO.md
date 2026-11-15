@@ -101,6 +101,17 @@ Repõe a configuração vulnerável. O scan seguinte volta a dar 8.5.
 
 ---
 
+## 6 · Recomeçar do zero
+
+```sh
+caspar-demo-reset --all
+```
+
+Apaga a imagem, `~/cvm` e os comandos, depois de confirmares. Para voltar a
+ter tudo, corre outra vez o passo 0 — a imagem é descarregada de novo.
+
+---
+
 ## Números que têm de aparecer no ecrã
 
 | Momento | Score | Cadeias |
