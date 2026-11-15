@@ -75,7 +75,6 @@ if [ -n "${CASPAR_DEMO:-}" ]; then
     docker pull alfilipe/caspar:demo \
       || { echo "❌ Failed to pull alfilipe/caspar:demo."; exit 1; }
 
-    echo "📂 Extracting the Apache config tree to $CVM_HOME/apache-conf..."
     mkdir -p "$CVM_HOME"
     rm -rf "$CVM_HOME/apache-conf"
     _cid=$(docker create alfilipe/caspar:demo) \
