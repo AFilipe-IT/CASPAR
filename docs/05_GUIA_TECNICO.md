@@ -1,5 +1,14 @@
 # CASPAR — Guia Técnico do Projeto
 
+> **Estado: Agosto de 2026, anterior ao release 1.0.0 (`542286d`, 2026-08-12) e ao
+> alinhamento dos coeficientes GEL/GRL com o NISTIR 7502 §3.2.2 (`ec42921`,
+> 2026-09-12).** A arquitectura e os comandos mantêm-se válidos; números soltos
+> — contagens de regras, de testes, portas, digests da base — podem estar
+> desactualizados face ao que a dissertação publica. A referência executável
+> actual é [`assets/reproducao/verificar.sh`](../assets/reproducao/verificar.sh),
+> que confere os dez pares do corpus contra os valores publicados. Cabeçalho
+> acrescentado a 2026-11-15.
+
 > Documento para perceberes o projeto de ponta a ponta: como está organizado,
 > como os dados fluem, onde mexer para cada tipo de alteração, e o que cada
 > ficheiro faz. Lê de cima a baixo uma vez; depois usa como referência.
@@ -8,7 +17,7 @@
 
 ## 1. A ideia em três frases
 
-O CASPAR lê a configuração de um serviço (13 plugins hoje — Apache, Nginx, MySQL, PostgreSQL, Redis, SSH, Tomcat, Docker, Dockerfile, Kubernetes, Ubuntu OS, Azure IaC, mais um plugin `dummy` de teste), compara cada directiva/regra contra o CIS Benchmark ou DISA STIG de origem, e atribui um score de segurança 0–10 baseado no standard NISTIR 7502 (CCSS). O trabalho pesado — perceber o que cada má configuração significa, atribuir métricas, escrever narrativas, procurar CVEs — acontece **uma vez** no *build time*, usando um LLM local (Ollama), e fica gravado numa base SQLite. Cada *scan* depois é **100% determinístico**: lê a config, procura na base, faz aritmética, produz o relatório — sem LLM, sem internet, mesmo resultado sempre.
+O CASPAR lê a configuração de um serviço (12 plugins com regras — Apache, Nginx, MySQL, PostgreSQL, Redis, SSH, Tomcat, Docker, Dockerfile, Kubernetes, Ubuntu OS, Azure IaC, mais um plugin `dummy` de teste, que o `caspar targets` não lista), compara cada directiva/regra contra o CIS Benchmark ou DISA STIG de origem, e atribui um score de segurança 0–10 baseado no standard NISTIR 7502 (CCSS). O trabalho pesado — perceber o que cada má configuração significa, atribuir métricas, escrever narrativas, procurar CVEs — acontece **uma vez** no *build time*, usando um LLM local (Ollama), e fica gravado numa base SQLite. Cada *scan* depois é **100% determinístico**: lê a config, procura na base, faz aritmética, produz o relatório — sem LLM, sem internet, mesmo resultado sempre.
 
 Esta separação build/runtime é a decisão de arquitetura mais importante do projeto e o que o torna defensável academicamente: os scores são reprodutíveis e auditáveis (manifesto com hash SHA-256 do conteúdo da base de conhecimento, ver §7 do [03_GUIA_VM_UBUNTU22.md](03_GUIA_VM_UBUNTU22.md)).
 
@@ -238,7 +247,7 @@ caspar scan /etc/apache2/ --report --format json
 caspar scan /etc/apache2/ --threshold 7.0   # exit 1 se score > 7 (CI/CD)
 
 # ── Utilitários ──
-caspar targets                              # lista os 13 plugins
+caspar targets                              # lista os 12 plugins com regras
 caspar doctor                               # integridade da DB
 pytest tests/ -q                            # corre os 823 testes
 ```
@@ -294,7 +303,7 @@ O runtime chama `detection_confidence(path)` em todos os candidatos que passaram
 - 0% mismatch (MAE) contra o ground truth CCE no Apache; 100% de recall nas fixtures vulneráveis (96/96)
 - 823 testes automatizados, todos offline-safe, incl. réplica dos 18 exemplos oficiais do NISTIR 7502 §4
 
-**13 plugins registados** (12 com regras próprias + `dummy` de teste): apache-httpd, nginx, mysql, postgresql, redis, ssh, tomcat, docker, dockerfile, kubernetes, ubuntu, azure-iac. 514 misconfigurations catalogadas, 32 attack chains, distribuídas de forma muito desigual (azure-iac 220, docker 57, tomcat 49… dockerfile 5) — reflexo direto da riqueza do benchmark-fonte de cada um, não de esforço desigual.
+**12 plugins com regras** (mais um `dummy` de teste, não listado): apache-httpd, nginx, mysql, postgresql, redis, ssh, tomcat, docker, dockerfile, kubernetes, ubuntu, azure-iac. 514 misconfigurations catalogadas, 32 attack chains, distribuídas de forma muito desigual (azure-iac 220, docker 57, tomcat 49… dockerfile 5) — reflexo direto da riqueza do benchmark-fonte de cada um, não de esforço desigual.
 
 **Dívida técnica conhecida, honesta:**
 - `llm_pipeline.py`/`chain_pipeline.py`/`narrative_pipeline.py` continuam em `plugins/apache_httpd/` embora sejam genéricos — candidatos a mover para `core/` ou `build/`.

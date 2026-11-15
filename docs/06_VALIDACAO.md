@@ -1,7 +1,16 @@
 # CASPAR — Plano de Validação Completo
 
+> **Estado: Agosto de 2026, anterior ao release 1.0.0 (`542286d`, 2026-08-12) e ao
+> alinhamento dos coeficientes GEL/GRL com o NISTIR 7502 §3.2.2 (`ec42921`,
+> 2026-09-12).** A arquitectura e os comandos mantêm-se válidos; números soltos
+> — contagens de regras, de testes, portas, digests da base — podem estar
+> desactualizados face ao que a dissertação publica. A referência executável
+> actual é [`assets/reproducao/verificar.sh`](../assets/reproducao/verificar.sh),
+> que confere os dez pares do corpus contra os valores publicados. Cabeçalho
+> acrescentado a 2026-11-15.
+
 > **Propósito:** catálogo sistemático de **todas as formas de validar o CASPAR**
-> (metodologia AMiSA): validação científica, funcional, fiabilidade, desempenho
+> (metodologia CVM): validação científica, funcional, fiabilidade, desempenho
 > (tempo, CPU, memória, energia), escalabilidade, comparação com baselines,
 > **tradeoffs explícitos** e métricas estatísticas. Cada dimensão indica: a
 > pergunta a que responde, o protocolo, a métrica, o comando, e o estado
@@ -45,7 +54,7 @@ NVD. Replicá-los é a validação mais direta possível do motor de scoring: se
 construção**, independentemente da qualidade das submétricas extraídas.
 
 ```bash
-python -m pytest tests/test_nistir7502_examples.py -v   # 21 passed
+python -m pytest tests/test_nistir7502_examples.py -v   # 42 passed
 ```
 
 | O que se replica | Resultado |
@@ -54,17 +63,32 @@ python -m pytest tests/test_nistir7502_examples.py -v   # 21 passed
 | Exemplo temporal §4.12 (GEL:L/GRL:M → 1.9 / 3.7), via equação oficial §3.2.2 | ✅ reproduz |
 | Defaults ND neutros (não alteram o score) em ambos os modelos | ✅ |
 
-**Desvio documentado (achado desta replicação):** o `temporal_score()` do
-CASPAR usa um modelo temporal **simplificado** — `BaseScore × GEL × GRL` com
-valores GRL `U/W/H/ND` (linhagem CVSS v2) e multiplicadores combinados em
-[0.81, 1.0] — enquanto a equação oficial usa GRL `N/L/M/H`, re-escala apenas o
-termo de exploitability e permite multiplicadores até 0.6×0.4=0.24. O modelo
-do CASPAR desconta portanto **no máximo ~19%** do score, contra reduções muito
-maiores permitidas pela norma quando há remediação forte — um desvio
-**conservador** (nunca subestima risco face à norma) mas que impede a
-replicação direta do exemplo temporal com a API do CASPAR. Isto separa duas
-coisas na dissertação: o **base score segue a norma exatamente** (18/18); o
-ajuste temporal é uma **variação declarada e justificada**. Ver tradeoff em §7.
+**Desvio que esta replicação encontrou — corrigido a 2026-09-12 (`ec42921`).**
+Na versão que este documento descreve, o `temporal_score()` usava uma tabela de
+coeficientes própria: `BaseScore × GEL × GRL`, com GEL limitado a [0.900, 1.000]
+e GRL `U/W/H/ND` de linhagem CVSS v2, pelo que descontava no máximo ~19% e não
+replicava o exemplo temporal §4.12 pela API. O `ec42921` substituiu-a pela da
+norma:
+
+- **GEL** cobre agora a gama completa (None 0.600 … High 1.200), logo o score
+  temporal pode mover-se nos dois sentidos face ao base score, e não só para
+  baixo;
+- **GRL** passa pelo mapeamento explícito do vocabulário do CASPAR (`H` fix
+  oficial, `W` workaround, `U` sem remédio) para a tabela da norma. Como o
+  CASPAR registra a *existência* de correcção e não a sua *aplicação* numa
+  população — que é o que a norma mede, e que um ficheiro não permite observar —
+  todas as etiquetas resolvem conservadoramente para o `None` da norma (1.000).
+  A coluna mantém-se como metadado do relatório: diz ao leitor se existe fix,
+  mas já não modula o score;
+- o `temporal_score()` recalcula a Exploitability a partir de AV/Au/AC
+  (`min(10, Exploitability × GEL × GRL)`) em vez de reutilizar o base score
+  arredondado, que é exactamente a eq. 3 do §3.2.2.
+
+Consequência para a dissertação: **o base score segue a norma exactamente**
+(18/18) e **o ajuste temporal também**, deixando de ser uma variação declarada.
+O que se mantém como limitação — e está escrito no Cap. 6 — é que a avaliação
+sobre ficheiro não observa remediação aplicada, pelo que na prática só o GEL
+varia. Ver tradeoff em §7.
 
 ### 1.1 MAE vs ground truth CCE (Apache) — ✅ medido
 
@@ -494,7 +518,7 @@ Ainda por fazer (🔲) — `scripts/perf_scan.py` mede só o processo fresco
 
 ### 4.2 Adicionar um target/feature novo (extensibilidade) — ✅ medido (via LLM build, WSL2)
 
-O argumento central da AMiSA é que estender a ferramenta é barato. Medir as
+O argumento central da CVM é que estender a ferramenta é barato. Medir as
 **três vias** de extensão:
 
 | Via | O que medir | Comando |
@@ -947,7 +971,7 @@ números. Não se repetiu no Ubuntu nativo.
 | RAG "ingerir uma vez, consultar sempre" | overhead por scan ≈ 0 com L3 off | custo de disco por manual; conhecimento desatualiza até re-ingestão | §4.3 |
 | Camada 3 (LLM) **opt-in** | default 100% determinístico | diretivas desconhecidas ficam sem avaliação por omissão | §2.4 |
 | Fator de amplificação por-chain curado | captura risco composto que scanners atómicos ignoram | heurística sem validação empírica da gama (declarado) | §1.4 |
-| Modelo temporal simplificado (GEL/GRL × BaseScore) | nunca desconta mais de ~19% — não subestima risco; API simples | desvia da equação oficial §3.2.2 (que desconta até ~50%+ com remediação forte); exemplo temporal do NISTIR não replica via API | §1.0 |
+| Modelo temporal da norma, com GRL resolvido conservadoramente para `None` | segue a eq. 3 do §3.2.2 exactamente; score temporal move-se nos dois sentidos; replicação 42/42 | a avaliação sobre ficheiro não observa remediação aplicada, logo só o GEL varia na prática — a coluna `grl` fica como metadado do relatório | §1.0 |
 | Python + SQLite | extensível, legível, zero infra | mais lento e pesado que um binário Go (Trivy) | §6.2 |
 
 Cada linha desta tabela deve aparecer na dissertação com o número que a
@@ -1034,7 +1058,7 @@ python -m scripts.perf_baseline --runs 10      # §6.2 idem para Trivy/OpenSCAP
 
 ---
 
-*Documento de apoio à secção de avaliação da dissertação (metodologia AMiSA /
+*Documento de apoio à secção de avaliação da dissertação (metodologia CVM /
 ferramenta CASPAR). Resultados funcionais/correção ✅ obtidos em Ubuntu 22.04
 real, 2026-07-09; resultados de desempenho §4.1/§6.2 repetidos em Ubuntu 22.04
 nativo (VM separada), 2026-08-01 — ver secções respetivas para a máquina

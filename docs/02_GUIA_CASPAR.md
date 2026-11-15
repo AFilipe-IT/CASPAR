@@ -1,5 +1,14 @@
 # CASPAR — Guia Comprensivo e Demonstração Prática
 
+> **Estado: Agosto de 2026, anterior ao release 1.0.0 (`542286d`, 2026-08-12) e ao
+> alinhamento dos coeficientes GEL/GRL com o NISTIR 7502 §3.2.2 (`ec42921`,
+> 2026-09-12).** A arquitectura e os comandos mantêm-se válidos; números soltos
+> — contagens de regras, de testes, portas, digests da base — podem estar
+> desactualizados face ao que a dissertação publica. A referência executável
+> actual é [`assets/reproducao/verificar.sh`](../assets/reproducao/verificar.sh),
+> que confere os dez pares do corpus contra os valores publicados. Cabeçalho
+> acrescentado a 2026-11-15.
+
 > Documento de leitura única para **perceber o que o CASPAR faz, porquê, e como usá-lo do zero**.
 > É o **guia 02** do roteiro (ver [README.md](../README.md)). Complementa o
 > [05_GUIA_TECNICO.md](05_GUIA_TECNICO.md) (orientado à arquitectura interna) e o
@@ -443,17 +452,26 @@ ao catálogo.
 
 ## 12. Números do projeto (a base de conhecimento)
 
-A base de dados canónica que vem na imagem (semeada de `data/ccss_canonical.sql`) contém:
+Há **duas** bases a não confundir. A que a dissertação mede é a que o
+`caspar init` materializa a partir do pacote 1.0.0 (514 regras, 32 chains,
+12 alvos, `kb sha256:83b3ee01f415`). O ficheiro `data/ccss_canonical.sql` deste
+repositório — usado pela imagem Docker e pelo reseed — ficou na geração anterior
+(488 regras, 27 chains, `kb sha256:37087229989b`). Medido a 2026-11-15: as duas
+dão os **mesmos** dez pares do corpus (10.0 · 9.4 · 9.0 · 8.5 · 8.5 · 8.5 · 7.5
+· 5.8 · 5.0 · 5.0) e as mesmas contrapartes a 0.0; diferem nas 26 regras e 5
+chains que não tocam o corpus — e, por isso, no digest. Quem comparar **digests**
+tem de usar a base do `caspar init`, não a semeada.
 
-| Métrica | Valor |
-|---------|-------|
-| Plugins registados (`caspar targets`) | **12** (11 com regras próprias + `dummy` de teste) |
-| Misconfigurations catalogadas | **488** (com score CCSS, narrativa e recomendação) |
-| Attack chains | **27** (combinações que amplificam o risco) |
-| Version-exploits pré-computados | **19** (mapeamento versão → CVEs/exploits) |
-| Alvos disponíveis via `plugin fetch` | **43** (stigviewer.com) |
-| Versão da DB base (para o reseed) | **2** (`base_db_version` na tabela de metadados) |
-| Testes automatizados | **647** (a passar) |
+| Métrica | `data/ccss_canonical.sql` (seed) | `caspar init` 1.0.0 (dissertação) |
+|---------|---------------------------------|-----------------------------------|
+| Plugins com regras (`caspar targets`) | 11 (sem postgresql) | **12** |
+| Misconfigurations catalogadas | 488 | **514** |
+| Attack chains | 27 | **32** |
+| `kb sha256` no manifesto | `37087229989b` | **`83b3ee01f415`** |
+| Version-exploits pré-computados | 19 | 19 (mapeamento versão → CVEs/exploits) |
+| Alvos disponíveis via `plugin fetch` | 43 | 43 (stigviewer.com) |
+| Versão da DB base (para o reseed) | 2 | 2 (`base_db_version` nos metadados) |
+| Testes automatizados | 647 (então) | por re-medir |
 
 Distribuição das 514 misconfigs pelos 12 targets com regras: **azure-iac 220 · docker 57 ·
 tomcat 49 · redis 36 · apache-httpd 35 · postgresql 26 · mysql 23 · nginx 18 · ubuntu 18 ·
@@ -719,7 +737,7 @@ config igual ⇒ scores iguais, por construção** — qualquer pessoa audita a 
 partir do próprio relatório, sem confiar em quem o gerou:
 
 ```
-  reproducible: caspar 0.1.0 · kb sha256:34ce3970acaa · 18 rules (nginx)
+  reproducible: caspar 1.0.0 · kb sha256:83b3ee01f415 · 18 rules (nginx)
 ```
 
 **`watch` — auditoria contínua de drift (alerta em tempo real).** Vigia um ficheiro, um diretório ou um

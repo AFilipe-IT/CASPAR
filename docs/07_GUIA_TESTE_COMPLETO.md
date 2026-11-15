@@ -1,5 +1,14 @@
 # Guia de teste completo — CVM/CASPAR
 
+> **Estado: Agosto de 2026, anterior ao release 1.0.0 (`542286d`, 2026-08-12) e ao
+> alinhamento dos coeficientes GEL/GRL com o NISTIR 7502 §3.2.2 (`ec42921`,
+> 2026-09-12).** A arquitectura e os comandos mantêm-se válidos; números soltos
+> — contagens de regras, de testes, portas, digests da base — podem estar
+> desactualizados face ao que a dissertação publica. A referência executável
+> actual é [`assets/reproducao/verificar.sh`](../assets/reproducao/verificar.sh),
+> que confere os dez pares do corpus contra os valores publicados. Cabeçalho
+> acrescentado a 2026-11-15.
+
 Este guia percorre **toda** a plataforma: serviços reais instalados, os 20
 comandos do CLI, a API REST e a consola de gestão Web. Serve dois propósitos:
 validar uma instalação e produzir evidência reproduzível para a dissertação.
@@ -510,23 +519,23 @@ instaladas. Só num `pip install -e .` feito à mão é que precisas do extra:
 Noutra sessão:
 
 ```bash
-curl -s localhost:8000/api/v1/health | python3 -m json.tool
-curl -s localhost:8000/api/v1/targets | python3 -m json.tool
-curl -s -X POST localhost:8000/api/v1/scans \
+curl -s 127.0.0.1:2027/api/v1/health | python3 -m json.tool
+curl -s 127.0.0.1:2027/api/v1/targets | python3 -m json.tool
+curl -s -X POST 127.0.0.1:2027/api/v1/scans \
      -H 'Content-Type: application/json' \
      -d '{"input_path": "'$PWD'/caspar-demo/apache-vulnerable.conf"}' \
      | python3 -m json.tool | head -30
 ```
 
-A especificação completa está em `http://localhost:8000/docs` — 44 operações
+A especificação completa está em `http://127.0.0.1:2027/docs` — 44 operações
 sobre 38 caminhos.
 
 **Autenticação**, activa só quando a variável está definida:
 
 ```bash
 CASPAR_API_KEY=segredo caspar serve
-curl -s localhost:8000/api/v1/scans                       # 401
-curl -s -H 'X-API-Key: segredo' localhost:8000/api/v1/scans   # 200
+curl -s 127.0.0.1:2027/api/v1/scans                       # 401
+curl -s -H 'X-API-Key: segredo' 127.0.0.1:2027/api/v1/scans   # 200
 ```
 
 **Verificação que interessa à tese** — o CLI e a API têm de produzir o mesmo
@@ -565,7 +574,7 @@ endereço que responde 404. Nesse caso: `git checkout frontend/dist`.
 
 ### 6.2 Percorrer as oito páginas
 
-Abre `http://localhost:8000/app`.
+Abre `http://127.0.0.1:2027/app/` (sem a barra final, o servidor responde 307 para ela).
 
 | Página | O que verificar |
 |---|---|
@@ -645,7 +654,7 @@ e um intervalo curto (2 segundos) para não esperares. O equivalente por API,
 útil para confirmar o que a consola está a fazer:
 
 ```bash
-curl -s -X POST localhost:8000/api/v1/watch \
+curl -s -X POST 127.0.0.1:2027/api/v1/watch \
      -H 'Content-Type: application/json' \
      -d '{"path": "'$HOME'/watch-demo/apache2.conf", "interval": 2}'
 ```
@@ -693,7 +702,7 @@ diferença que faz o `watch` parecer partido quando não está.
 Confirmação por API (`events` tem de crescer a cada degrau):
 
 ```bash
-curl -s localhost:8000/api/v1/watch/$S | python3 -m json.tool | head -20
+curl -s 127.0.0.1:2027/api/v1/watch/$S | python3 -m json.tool | head -20
 ```
 
 Latência medida: **~2 segundos** entre gravar o ficheiro e o evento novo, com
@@ -711,9 +720,9 @@ São capacidades que o CLI não tem. Testadas pelos botões da consola ou:
 
 ```bash
 S=<watch_session>
-curl -s -X POST localhost:8000/api/v1/watch/$S/pause
-curl -s -X POST localhost:8000/api/v1/watch/$S/resume
-curl -s -X POST localhost:8000/api/v1/watch/$S/stop
+curl -s -X POST 127.0.0.1:2027/api/v1/watch/$S/pause
+curl -s -X POST 127.0.0.1:2027/api/v1/watch/$S/resume
+curl -s -X POST 127.0.0.1:2027/api/v1/watch/$S/stop
 ```
 
 O `runner_state` deve percorrer `running → paused → running → stopped`.

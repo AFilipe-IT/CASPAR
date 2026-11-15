@@ -1,5 +1,14 @@
 # CASPAR — Avaliação Funcional (Ubuntu 22.04)
 
+> **Estado: Agosto de 2026, anterior ao release 1.0.0 (`542286d`, 2026-08-12) e ao
+> alinhamento dos coeficientes GEL/GRL com o NISTIR 7502 §3.2.2 (`ec42921`,
+> 2026-09-12).** A arquitectura e os comandos mantêm-se válidos; números soltos
+> — contagens de regras, de testes, portas, digests da base — podem estar
+> desactualizados face ao que a dissertação publica. A referência executável
+> actual é [`assets/reproducao/verificar.sh`](../assets/reproducao/verificar.sh),
+> que confere os dez pares do corpus contra os valores publicados. Cabeçalho
+> acrescentado a 2026-11-15.
+
 > **Propósito:** roteiro reproduzível para avaliar o CASPAR de ponta a ponta
 > numa máquina Ubuntu 22.04 real (nativo, git clone + venv), e recolher os
 > resultados para a secção de avaliação da dissertação. Cada passo diz o que

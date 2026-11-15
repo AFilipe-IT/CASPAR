@@ -1,5 +1,14 @@
 # CASPAR — Testar numa VM Ubuntu 22.04 limpa, do zero até à comparação final
 
+> **Estado: Agosto de 2026, anterior ao release 1.0.0 (`542286d`, 2026-08-12) e ao
+> alinhamento dos coeficientes GEL/GRL com o NISTIR 7502 §3.2.2 (`ec42921`,
+> 2026-09-12).** A arquitectura e os comandos mantêm-se válidos; números soltos
+> — contagens de regras, de testes, portas, digests da base — podem estar
+> desactualizados face ao que a dissertação publica. A referência executável
+> actual é [`assets/reproducao/verificar.sh`](../assets/reproducao/verificar.sh),
+> que confere os dez pares do corpus contra os valores publicados. Cabeçalho
+> acrescentado a 2026-11-15.
+
 > **Papel deste documento:** percurso único e sequencial — VM acabada de instalar, sem nada do
 > projeto, até: instalar o CASPAR, **inserir uma vulnerabilidade real** num serviço, correr o scan,
 > abrir o relatório, percorrer **todos os comandos do CLI**, e terminar com a **comparação final
@@ -97,11 +106,11 @@ repositório (`test_target/`, `scripts/baseline_compare.py`).
 
 ```bash
 caspar doctor       # integridade da DB
-caspar targets      # 13 plugins listados: apache-httpd, azure-iac, docker, dockerfile, dummy,
+caspar targets      # 12 plugins listados: apache-httpd, azure-iac, docker, dockerfile,
                      # kubernetes, mysql, nginx, postgresql, redis, ssh, tomcat, ubuntu
 ```
 
-✓ **Esperado:** `doctor` devolve `✓ Database is healthy`; `targets` lista os 13 plugins.
+✓ **Esperado:** `doctor` devolve `✓ Database is healthy`; `targets` lista os 12 plugins com regras.
 
 ### 2.5 (Opcional) Construir as imagens a partir do código local, em vez das publicadas
 
