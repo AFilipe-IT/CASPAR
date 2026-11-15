@@ -1,0 +1,91 @@
+# docker/caspar/Dockerfile.demo — CASPAR + Apache 2.4.49 vulnerável, numa imagem
+#
+# A imagem da demonstração do vídeo-anexo (docs/08_ROTEIRO_VIDEO.md). Traz o
+# Apache 2.4.49 instalado e configurado de forma deliberadamente vulnerável, de
+# modo a que `caspar scan apache2 --live` dentro do contentor reproduza, sem
+# nenhum passo manual, os números que a dissertação publica:
+#
+#   8.5 / 10 HIGH · 23 achados (0/2/19/2) · 8 chains · pior 10.0
+#   e o painel "Public Exploits for apache-httpd 2.4.49 (7)" no dashboard
+#
+# Build (contexto = raiz do repositório, e a caspar:latest PRIMEIRO):
+#   docker build -t caspar:latest -f docker/caspar/Dockerfile      .
+#   docker build -t caspar:demo   -f docker/caspar/Dockerfile.demo .
+#
+# Uso:
+#   docker run --rm -it caspar:demo scan apache2 --live
+#   docker run --rm -v caspar_reports:/reports caspar:demo \
+#          scan apache2 --live --report -f dashboard
+#
+# Porque é que a 2.4.49 é compilada de origem na VM mas aqui vem de uma imagem:
+# a `httpd:2.4.49` oficial do Docker Hub é exactamente a mesma build de origem,
+# com o prefixo /usr/local/apache2, e poupa a compilação. O digest amd64 desta
+# tag é sha256:4b5cb7697fea2aa6d398504c381b693a54ae9ad5e6317fcdbb7a2d9b8c3b1364
+# — fixa-o se precisares de reprodutibilidade bit-a-bit.
+#
+# AVISO: a 2.4.49 tem um RCE conhecido (CVE-2021-41773). Esta imagem NUNCA
+# arranca o httpd — o scan lê a árvore de configuração em disco — e não expõe
+# porta nenhuma. Não a publiques num registo público nem lhe faças `-p`.
+
+FROM httpd:2.4.49 AS apache
+
+FROM caspar:latest
+
+USER root
+
+# Bibliotecas de que o binário do httpd depende directamente. Os módulos
+# (lua, xml2, brotli, nghttp2) não entram: não são carregados por `httpd -v`
+# nem por `apachectl -V`, que é tudo o que o resolver executa.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libapr1 \
+        libaprutil1 \
+        libaprutil1-ldap \
+        libldap-common \
+        libpcre3 \
+        zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+# A árvore vai para o MESMO caminho que tinha na imagem de origem: o prefixo
+# está compilado dentro do binário (HTTPD_ROOT), e é dele que o `apachectl -V`
+# tira o SERVER_CONFIG_FILE. Mudá-lo quebrava a detecção.
+COPY --from=apache /usr/local/apache2 /usr/local/apache2
+
+# Os dois nomes que o resolver procura no PATH. São precisos os DOIS: a versão
+# vem do `apache2 -v` e a configuração do `apache2ctl -V`. Com só um deles, o
+# relatório anuncia a versão certa e lê a árvore errada, sem avisar.
+RUN ln -sf /usr/local/apache2/bin/httpd     /usr/local/bin/apache2 \
+    && ln -sf /usr/local/apache2/bin/apachectl /usr/local/bin/apache2ctl \
+    && apache2 -v \
+    && apache2ctl -V | grep -E 'HTTPD_ROOT|SERVER_CONFIG_FILE'
+
+# O utilizador que a base de conhecimento tem como valor seguro para `User` é
+# `apache`, não o `www-data` do Debian. Sem ele existir, o `configtest` depois
+# do `caspar fix` reclama — e o plano 20 do roteiro mostra esse configtest.
+RUN useradd -r -s /usr/sbin/nologin apache
+
+# A imagem oficial guarda em conf/original/httpd.conf a saída intacta do
+# `make install`. É esse o ponto de partida que foi medido e que está publicado;
+# o conf/httpd.conf da imagem oficial leva alterações dela (ServerName, um
+# <Directory> próprio) que mudariam a contagem de achados.
+RUN cp /usr/local/apache2/conf/original/httpd.conf /usr/local/apache2/conf/httpd.conf \
+    && PREFIX=/usr/local/apache2 bash \
+       /home/caspar/app/assets/demo-apache/vulneravel-249.sh
+
+# A árvore de configuração fica escrita por quem corre o scan, porque a cena 5
+# do roteiro aplica o `caspar fix --in-place` sobre ela.
+RUN chown -R caspar:caspar /usr/local/apache2/conf
+
+USER caspar
+
+# Auto-verificação: a imagem não se constrói se a demonstração não reproduzir.
+# Vale mais falhar aqui, com a mensagem à frente dos olhos, do que descobrir o
+# desvio com a câmara a andar. O `caspar-seed` é o entrypoint da imagem base e
+# é ele que semeia a base de dados a partir do dump canónico.
+RUN set -eux; \
+    out="$(/usr/local/bin/caspar-seed caspar scan apache2 --live)"; \
+    echo "$out" | grep -q '8.5 / 10'          || { echo "$out"; echo "FALHOU: score != 8.5"; exit 1; }; \
+    echo "$out" | grep -q 'Chains triggered 8' || { echo "$out"; echo "FALHOU: chains != 8"; exit 1; }; \
+    echo "$out" | grep -q 'apache-httpd 2.4.49' || { echo "$out"; echo "FALHOU: versao != 2.4.49"; exit 1; }; \
+    echo "auto-verificacao OK: 8.5 / 10 HIGH, 8 chains, apache-httpd 2.4.49"
+
+CMD ["scan", "apache2", "--live"]

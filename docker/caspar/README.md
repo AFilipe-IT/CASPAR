@@ -27,6 +27,52 @@ docker build -t caspar:slim   -f docker/caspar/Dockerfile.slim .
 docker images | grep caspar
 ```
 
+A `caspar:full` e a `caspar:demo` partem ambas da `caspar:latest` (`FROM
+caspar:latest`), por isso a `latest` tem de ser reconstruída **primeiro** —
+senão as alterações ao código não chegam a nenhuma das duas.
+
+---
+
+## A imagem da demonstração (`caspar:demo`)
+
+A imagem do vídeo-anexo. Traz o Apache 2.4.49 instalado e já em configuração
+deliberadamente vulnerável, de modo a que o scan ao vivo reproduza, sem nenhum
+passo manual, os números que a dissertação publica.
+
+```bash
+docker build -t caspar:latest -f docker/caspar/Dockerfile      .
+docker build -t caspar:demo   -f docker/caspar/Dockerfile.demo .
+
+docker run --rm -it caspar:demo scan apache2 --live
+```
+
+Esperado: `apache-httpd 2.4.49` · `8.5 / 10 HIGH` · 23 achados (0/2/19/2) ·
+`Chains triggered 8` · pior chain 10.0. O *build* **falha** se não for isto: a
+última camada do `Dockerfile.demo` corre o scan e confere o score, a contagem
+de chains e a versão detectada. Vale mais falhar no *build* do que descobrir o
+desvio com a câmara a andar.
+
+O Apache vem da `httpd:2.4.49` oficial, que é a mesma build de origem que o
+[`instalar-2.4.49.sh`](../../assets/demo-apache/instalar-2.4.49.sh) compila na
+VM, com o mesmo prefixo (`/usr/local/apache2`) — poupa a compilação. A
+configuração de partida é o `conf/original/httpd.conf` dessa imagem, a saída
+intacta do `make install`, porque é esse o ponto de partida que foi medido.
+
+**A 2.4.49 tem um RCE conhecido** (`CVE-2021-41773`). A imagem nunca arranca o
+httpd — o scan lê a árvore de configuração em disco — e não expõe porta
+nenhuma. Não lhe faças `-p` nem a publiques num registo público.
+
+### Transportar a imagem para outra máquina
+
+```bash
+docker save caspar:demo | gzip > caspar-demo.tar.gz     # na máquina que constrói
+docker load < caspar-demo.tar.gz                        # na máquina que grava
+```
+
+Evita ter de instalar o CASPAR, compilar o Apache e aplicar a configuração na
+máquina da gravação: a imagem já traz tudo, e o estado é o mesmo em qualquer
+máquina. Também dispensa o `restaurar-249.sh` — o contentor é descartável.
+
 ---
 
 ## Uso rápido

@@ -68,3 +68,10 @@ docker/
 !docker/caspar/entrypoint_full.sh
 # Exception: the :latest image COPYs the data-seeding script.
 !docker/caspar/seed_data.sh
+
+# Material do repositório que não pertence à imagem: capturas de ecrã do README
+# e o vídeo-anexo com os seus fotogramas (12 MB que nenhuma imagem precisa).
+# Os scripts de assets/demo-apache/ e assets/reproducao/ FICAM — a imagem da
+# demonstração (Dockerfile.demo) e o kit de reprodução correm-nos de dentro.
+assets/*.png
+assets/video/
