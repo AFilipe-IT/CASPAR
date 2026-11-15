@@ -1,8 +1,10 @@
 # CASPAR — Vídeo de demonstração (anexo à dissertação)
 
 **Corte actual:** 5 cenas · 25 planos · **~4:50** (288 s) · 1920×1080 (16:9) · 30 fps ·
-**sem faixa de áudio**. Alvo único: **apache**, numa VM com uma configuração deliberadamente
-vulnerável. Gravação de ecrã ao vivo — ver [09_GUIAO_GRAVACAO.md](09_GUIAO_GRAVACAO.md).
+**sem faixa de áudio**. Alvo principal: **apache**, numa VM com uma configuração deliberadamente
+vulnerável (cenas 1–4). A cena 5 mede um segundo serviço real, **nginx**, instalado na mesma
+máquina, e mostra a consola web a corrigi-lo em directo. Gravação de ecrã ao vivo — ver
+[10_GRAVACAO_PASSO_A_PASSO.md](10_GRAVACAO_PASSO_A_PASSO.md).
 
 > O ficheiro em `assets/video/CVM-CASPAR-demo.mp4` é um corte **anterior** (5:00, 33 planos,
 > 8 cenas, dez alvos, cartões de desempenho). Serve de referência de ritmo; o roteiro válido é
@@ -20,10 +22,13 @@ do vídeo: eram dois números que o ecrã não podia sustentar, e passam a ser m
 **O arco, em quatro frases:** o instrumento existe → mede uma máquina real → explica cada número
 que atribui → serve para corrigir, e a correcção vê-se no score → e o resultado é reproduzível.
 
-**Porque um alvo só.** Seguir o apache do princípio ao fim responde à objecção mais provável do
-júri — "isto só funciona nos ficheiros que vocês escreveram" — melhor do que passar por dez
-alvos. O corpus dos dez pares aparece, mesmo assim, na cena 5: a experiência de determinismo
-corre sobre as dez configurações.
+**Porque um alvo só, até à cena 5.** Seguir o apache do princípio ao fim responde à objecção mais
+provável do júri — "isto só funciona nos ficheiros que vocês escreveram" — melhor do que passar
+por dez alvos. A cena 5 introduz deliberadamente um segundo serviço, nginx, mas instalado a sério
+na máquina de gravação: mostra que o mesmo instrumento, com a mesma base de conhecimento, serve
+outro produto sem código novo, e que a consola web fecha o ciclo detectar → corrigir → confirmar
+sem passar pela linha de comandos. A experiência de determinismo do capítulo 6 (dez configurações,
+cem execuções, um digest por configuração) não entra no vídeo — ver §3.
 
 ### Regras de edição aplicadas
 
@@ -94,12 +99,12 @@ mostra que o instrumento não devolve um número, devolve a sua derivação.
 | 21 | 218 → 235 | Re-scan: **5.5 / 10 · MEDIUM**, `Chains triggered 0` |
 | 22 | 235 → 247 | As linhas `Header` acrescentadas à mão e o re-scan final: **0.0 / 10 · NONE** |
 
-### Cena 5 — Reproducibility · legenda `100 executions · 1 digest` · 4:07–4:48
+### Cena 5 — Continuous monitoring · legenda `Watch · score updates live` · 4:07–4:48
 
 | # | in → out | No ecrã |
 |---|---|---|
-| 23 | 247 → 257 | O mesmo rodapé `reproducible: caspar 1.0.0 · kb sha256:83b3ee01f415` em duas execuções distintas |
-| 24 | 257 → 275 | `determinismo.py --runs 10 --db ccss.db --alt-db ccss_alt.db` → `total runs: 100`, `distinct digests per configuration: 1` |
+| 23 | 247 → 253 | O mesmo rodapé `reproducible: caspar 1.0.0 · kb sha256:83b3ee01f415` em duas execuções distintas |
+| 24 | 253 → 275 | Consola web, página **Watch**: `nginx` seleccionado em *Installed service*, sessão a arrancar em **5.0 / 10 · MEDIUM** (`server_tokens`); corte para `sudo nano /etc/nginx/nginx.conf`, `server_tokens on` → `off`, guardar; corte de volta à consola — **sem reiniciar nada** — a mostrar **0.0 / 10 · NONE** |
 | 25 | 275 → 288 | Cartão final: título, `CASPAR 1.0.0`, `sha256:83b3ee01f415`, 514 regras · 32 chains · 12 alvos |
 
 ---
@@ -192,14 +197,15 @@ o vídeo não precisa de palavra em cima de cada plano.
 
 > *(plano 23)* Todos os relatórios transportam a versão da ferramenta e um digest SHA-256 da base
 > de conhecimento. Duas execuções, o mesmo rodapé: qualquer resultado pode ser reatado à base
-> exacta que o produziu, e qualquer pessoa pode recomputar esse digest a partir do pacote
-> publicado.
+> exacta que o produziu.
 >
-> *(plano 24)* E esta é a experiência de determinismo do capítulo seis: dez configurações, dez
-> execuções cada, em dois ficheiros de base de dados diferentes — cem execuções, **um único
-> digest distinto por configuração**. O resultado não depende da ordem, do histórico de scans nem
-> do ficheiro de base de dados. É por isto que na avaliação não há modelo de linguagem nem acesso
-> à rede: o modelo é usado uma vez, offline, a construir a base — nunca a pontuar.
+> *(plano 24)* Até aqui, tudo pela linha de comandos. A consola web fala com o mesmo motor —
+> nenhuma lógica nova — e tem uma página que avalia continuamente: aqui está o nginx **instalado
+> nesta máquina**, não um ficheiro preparado, a ausentar-se da versão em cada resposta HTTP. Cinco
+> em dez. Vou corrigir uma linha na configuração real, fora da consola... e pronto. Sem recarregar
+> a página, sem reiniciar sessão nenhuma: a consola voltou a ler o ficheiro e o score caiu para
+> zero. É o mesmo ciclo detectar-corrigir-confirmar da cena 4, agora contínuo e visível em tempo
+> real.
 >
 > *(plano 25)* Fica no ecrã a versão e o digest. Obrigado.
 
@@ -225,7 +231,7 @@ o Apache 2.4.49 compilado por [`instalar-2.4.49.sh`](../assets/demo-apache/insta
 | Score depois do `fix` | **5.5 / 10 · MEDIUM**, `Chains triggered 0` |
 | Score depois dos passos manuais | **0.0 / 10 · NONE** |
 | Exploits públicos na versão | 7 para `apache-httpd 2.4.49` (81 CVEs, 3 em KEV, CVSS máx. 9.8); o primeiro é `EDB-50383 / CVE-2021-41773 (verified)`. Nota de risco no detalhe: `Apache 2.4.49 — 3 KEV-listed CVEs detected` |
-| Determinismo | `total runs: 100`, `distinct digests per configuration: 1` |
+| Determinismo (fora do vídeo, Cap. 6) | `total runs: 100`, `distinct digests per configuration: 1` |
 
 **O tecto do apache é 8.5 — não há CRITICAL no score global, e isso é correcto.** A regra de topo
 do apache na base de conhecimento é `User root`, com base 9.4 e temporal 8.5; a amplificação por
@@ -261,6 +267,38 @@ os 14–158 ms não está no repositório: o que está é o `scripts/perf_scan.p
 de parede de um subprocesso novo e dá 0,130 s (WSL2) / 0,100 s (VM nativa), publicados no
 [06_VALIDACAO.md](06_VALIDACAO.md) §4.1. A diferença é o arranque do interpretador e a abertura
 do SQLite.
+
+### Verificação da cena 5 — nginx real
+
+Medido a 2026-11-15, nginx 1.24.0 instalado na VM via `apt`, a correr fora de qualquer contentor.
+O CASPAR avalia-o montando `/etc/nginx` do anfitrião, só de leitura, no contentor de
+demonstração (`install.sh`, commit `2b9c9fb`) — a avaliação nunca escreve na configuração real.
+
+Antes de gravar, a configuração do nginx já tem os quatro cabeçalhos de segurança (CSP, HSTS,
+X-Content-Type-Options, Referrer-Policy) e mantém `ssl_protocols TLSv1.3`, que já traz de fábrica.
+A única directiva deliberadamente errada é `server_tokens on` — é essa, e só essa, que se corrige
+em câmara.
+
+| Afirmação do plano 24 | Resultado medido |
+|---|---|
+| Score antes da correcção | **5.0 / 10 · MEDIUM**, 1 finding (`server_tokens`) |
+| Score depois da correcção (`server_tokens off`) | **0.0 / 10 · NONE** |
+| Cadeia disparada antes da correcção | `server-info-to-tls-downgrade` **7.0** (não entra no score global) |
+
+**Nota para a defesa:** a cadeia `server-info-to-tls-downgrade` dispara por `server_tokens` e
+`ssl_protocols` estarem ambos **presentes** no ficheiro — a condição 1 do motor de cadeias
+(`attack_chain.py:detect_chains`) exige a presença de todas as directivas da cadeia, não que todas
+sejam más. A condição 2 exige só que pelo menos uma seja de facto um finding. Aqui `ssl_protocols
+TLSv1.3` é um valor **bom**; é `server_tokens on` que é o finding, e é ele que arma a cadeia. Não é
+um erro: é a regra documentada do motor, e vale a pena a saber de antemão se for perguntado.
+
+**Porque nenhuma outra directiva entra em jogo.** As regras de valor do nginx (`ssl_protocols`,
+`send_timeout`, `client_max_body_size`, `keepalive_timeout`, `ssl_session_tickets`, `proxy_pass`…)
+só disparam se a directiva estiver **presente com um valor mau** — ausência não é falha, ao
+contrário das quatro regras de `add_header`, que são de ausência e disparam sempre que o cabeçalho
+não existe. Por isso a preparação da cena exige os quatro cabeçalhos escritos antes de gravar: sem
+eles, o score de partida seria sempre 5.5 (o `Content-Security-Policy` em falta), e corrigir só o
+`server_tokens` não moveria o número no ecrã.
 
 **Pendente, fora do vídeo:** o `README.md` §12 ainda anuncia 488 regras / 27 chains / 647 testes.
 A base e a dissertação dizem **514 / 32 / 12**.

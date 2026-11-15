@@ -4,17 +4,54 @@ Folha única para ter ao lado durante a gravação.
 
 O Docker aparece uma vez, para trazer a aplicação. Depois disso não se escreve
 `docker` outra vez: há `caspar`, há `apache2ctl`, e a configuração do Apache é
-um directório normal em `~/cvm/apache-conf`.
+um directório normal em `~/cvm/apache-conf`. A cena 5 usa um segundo alvo real
+— o nginx instalado nesta VM — lido pelo mesmo contentor, sempre em leitura.
 
 ---
 
-## 0 · Instalar
+## 0 · Instalar (ou reinstalar)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | CASPAR_DEMO=1 bash
 ```
 
-Fecha e reabre o terminal.
+Fecha e reabre o terminal. **Reinstala mesmo que já tenhas instalado antes** —
+é esta versão que publica a porta do `caspar serve` e monta `/etc/nginx` do
+anfitrião; sem reinstalar, a cena 5 não funciona.
+
+---
+
+## 0.1 · Preparar o nginx (antes de gravar, fora de câmara)
+
+```sh
+nginx -v                                    # confirma que está instalado
+sudo cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.original   # salvaguarda
+sudo nano /etc/nginx/nginx.conf
+```
+
+Dentro do bloco `http { }`, garante estas cinco linhas (a maioria dos
+`nginx.conf` do Ubuntu já tem `ssl_protocols TLSv1.3;` — não tocar nessa):
+
+```nginx
+server_tokens on;
+
+add_header Content-Security-Policy "default-src 'self'; frame-ancestors 'self';" always;
+add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+```
+
+```sh
+sudo nginx -t                               # Syntax OK
+caspar scan nginx --live
+```
+
+Tem de dar **5.0 / 10 MEDIUM**, finding único `server_tokens`. Se der outro
+número, falta alguma das quatro linhas `add_header` — sem elas o CSP em falta
+já vale 5.5 por si só, e corrigir o `server_tokens` em câmara não move nada.
+
+É só isto que fica deliberadamente errado: `server_tokens on`. É a única
+linha que se toca durante a gravação, no plano 24.
 
 ---
 
@@ -90,11 +127,36 @@ caspar scan apache2 --live
 
 ## 4 · Cena 5 — planos 23 a 25
 
+Plano 23 — repete um dos scans já feitos (basta uma captura do rodapé, não
+precisa de correr outra vez: `reproducible: caspar 1.0.0 · kb sha256:83b3ee01f415`).
+
+Plano 24 — a consola web:
+
 ```sh
-determinismo.py --runs 10 --db ccss.db --alt-db ccss_alt.db
+caspar serve
 ```
 
-`total runs: 100` · `distinct digests per configuration: 1`.
+Abre `http://localhost:2027/app` → página **Watch** → botão **Installed
+service** → selecciona `nginx` na lista (aparece como detectado) → deixa o
+intervalo em 2 s → **Start watching**.
+
+Confirma no ecrã: **5.0 / 10 · MEDIUM**, finding `server_tokens`.
+
+Corta para o terminal:
+
+```sh
+sudo nano /etc/nginx/nginx.conf
+```
+
+Muda a única linha — `server_tokens on` → `server_tokens off` — grava, sai.
+
+```sh
+sudo nginx -t
+```
+
+Corta de volta ao browser, sem tocar em nada: a sessão já mostra
+**0.0 / 10 · NONE**. Não recarregues a página — o ponto do plano é precisamente
+que ela se actualiza sozinha.
 
 ---
 
@@ -104,7 +166,21 @@ determinismo.py --runs 10 --db ccss.db --alt-db ccss_alt.db
 caspar-demo-reset
 ```
 
-Repõe a configuração vulnerável. O scan seguinte volta a dar 8.5.
+Repõe a configuração do Apache. O scan seguinte volta a dar 8.5.
+
+Repor o nginx para repetires a cena 5 é à mão, porque é a configuração real
+da máquina, não algo que o `caspar-demo-reset` toque. Os quatro `add_header`
+continuam lá — só a linha do `server_tokens` voltou a mudar:
+
+```sh
+sudo sed -i 's/server_tokens off;/server_tokens on;/' /etc/nginx/nginx.conf
+sudo nginx -t
+caspar scan nginx --live    # confirma 5.0 / 10 MEDIUM
+```
+
+Se alguma coisa correu mal e preferes recomeçar do zero, `nginx.conf.original`
+(passo 0.1) é a configuração de fábrica, sem nada do CASPAR — tens de repetir
+todo o passo 0.1 a partir dela.
 
 ---
 
@@ -123,8 +199,10 @@ ter tudo, corre outra vez o passo 0 — a imagem é descarregada de novo.
 
 | Momento | Score | Cadeias |
 |---|---|---|
-| Scan inicial | 8.5 HIGH | 8 |
+| Scan inicial (apache) | 8.5 HIGH | 8 |
 | Depois do `fix --in-place` | 5.5 MEDIUM | 0 |
 | Depois das 3 linhas `Header` | 0.0 NONE | 0 |
+| Watch, nginx, antes da correcção | 5.0 MEDIUM | 1 |
+| Watch, nginx, depois (`server_tokens off`) | 0.0 NONE | 0 |
 
 Rodapé em todas as execuções: `caspar 1.0.0 · kb sha256:83b3ee01f415`.
