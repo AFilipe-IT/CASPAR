@@ -103,6 +103,17 @@ CVM_HOME="$HOME/cvm"
 # do anfitrião. O socket só é montado nessas invocações: dá controlo total da
 # máquina a quem está lá dentro, e não há razão para o entregar a um scan que
 # lê um ficheiro. --group-add evita ter de correr como root.
+# A consola web. Dentro do contentor o uvicorn tem de escutar em 0.0.0.0 — em
+# 127.0.0.1 só o próprio contentor lhe chegaria — e a porta 2027 é publicada
+# para o anfitrião. O que fica exposto é a API do CASPAR: o httpd 2.4.49 desta
+# imagem nunca arranca e não tem porta nenhuma.
+PORT_ARGS=""
+if [ "${1:-}" = "serve" ]; then
+    PORT_ARGS="-p 2027:2027"
+    shift
+    set -- serve --host 0.0.0.0 "$@"
+fi
+
 SOCK_ARGS=""
 SCAN_DOCKER=no
 case "$*" in
@@ -139,7 +150,7 @@ TTY_ARG=""
 if [ -t 1 ]; then TTY_ARG="-t"; fi
 
 mkdir -p "$CVM_HOME/reports"
-exec docker run --rm --init $TTY_ARG $SOCK_ARGS \
+exec docker run --rm --init $TTY_ARG $SOCK_ARGS $PORT_ARGS \
     -v "$CVM_HOME/apache-conf:/usr/local/apache2/conf" \
     -v "$CVM_HOME:/workspace" \
     -v "$CVM_HOME/reports:/reports" \
