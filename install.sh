@@ -41,14 +41,22 @@ fi
 #   curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh \
 #     | CASPAR_DEMO=1 sh
 #
-# Puxa só a imagem :demo (que já traz o Apache 2.4.49 configurado) e instala um
-# wrapper 'caspar' apontado a ela. Não há nada a compilar nem a configurar.
+# O princípio: o Docker serve para trazer a aplicação, e mais nada. Depois da
+# instalação não se volta a escrever 'docker' — há 'caspar', há 'apache2ctl', e
+# há a configuração do Apache em ~/cvm/apache-conf, que é um directório normal
+# do disco. Quem grava vê uma aplicação local.
+#
+# Isso consegue-se montando a árvore de configuração do anfitrião para dentro
+# do container. O efeito que interessa é o estado: 'caspar fix --in-place'
+# escreve nos ficheiros do anfitrião, por isso a correcção sobrevive ao --rm e
+# o re-scan seguinte — noutro container — lê-a. Sem esta montagem seria preciso
+# manter um container vivo entre comandos, e isso aparecia em câmara.
 #
 # O wrapper é deliberadamente SEPARADO do normal, porque três coisas que o
 # normal faz bem destruiriam a demonstração em silêncio:
 #
-#   1. monta /etc do host em --live. O alvo da demonstração é o 2.4.49 de
-#      dentro da imagem, não o apache2 que a máquina por acaso tenha;
+#   1. monta /etc do host em --live. O alvo da demonstração é o 2.4.49, não o
+#      apache2 que a máquina por acaso tenha;
 #   2. corre 'apache2 -v' no host e injecta --service-version. Numa máquina com
 #      apache2 instalado, isso passaria a versão do host (2.4.52, por exemplo)
 #      e o relatório contradiria o ecrã;
@@ -57,46 +65,114 @@ fi
 #      alvos nativos — não os alvos nem os exploits. A digest deixaria de ser
 #      83b3ee01f415, que é o número que aparece em ecrã.
 #
-# Sem volume de dados, cada execução semeia a base da imagem: é mais lento por
-# uma fracção de segundo e é sempre o mesmo resultado.
+# Por isso não há volume de dados nenhum: cada execução semeia a base a partir
+# da imagem. É mais lento por uma fracção de segundo e é sempre o mesmo
+# resultado, que numa demonstração de reprodutibilidade é o ponto todo.
 if [ -n "${CASPAR_DEMO:-}" ]; then
+    CVM_HOME="$HOME/cvm"
+
     echo "📦 Pulling the demo image (Apache 2.4.49 included)..."
     docker pull alfilipe/caspar:demo \
       || { echo "❌ Failed to pull alfilipe/caspar:demo."; exit 1; }
 
-    echo "📝 Installing wrapper (demo mode)..."
+    echo "📂 Extracting the Apache config tree to $CVM_HOME/apache-conf..."
+    mkdir -p "$CVM_HOME"
+    rm -rf "$CVM_HOME/apache-conf"
+    _cid=$(docker create alfilipe/caspar:demo) \
+      || { echo "❌ Could not create a container to copy from."; exit 1; }
+    docker cp "$_cid:/usr/local/apache2/conf" "$CVM_HOME/apache-conf" >/dev/null \
+      || { docker rm "$_cid" >/dev/null 2>&1; echo "❌ Could not copy the config tree."; exit 1; }
+    docker rm "$_cid" >/dev/null 2>&1
+
+    echo "📝 Installing commands (demo mode)..."
     mkdir -p "$INSTALL_DIR"
+
+    # ---- caspar ----------------------------------------------------------
     cat > "$WRAPPER" << 'DEMO_WRAPPER_EOF'
 #!/usr/bin/env bash
-# CASPAR wrapper — modo demonstração. O alvo é o Apache 2.4.49 de dentro da
-# imagem: nada do host é montado para dentro, à parte da pasta de trabalho.
+# CASPAR — modo demonstração.
+#
+# A configuração do Apache vem de ~/cvm/apache-conf, no disco: é isso que faz
+# com que 'fix --in-place' e o re-scan seguinte vejam o mesmo ficheiro, apesar
+# de serem containers diferentes. ~/cvm é a pasta de trabalho, por isso um
+# '-o reports' aterra em ~/cvm/reports.
 IMAGE="alfilipe/caspar:demo"
+CVM_HOME="$HOME/cvm"
 
-# A pasta de trabalho vai como /workspace para que um '-o reports' (relativo ao
-# cwd dentro do container) aterre no disco de quem corre. Sem isto o relatório
-# era escrito na camada de escrita do container e o --rm apagava-o — o scan
-# avisa quando isso acontece, mas durante uma gravação o aviso é um sobressalto
-# a amarelo no meio do ecrã.
-MOUNT_ARGS="-v $(pwd):/workspace"
-
-# Sem -o, o relatório cai no CASPAR_REPORTS_DIR=/reports: montá-lo em ./reports
-# põe o ficheiro ao lado de quem corre, nos dois casos.
-if echo "$*" | grep -q "\-\-report"; then
-    mkdir -p "$(pwd)/reports"
-    MOUNT_ARGS="$MOUNT_ARGS -v $(pwd)/reports:/reports"
+if [ ! -d "$CVM_HOME/apache-conf" ]; then
+    echo "A configuração do Apache não está em $CVM_HOME/apache-conf." >&2
+    echo "Corre 'caspar-demo-reset' para a repor." >&2
+    exit 1
 fi
 
 TTY_ARG=""
-if [ -t 1 ]; then
-    TTY_ARG="-t"
-fi
+if [ -t 1 ]; then TTY_ARG="-t"; fi
 
+mkdir -p "$CVM_HOME/reports"
 exec docker run --rm --init $TTY_ARG \
-    $MOUNT_ARGS \
+    -v "$CVM_HOME/apache-conf:/usr/local/apache2/conf" \
+    -v "$CVM_HOME:/workspace" \
+    -v "$CVM_HOME/reports:/reports" \
     -w /workspace \
     "$IMAGE" "$@"
 DEMO_WRAPPER_EOF
     chmod +x "$WRAPPER"
+
+    # ---- apache2ctl ------------------------------------------------------
+    cat > "$INSTALL_DIR/apache2ctl" << 'DEMO_APACHECTL_EOF'
+#!/usr/bin/env bash
+# apache2ctl do 2.4.49 da demonstração, a validar a configuração local.
+IMAGE="alfilipe/caspar:demo"
+CVM_HOME="$HOME/cvm"
+TTY_ARG=""
+if [ -t 1 ]; then TTY_ARG="-t"; fi
+exec docker run --rm --init $TTY_ARG \
+    -v "$CVM_HOME/apache-conf:/usr/local/apache2/conf" \
+    --entrypoint apache2ctl \
+    "$IMAGE" "$@"
+DEMO_APACHECTL_EOF
+    chmod +x "$INSTALL_DIR/apache2ctl"
+
+    # ---- determinismo.py -------------------------------------------------
+    # O script vive dentro da imagem e precisa da base semeada. Os symlinks
+    # ccss.db / ccss_alt.db existem para que a linha escrita em câmara seja
+    # exactamente '--db ccss.db --alt-db ccss_alt.db', como no roteiro.
+    cat > "$INSTALL_DIR/determinismo.py" << 'DEMO_DET_EOF'
+#!/usr/bin/env bash
+IMAGE="alfilipe/caspar:demo"
+CVM_HOME="$HOME/cvm"
+TTY_ARG=""
+if [ -t 1 ]; then TTY_ARG="-t"; fi
+exec docker run --rm --init $TTY_ARG \
+    -v "$CVM_HOME:/workspace" \
+    --entrypoint bash \
+    "$IMAGE" -lc '
+cd /home/caspar/app
+caspar targets >/dev/null 2>&1
+cp -f /home/caspar/data/ccss.db /home/caspar/data/ccss_alt.db
+ln -sf /home/caspar/data/ccss.db ccss.db
+ln -sf /home/caspar/data/ccss_alt.db ccss_alt.db
+exec python3 assets/reproducao/determinismo.py "$@"
+' determinismo "$@"
+DEMO_DET_EOF
+    chmod +x "$INSTALL_DIR/determinismo.py"
+
+    # ---- caspar-demo-reset ----------------------------------------------
+    cat > "$INSTALL_DIR/caspar-demo-reset" << 'DEMO_RESET_EOF'
+#!/usr/bin/env bash
+# Repõe a configuração vulnerável de origem — entre tomadas, fora de câmara.
+set -e
+IMAGE="alfilipe/caspar:demo"
+CVM_HOME="$HOME/cvm"
+mkdir -p "$CVM_HOME"
+rm -rf "$CVM_HOME/apache-conf"
+cid=$(docker create "$IMAGE")
+docker cp "$cid:/usr/local/apache2/conf" "$CVM_HOME/apache-conf" >/dev/null
+docker rm "$cid" >/dev/null
+echo "Configuração reposta: $CVM_HOME/apache-conf"
+echo "O próximo 'caspar scan apache2 --live' volta a dar 8.5 / 10 HIGH."
+DEMO_RESET_EOF
+    chmod +x "$INSTALL_DIR/caspar-demo-reset"
 
     if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
         echo "" >> "$HOME/.bashrc"
@@ -107,11 +183,17 @@ DEMO_WRAPPER_EOF
     echo ""
     echo "✅ CASPAR installed in demo mode."
     echo ""
-    echo "The demo target travels inside the image — nothing to compile:"
+    echo "Everything from here on is local — no further docker commands:"
     echo "  caspar about"
-    echo "  caspar targets"
     echo "  caspar scan apache2 --live"
-    echo "  caspar scan apache2 --live --report -f dashboard -o reports"
+    echo "  caspar fix apache2 --live --in-place"
+    echo "  apache2ctl configtest"
+    echo "  determinismo.py --runs 10 --db ccss.db --alt-db ccss_alt.db"
+    echo ""
+    echo "The Apache config is a normal directory you can edit:"
+    echo "  $CVM_HOME/apache-conf/"
+    echo "Reports land in $CVM_HOME/reports/."
+    echo "Between takes, 'caspar-demo-reset' restores the vulnerable config."
     echo ""
     echo "Expected: apache-httpd 2.4.49 · 8.5 / 10 HIGH · 23 findings ·"
     echo "          8 chains · worst chain 10.0 · kb sha256:83b3ee01f415"
