@@ -75,3 +75,17 @@ docker/
 # demonstração (Dockerfile.demo) e o kit de reprodução correm-nos de dentro.
 assets/*.png
 assets/video/
+
+# A dissertação e o material de escrita: ~290 MB que o `COPY . .` levaria para
+# dentro da imagem. Nada disto é lido em runtime, e uma imagem da aplicação não
+# deve transportar o texto da tese — pode ser partilhada, o texto não.
+FCUP_thesis_layout_2026*/
+Springer_Nature_Lecture_Notes_in_Computer_Science/
+tese/
+tese-pt/
+paper/
+paper_*/
+cap5_*/
+defesa/
+*.pptx
+mockup.png
