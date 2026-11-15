@@ -47,10 +47,18 @@ docker run --rm -it caspar:demo scan apache2 --live
 ```
 
 Esperado: `apache-httpd 2.4.49` · `8.5 / 10 HIGH` · 23 achados (0/2/19/2) ·
-`Chains triggered 8` · pior chain 10.0. O *build* **falha** se não for isto: a
-última camada do `Dockerfile.demo` corre o scan e confere o score, a contagem
-de chains e a versão detectada. Vale mais falhar no *build* do que descobrir o
-desvio com a câmara a andar.
+`Chains triggered 8` · pior chain 10.0 · `kb sha256:83b3ee01f415`. O *build*
+**falha** se não for isto: a última camada do `Dockerfile.demo` corre o scan e
+confere o score, a contagem de chains, a versão detectada e a digest da base de
+conhecimento. Vale mais falhar no *build* do que descobrir o desvio com a câmara
+a andar.
+
+A digest está lá por uma razão concreta: é o número que aparece no rodapé
+`reproducible:` em ecrã e no cartão final do vídeo, e a semente da imagem
+(`data/ccss_canonical.sql`) já esteve uma versão atrás da base de trabalho —
+514 regras · 32 chains · 12 alvos contra 488 · 27 · 11. A imagem dava então
+`37087229989b`, e contradizia o roteiro sem avisar. Agora não compila se isso
+voltar a acontecer.
 
 O Apache vem da `httpd:2.4.49` oficial, que é a mesma build de origem que o
 [`instalar-2.4.49.sh`](../../assets/demo-apache/instalar-2.4.49.sh) compila na

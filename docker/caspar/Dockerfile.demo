@@ -102,6 +102,7 @@ RUN set -eux; \
     echo "$out" | grep -q '8.5 / 10'          || { echo "$out"; echo "FALHOU: score != 8.5"; exit 1; }; \
     echo "$out" | grep -q 'Chains triggered 8' || { echo "$out"; echo "FALHOU: chains != 8"; exit 1; }; \
     echo "$out" | grep -q 'apache-httpd 2.4.49' || { echo "$out"; echo "FALHOU: versao != 2.4.49"; exit 1; }; \
-    echo "auto-verificacao OK: 8.5 / 10 HIGH, 8 chains, apache-httpd 2.4.49"
+    echo "$out" | grep -q 'kb sha256:83b3ee01f415' || { echo "$out"; echo "FALHOU: digest != 83b3ee01f415 (semente desactualizada)"; exit 1; }; \
+    echo "auto-verificacao OK: 8.5 / 10 HIGH, 8 chains, apache-httpd 2.4.49, kb 83b3ee01f415"
 
 CMD ["scan", "apache2", "--live"]
