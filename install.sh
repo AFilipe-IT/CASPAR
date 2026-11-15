@@ -99,10 +99,38 @@ if [ -n "${CASPAR_DEMO:-}" ]; then
 IMAGE="alfilipe/caspar:demo"
 CVM_HOME="$HOME/cvm"
 
+# Avaliar uma imagem externa ('caspar scan docker://nginx:1.24.0') significa
+# puxá-la e extrair-lhe a configuração, e para isso o CASPAR fala com o daemon
+# do anfitrião. O socket só é montado nessas invocações: dá controlo total da
+# máquina a quem está lá dentro, e não há razão para o entregar a um scan que
+# lê um ficheiro. --group-add evita ter de correr como root.
+SOCK_ARGS=""
+SCAN_DOCKER=no
+case "$*" in
+    *docker://*) SCAN_DOCKER=yes ;;
+esac
+if [ "$SCAN_DOCKER" = yes ]; then
+    if [ -S /var/run/docker.sock ]; then
+        SOCK_ARGS="-v /var/run/docker.sock:/var/run/docker.sock"
+        _gid=$(stat -c %g /var/run/docker.sock 2>/dev/null || echo "")
+        if [ -n "$_gid" ]; then SOCK_ARGS="$SOCK_ARGS --group-add $_gid"; fi
+    else
+        echo "Aviso: /var/run/docker.sock não existe — não é possível puxar" >&2
+        echo "a imagem a avaliar. Verifica com 'docker info'." >&2
+    fi
+fi
+
 # Sem httpd.conf não há nada para avaliar, e o erro que o scan daria seria
 # "Service 'apache2' not found" — enganador, porque sugere que falta instalar
-# alguma coisa quando o que falta é a árvore extraída.
-if [ ! -f "$CVM_HOME/apache-conf/httpd.conf" ]; then
+# alguma coisa quando o que falta é a árvore extraída. A exigência vale só para
+# os comandos que lêem essa árvore: 'about' e 'targets' não a tocam, e uma
+# imagem externa traz a sua própria configuração.
+case "${1:-}" in
+    scan|fix) LE_CONF=sim ;;
+    *)        LE_CONF=nao ;;
+esac
+if [ "$SCAN_DOCKER" = yes ]; then LE_CONF=nao; fi
+if [ "$LE_CONF" = sim ] && [ ! -f "$CVM_HOME/apache-conf/httpd.conf" ]; then
     echo "A configuração do Apache não está em $CVM_HOME/apache-conf." >&2
     echo "Corre 'caspar-demo-reset' para a repor." >&2
     exit 1
@@ -112,7 +140,7 @@ TTY_ARG=""
 if [ -t 1 ]; then TTY_ARG="-t"; fi
 
 mkdir -p "$CVM_HOME/reports"
-exec docker run --rm --init $TTY_ARG \
+exec docker run --rm --init $TTY_ARG $SOCK_ARGS \
     -v "$CVM_HOME/apache-conf:/usr/local/apache2/conf" \
     -v "$CVM_HOME:/workspace" \
     -v "$CVM_HOME/reports:/reports" \
