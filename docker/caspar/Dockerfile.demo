@@ -33,17 +33,25 @@ FROM caspar:latest
 
 USER root
 
-# Bibliotecas de que o binário do httpd depende directamente. Os módulos
-# (lua, xml2, brotli, nghttp2) não entram: não são carregados por `httpd -v`
-# nem por `apachectl -V`, que é tudo o que o resolver executa.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        libapr1 \
-        libaprutil1 \
-        libaprutil1-ldap \
-        libldap-common \
-        libpcre3 \
-        zlib1g \
-    && rm -rf /var/lib/apt/lists/*
+# As bibliotecas de que o binário do httpd 2.4.49 depende, tiradas da imagem
+# onde ele foi compilado. A httpd:2.4.49 é da era do Debian buster (glibc 2.28)
+# e a caspar:latest é trixie, onde o `libpcre3` já não existe — o PCRE1 saiu da
+# distribuição — e o `libapr1`/`libaprutil1` passaram a variantes time64, de ABI
+# diferente. Instalá-las pelo apt não é opção; copiá-las da imagem de origem é
+# exacto, e é o que faz desta a MESMA build que a VM compilaria.
+#
+# Ficam num directório próprio, não no caminho global do loader: um
+# `libcrypt.so.1` de 2018 no `ld.so.conf` afectaria o Python da imagem base.
+# Quem as vê são só os dois wrappers abaixo.
+COPY --from=apache \
+     /usr/lib/x86_64-linux-gnu/libapr-1.so.0* \
+     /usr/lib/x86_64-linux-gnu/libaprutil-1.so.0* \
+     /lib/x86_64-linux-gnu/libpcre.so.3* \
+     /lib/x86_64-linux-gnu/libuuid.so.1* \
+     /lib/x86_64-linux-gnu/libexpat.so.1* \
+     /lib/x86_64-linux-gnu/libcrypt.so.1 \
+     /lib/x86_64-linux-gnu/libcrypt-2.28.so \
+     /opt/apache249-lib/
 
 # A árvore vai para o MESMO caminho que tinha na imagem de origem: o prefixo
 # está compilado dentro do binário (HTTPD_ROOT), e é dele que o `apachectl -V`
@@ -53,8 +61,14 @@ COPY --from=apache /usr/local/apache2 /usr/local/apache2
 # Os dois nomes que o resolver procura no PATH. São precisos os DOIS: a versão
 # vem do `apache2 -v` e a configuração do `apache2ctl -V`. Com só um deles, o
 # relatório anuncia a versão certa e lê a árvore errada, sem avisar.
-RUN ln -sf /usr/local/apache2/bin/httpd     /usr/local/bin/apache2 \
-    && ln -sf /usr/local/apache2/bin/apachectl /usr/local/bin/apache2ctl \
+# São wrappers e não links simbólicos por causa do LD_LIBRARY_PATH acima. O
+# `apachectl` é ele próprio um script que invoca o httpd, pelo que herda a
+# variável do wrapper.
+RUN printf '#!/bin/sh\nLD_LIBRARY_PATH=/opt/apache249-lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\nexport LD_LIBRARY_PATH\nexec /usr/local/apache2/bin/httpd "$@"\n' \
+        > /usr/local/bin/apache2 \
+    && printf '#!/bin/sh\nLD_LIBRARY_PATH=/opt/apache249-lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\nexport LD_LIBRARY_PATH\nexec /usr/local/apache2/bin/apachectl "$@"\n' \
+        > /usr/local/bin/apache2ctl \
+    && chmod +x /usr/local/bin/apache2 /usr/local/bin/apache2ctl \
     && apache2 -v \
     && apache2ctl -V | grep -E 'HTTPD_ROOT|SERVER_CONFIG_FILE'
 
@@ -67,8 +81,10 @@ RUN useradd -r -s /usr/sbin/nologin apache
 # `make install`. É esse o ponto de partida que foi medido e que está publicado;
 # o conf/httpd.conf da imagem oficial leva alterações dela (ServerName, um
 # <Directory> próprio) que mudariam a contagem de achados.
+# O LD_LIBRARY_PATH vai aqui porque o script termina com um `apachectl
+# configtest` invocado pelo caminho directo, sem passar pelo wrapper.
 RUN cp /usr/local/apache2/conf/original/httpd.conf /usr/local/apache2/conf/httpd.conf \
-    && PREFIX=/usr/local/apache2 bash \
+    && LD_LIBRARY_PATH=/opt/apache249-lib PREFIX=/usr/local/apache2 bash \
        /home/caspar/app/assets/demo-apache/vulneravel-249.sh
 
 # A árvore de configuração fica escrita por quem corre o scan, porque a cena 5
