@@ -156,6 +156,22 @@ IMAGE="alfilipe/caspar:demo"
 CVM_HOME="$HOME/cvm"
 TTY_ARG=""
 if [ -t 1 ]; then TTY_ARG="-t"; fi
+
+# 'configtest' sem o aviso do ServerName. O apachectl traduz 'configtest' para
+# 'httpd -t' e não deixa acrescentar directivas pelo caminho, por isso chamamos
+# o httpd nós (e com o LD_LIBRARY_PATH que o apache2ctl da imagem põe). O -c
+# injecta um ServerName só para esta verificação: não escreve nada em disco e
+# não muda o que o CASPAR lê. Sem ele o Apache queixa-se de não saber o seu
+# nome e imprime o IP da rede do Docker por cima do 'Syntax OK'.
+case "${1:-}" in
+    configtest|-t)
+        exec docker run --rm --init $TTY_ARG \
+            -v "$CVM_HOME/apache-conf:/usr/local/apache2/conf" \
+            --entrypoint bash \
+            "$IMAGE" -lc 'LD_LIBRARY_PATH=/opt/apache249-lib exec /usr/local/apache2/bin/httpd -t -c "ServerName localhost"'
+        ;;
+esac
+
 exec docker run --rm --init $TTY_ARG \
     -v "$CVM_HOME/apache-conf:/usr/local/apache2/conf" \
     --entrypoint apache2ctl \
