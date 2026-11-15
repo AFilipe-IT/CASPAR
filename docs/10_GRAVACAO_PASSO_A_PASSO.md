@@ -38,7 +38,14 @@ caspar scan apache2 --live --report -f dashboard -o reports
 
 **8.5 / 10 HIGH** · 23 findings · `Chains triggered 8` · `Highest chain 10.0`.
 
-O HTML fica em `~/cvm/reports/`. Abre-o no browser para os planos 10 a 15.
+O HTML fica em `~/cvm/reports/`. Para os planos 10 a 15, abre-o com:
+
+```bash
+caspar-report
+```
+
+Sem argumento abre o relatório mais recente, para não teres de escrever
+um nome com timestamp em câmara.
 
 ---
 

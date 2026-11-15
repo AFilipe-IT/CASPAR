@@ -163,6 +163,36 @@ exec docker run --rm --init $TTY_ARG \
 DEMO_APACHECTL_EOF
     chmod +x "$INSTALL_DIR/apache2ctl"
 
+    # ---- caspar-report ---------------------------------------------------
+    # Abrir o relatório não é trabalho do contentor: o ficheiro está no disco
+    # do anfitrião e quem o abre é o navegador do anfitrião. Sem argumento,
+    # abre o mais recente — em câmara evita escrever um nome com timestamp.
+    cat > "$INSTALL_DIR/caspar-report" << 'DEMO_REPORT_EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+CVM_HOME="$HOME/cvm"
+alvo="${1:-}"
+if [ -z "$alvo" ]; then
+    alvo=$(ls -1t "$CVM_HOME"/reports/*.html 2>/dev/null | head -1 || true)
+fi
+if [ -z "$alvo" ] || [ ! -f "$alvo" ]; then
+    echo "Não há relatórios em $CVM_HOME/reports." >&2
+    echo "Gera um com: caspar scan apache2 --live --report" >&2
+    exit 1
+fi
+echo "A abrir $alvo"
+if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$alvo" >/dev/null 2>&1 &
+elif command -v wslview >/dev/null 2>&1; then
+    wslview "$alvo"
+else
+    echo "Sem xdg-open nem wslview — abre à mão:" >&2
+    echo "  $alvo" >&2
+    exit 1
+fi
+DEMO_REPORT_EOF
+    chmod +x "$INSTALL_DIR/caspar-report"
+
     # ---- determinismo.py -------------------------------------------------
     # O script vive dentro da imagem e precisa da base semeada. Os symlinks
     # ccss.db / ccss_alt.db existem para que a linha escrita em câmara seja
@@ -223,7 +253,7 @@ if [ "${1:-}" = "--all" ]; then
     rm -rf "$CVM_HOME"
     echo "  removido: $CVM_HOME (configuração e relatórios)"
 
-    rm -f "$BIN/caspar" "$BIN/apache2ctl" "$BIN/determinismo.py"
+    rm -f "$BIN/caspar" "$BIN/apache2ctl" "$BIN/caspar-report" "$BIN/determinismo.py"
     echo "  removidos: caspar, apache2ctl, determinismo.py"
     echo ""
     echo "Limpo. Para recomeçar do princípio:"
@@ -261,7 +291,8 @@ DEMO_RESET_EOF
     echo "  caspar scan apache2 --live"
     echo "  caspar fix apache2 --live --in-place"
     echo "  apache2ctl configtest"
-    echo "  determinismo.py --runs 10 --db ccss.db --alt-db ccss_alt.db"
+    echo "  caspar-report                      # abre o relatório mais recente
+  determinismo.py --runs 10 --db ccss.db --alt-db ccss_alt.db"
     echo ""
     echo "The Apache config is a normal directory you can edit:"
     echo "  $CVM_HOME/apache-conf/"
