@@ -31,6 +31,17 @@ _PROSE_SIGNALS = (" with ", " or ", "organization", "appropriate", "defined",
                   "<", ">", "e.g", "should", "recommended", "valid ", " and ")
 
 
+def _is_comment_out(good: str, directive: str) -> bool:
+    """True when the rule's good_value is the commented-out form of the very
+    directive it applies to — the database's way of saying "disable this line"
+    (directive "LoadModule", good_value "#LoadModule status_module"). Such a
+    value is an instruction, not a value to substitute into the line."""
+    g = good.lstrip()
+    if not g.startswith("#"):
+        return False
+    return g.lstrip("#").lstrip().lower().startswith(directive.lower())
+
+
 def _is_literal_value(good: str) -> bool:
     g = good.strip().rstrip(";")
     if not g:
@@ -123,14 +134,39 @@ def _make_edit(issue, src, good: str) -> FixEdit | None:
         return None
     old = lines[idx]
     bad = getattr(issue, "bad_value", "") or getattr(src, "value", "") or ""
+    stripped = old.lstrip()
+    indent = old[: len(old) - len(stripped)]
 
-    if bad and bad in old:
-        new = old.replace(bad, good, 1)
+    if _is_comment_out(good, issue.directive):
+        # Substituting this good_value for the bad token would name the
+        # directive twice over — "LoadModule #LoadModule status_module
+        # modules/mod_status.so" — and Apache refuses to start on that line.
+        # What the rule means is to disable it, so comment the line out and
+        # keep its arguments intact. Already commented: nothing to do.
+        if stripped.startswith("#"):
+            return None
+        if not stripped.lower().startswith(issue.directive.lower()):
+            return None
+        new = f"{indent}#{stripped}"
+    elif bad and bad in old:
+        # Substitute inside the directive's ARGUMENTS, never inside its name.
+        # "AllowOverride All" with bad_value "All" and good_value "None" would
+        # otherwise match the "All" of AllowOverride itself and write
+        # "NoneowOverride All", which Apache rejects. When the bad token only
+        # occurs in the directive's name, there is no value to substitute and
+        # the generic rewrite below is the honest answer.
+        on_directive = stripped.lower().startswith(issue.directive.lower())
+        cut = len(indent) + len(issue.directive) if on_directive else 0
+        head, tail = old[:cut], old[cut:]
+        if bad in tail:
+            new = head + tail.replace(bad, good, 1)
+        elif on_directive:
+            new = f"{indent}{issue.directive} {good}"
+        else:
+            return None
     else:
         # Fall back to rewriting the directive's value: "<directive> <good>",
         # preserving leading indentation.
-        stripped = old.lstrip()
-        indent = old[: len(old) - len(stripped)]
         if not stripped.lower().startswith(issue.directive.lower()):
             return None
         new = f"{indent}{issue.directive} {good}"

@@ -120,3 +120,70 @@ def test_render_diff_shows_before_after(tmp_path):
     diff = render_diff(build_fix_plan(r))
     assert "- keepalive_timeout 65;" in diff
     assert "+ keepalive_timeout 10;" in diff
+
+
+# ── commenting a directive out ─────────────────────────────────────────
+# Module rules carry good_value "#LoadModule <mod>": the commented form of
+# their own directive, meaning "disable this line". Substituting that into the
+# line would name the directive twice ("LoadModule #LoadModule status_module
+# modules/mod_status.so") and Apache refuses to start on it.
+
+def test_comment_out_values_are_recognised():
+    from config_assessment.reports.remediation import _is_comment_out
+    assert _is_comment_out("#LoadModule status_module", "LoadModule")
+    assert _is_comment_out("# loadmodule info_module", "LoadModule")
+    assert not _is_comment_out("Prod", "ServerTokens")
+    assert not _is_comment_out("#some prose", "LoadModule")
+
+
+def test_module_rule_comments_the_whole_line(tmp_path):
+    conf = tmp_path / "httpd.conf"
+    conf.write_text("LoadModule status_module modules/mod_status.so\n")
+    plan = build_fix_plan(_result([
+        _issue("LoadModule", "status_module", "#LoadModule status_module",
+               file=str(conf), line=1)]))
+    assert len(plan.edits) == 1
+    edit = plan.edits[0]
+    assert edit.new_line == "#LoadModule status_module modules/mod_status.so"
+    assert "#LoadModule #" not in edit.new_line
+
+
+def test_indented_module_rule_keeps_its_indentation(tmp_path):
+    conf = tmp_path / "httpd.conf"
+    conf.write_text("    LoadModule info_module modules/mod_info.so\n")
+    plan = build_fix_plan(_result([
+        _issue("LoadModule", "info_module", "#LoadModule info_module",
+               file=str(conf), line=1)]))
+    assert plan.edits[0].new_line == \
+        "    #LoadModule info_module modules/mod_info.so"
+
+
+def test_already_commented_module_is_not_edited_again(tmp_path):
+    conf = tmp_path / "httpd.conf"
+    conf.write_text("#LoadModule status_module modules/mod_status.so\n")
+    plan = build_fix_plan(_result([
+        _issue("LoadModule", "status_module", "#LoadModule status_module",
+               file=str(conf), line=1)]))
+    assert plan.edits == []
+
+
+# ── the bad token must not be matched inside the directive's name ──────
+
+def test_value_is_replaced_in_the_arguments_not_the_directive_name(tmp_path):
+    """"AllowOverride All" → "None" must not rewrite the "All" of the
+    directive's own name ("NoneowOverride All")."""
+    conf = tmp_path / "httpd.conf"
+    conf.write_text("    AllowOverride All\n")
+    plan = build_fix_plan(_result([
+        _issue("AllowOverride", "All", "None", file=str(conf), line=1)]))
+    assert plan.edits[0].new_line == "    AllowOverride None"
+
+
+def test_substring_of_the_directive_name_alone_falls_back(tmp_path):
+    """The bad token occurs only inside the directive name: there is no value
+    to substitute, so the directive is rewritten with the good value."""
+    conf = tmp_path / "httpd.conf"
+    conf.write_text("ServerTokens\n")
+    plan = build_fix_plan(_result([
+        _issue("ServerTokens", "Tokens", "Prod", file=str(conf), line=1)]))
+    assert plan.edits[0].new_line == "ServerTokens Prod"

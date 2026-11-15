@@ -87,7 +87,7 @@ mostra que o instrumento não devolve um número, devolve a sua derivação.
 | # | in → out | No ecrã |
 |---|---|---|
 | 16 | 170 → 175 | Painel vazio com `caspar fix apache2 --live --dry-run` |
-| 17 | 175 → 190 | `AUTOMATIC FIXES (27)` — o diff: `- User root` / `+ User apache`, com directiva e score em cada bloco |
+| 17 | 175 → 190 | `AUTOMATIC FIXES (29)` — o diff: `- User root` / `+ User apache`, com directiva e score em cada bloco |
 | 18 | 190 → 200 | O diff no drop-in e nos módulos: `ServerTokens Full → Prod`, `LoadModule → #LoadModule` |
 | 19 | 200 → 210 | `MANUAL STEPS (3)` — as três regras de **ausência** (`Header`), com a razão pela qual não são aplicadas automaticamente |
 | 20 | 210 → 218 | `caspar fix apache2 --live --in-place` e `apache2ctl configtest` → `Syntax OK` |
