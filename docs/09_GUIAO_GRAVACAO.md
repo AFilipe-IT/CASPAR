@@ -7,6 +7,19 @@ máquina**: como a preparar, o que escrever, por que ordem, e o que não pode ap
 
 ---
 
+> **Não é este o documento a ter ao lado durante a gravação.**
+> A folha a seguir em câmara é [10_GRAVACAO_PASSO_A_PASSO.md](10_GRAVACAO_PASSO_A_PASSO.md),
+> e os planos são os de [08_ROTEIRO_VIDEO.md](08_ROTEIRO_VIDEO.md).
+>
+> As secções abaixo descrevem a preparação **anterior** à imagem de
+> demonstração: instalação por `pip`, `caspar init`, e os atalhos para apontar
+> o `apache2` do Debian ao 2.4.49. Nada disso é preciso agora — o instalador
+> em modo demonstração trata de tudo, e a configuração avaliada é um
+> directório normal em `~/cvm/apache-conf`. Ficam como registo de como a
+> demonstração foi montada e como resposta a perguntas do júri sobre o alvo.
+
+---
+
 ## 0. Gravar com `pip install cvm-caspar`
 
 O pacote publicado passou a ser o que a dissertação descreve. Estado em 2026-11-15:
@@ -78,7 +91,7 @@ A versão é fixada em `==1.0.0` de propósito: assim a instalação não depend
 cache na máquina. O extra `[api]` traz o uvicorn do `caspar serve`, que já não entra no vídeo mas
 continua a ser a via de quem quiser abrir a consola.
 
-Em câmara ficam duas linhas: `caspar --version` (tomada 1.2) e `caspar init` (514 regras, 32
+Em câmara ficam duas linhas: `caspar about` (tomada 1.2) e `caspar init` (514 regras, 32
 chains, 12 alvos, em menos de um segundo). O `preparar.sh` já corre o `init`; para a tomada,
 apaga o `ccss.db` e volta a correr o comando em quadro.
 
@@ -88,7 +101,7 @@ apaga o `ccss.db` e volta a correr o comando em quadro.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh \
-  | CASPAR_DEMO=1 sh
+  | CASPAR_DEMO=1 bash
 ```
 
 Puxa a `alfilipe/caspar:demo` (~635 MB) e instala o wrapper `caspar`. **Não há nada a

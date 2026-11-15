@@ -11,7 +11,7 @@ um directório normal em `~/cvm/apache-conf`.
 ## 0 · Instalar
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | CASPAR_DEMO=1 sh
+curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh | CASPAR_DEMO=1 bash
 ```
 
 Fecha e reabre o terminal.
