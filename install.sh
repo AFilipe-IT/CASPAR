@@ -146,11 +146,26 @@ if [ "$LE_CONF" = sim ] && [ ! -f "$CVM_HOME/apache-conf/httpd.conf" ]; then
     exit 1
 fi
 
+# Serviços realmente instalados no anfitrião. O CASPAR lá dentro vê o sistema
+# de ficheiros do contentor, por isso um nginx instalado na máquina aparecia
+# como ausente. Montar o /etc/nginx do anfitrião resolve-o, e a montagem é só
+# de leitura: a demonstração mostra a medição, nunca escreve na configuração
+# real da máquina. O /var/lib/dpkg/status vai junto porque é dali que a versão
+# é lida quando o binário do serviço não existe no contentor — e sem versão
+# não há cruzamento com exploits nem painel temporal.
+HOST_ARGS=""
+if [ -d /etc/nginx ]; then
+    HOST_ARGS="-v /etc/nginx:/etc/nginx:ro"
+    if [ -f /var/lib/dpkg/status ]; then
+        HOST_ARGS="$HOST_ARGS -v /var/lib/dpkg/status:/var/lib/dpkg/status:ro"
+    fi
+fi
+
 TTY_ARG=""
 if [ -t 1 ]; then TTY_ARG="-t"; fi
 
 mkdir -p "$CVM_HOME/reports"
-exec docker run --rm --init $TTY_ARG $SOCK_ARGS $PORT_ARGS \
+exec docker run --rm --init $TTY_ARG $SOCK_ARGS $PORT_ARGS $HOST_ARGS \
     -v "$CVM_HOME/apache-conf:/usr/local/apache2/conf" \
     -v "$CVM_HOME:/workspace" \
     -v "$CVM_HOME/reports:/reports" \
