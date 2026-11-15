@@ -67,6 +67,79 @@ def warn_if_inside_container(path, what: str = "file") -> bool:
     return True
 
 
+def _host_mount_points() -> list:
+    """The mount points visible to this process, excluding the container's own
+    root. Read from /proc/self/mountinfo, whose field 5 is the mount point with
+    spaces, tabs and newlines encoded as octal escapes.
+
+    A path under one of these is backed by something outside the container's
+    writable layer — a bind mount or a named volume — so a file written there
+    survives the container. A path that is under none of them does not.
+    """
+    import re as _re
+    from pathlib import Path
+
+    def _unescape(s: str) -> str:
+        return _re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), s)
+
+    points = []
+    try:
+        for line in Path("/proc/self/mountinfo").read_text().splitlines():
+            fields = line.split(" ")
+            if len(fields) > 4 and fields[4] != "/":
+                points.append(Path(_unescape(fields[4])))
+    except OSError:
+        return []
+    return points
+
+
+def _in_container() -> bool:
+    """Whether this process is running inside a container.
+
+    /.dockerenv is created by the Docker runtime and is absent on a native
+    install, which is the distinction that matters here: outside a container
+    every path is real and nothing below needs checking.
+    """
+    from pathlib import Path
+    return Path("/.dockerenv").exists()
+
+
+def warn_if_ephemeral_dir(path, what: str = "report") -> bool:
+    """Warn when `path` is in a container directory that nothing is mounted on.
+
+    The complement of warn_if_inside_container, and the failure it catches is
+    nastier. That one fires on a path the caller chose badly. This one fires on
+    the DEFAULT: the image points CASPAR_REPORTS_DIR at /reports, so a scan
+    without -o writes there and prints a confident cyan path — but /reports is
+    only bound to the host if the run passed -v. Without it the write succeeds
+    into the container's writable layer and `--rm` deletes it. Nothing in the
+    output distinguishes the two cases, which is exactly how a report gets
+    "lost inside Docker".
+
+    Gated on _in_container(), so a native install never reaches the mount
+    check.
+    Returns True when the warning fired.
+    """
+    from pathlib import Path
+
+    if not _in_container():
+        return False
+
+    resolved = Path(path).resolve()
+    mounts = _host_mount_points()
+    if not mounts:                      # cannot tell; stay quiet rather than cry wolf
+        return False
+    if any(resolved == m or m in resolved.parents for m in mounts):
+        return False
+
+    click.echo(click.style(
+        f"  Warning: nothing is mounted at '{resolved}' — the {what} is being "
+        f"written inside the container and will be lost when it exits.\n"
+        f"  Re-run with:  -v \"$PWD/reports:{resolved}\"",
+        fg="yellow"), err=True)
+    return True
+
+
 _BANNER = [
     r" ██████╗ █████╗ ███████╗██████╗  █████╗ ██████╗ ",
     r"██╔════╝██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔══██╗",

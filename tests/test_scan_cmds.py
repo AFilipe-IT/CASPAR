@@ -12,6 +12,8 @@ would still need a registered target either way.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from click.testing import CliRunner
 
 import cli.main as m  # noqa: F401 — discovers/registers plugins like the CLI
@@ -177,6 +179,51 @@ class TestContainerPathWarning:
         reports.mkdir()
         monkeypatch.setenv("CASPAR_REPORTS_DIR", str(reports))
         assert warn_if_inside_container(reports / "sub") is False
+
+
+class TestEphemeralReportDirWarning:
+    """The report written into an unmounted container directory.
+
+    The regression this guards: the image defaults reports to /reports, the
+    scan prints a cyan path, and without `-v` the file is in the writable
+    layer and `--rm` deletes it. The old warning could not see this, because
+    it assumed the reports volume was always bound.
+    """
+
+    def test_silent_on_a_native_install(self, tmp_path, monkeypatch):
+        from cli import _output
+        monkeypatch.setattr(_output, "_in_container", lambda: False)
+        assert _output.warn_if_ephemeral_dir(tmp_path) is False
+
+    def test_fires_when_nothing_is_mounted_there(self, tmp_path, monkeypatch, capsys):
+        from cli import _output
+        monkeypatch.setattr(_output, "_in_container", lambda: True)
+        monkeypatch.setattr(_output, "_host_mount_points",
+                            lambda: [Path("/proc"), Path("/sys")])
+        assert _output.warn_if_ephemeral_dir(tmp_path / "reports") is True
+        err = capsys.readouterr().err
+        assert "nothing is mounted at" in err
+        assert "-v" in err
+
+    def test_silent_when_the_dir_is_a_mount(self, tmp_path, monkeypatch):
+        from cli import _output
+        monkeypatch.setattr(_output, "_in_container", lambda: True)
+        monkeypatch.setattr(_output, "_host_mount_points", lambda: [tmp_path])
+        assert _output.warn_if_ephemeral_dir(tmp_path / "reports" / "x") is False
+
+    def test_silent_when_mounts_cannot_be_read(self, tmp_path, monkeypatch):
+        """No mountinfo means no evidence; a false alarm on every run would
+        train the reader to ignore the one that matters."""
+        from cli import _output
+        monkeypatch.setattr(_output, "_in_container", lambda: True)
+        monkeypatch.setattr(_output, "_host_mount_points", lambda: [])
+        assert _output.warn_if_ephemeral_dir(tmp_path) is False
+
+    def test_mount_points_parse_from_mountinfo(self):
+        """On Linux this process always has mounts other than / (/proc, /sys)."""
+        from cli._output import _host_mount_points
+        pts = _host_mount_points()
+        assert Path("/proc") in pts
 
 
 class TestReportOutputDirErrors:

@@ -46,6 +46,22 @@ docker build -t caspar:demo   -f docker/caspar/Dockerfile.demo .
 docker run --rm -it caspar:demo scan apache2 --live
 ```
 
+Para o relatório HTML — e **é aqui que se perde um relatório**. Sem `-v`, o
+`/reports` do contentor não é o teu disco: a escrita funciona, o caminho sai em
+ciano, e o `--rm` apaga o ficheiro. O scan avisa quando isso acontece
+(`nothing is mounted at '/reports'`), mas o certo é montar:
+
+```bash
+mkdir -p reports
+docker run --rm -v "$PWD/reports:/reports" \
+  caspar:demo scan apache2 --live --report -f dashboard
+# → reports/ccss_apache2_<data>_dashboard.html, no host
+```
+
+Sem `-o`, o relatório vai para `/reports` (é o que a imagem põe em
+`CASPAR_REPORTS_DIR`). Um `-o` para outro sítio qualquer dentro do contentor
+tem o mesmo destino, e é avisado da mesma forma.
+
 Esperado: `apache-httpd 2.4.49` · `8.5 / 10 HIGH` · 23 achados (0/2/19/2) ·
 `Chains triggered 8` · pior chain 10.0 · `kb sha256:83b3ee01f415`. O *build*
 **falha** se não for isto: a última camada do `Dockerfile.demo` corre o scan e

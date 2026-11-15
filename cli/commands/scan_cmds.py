@@ -19,7 +19,8 @@ import click
 
 from cli._discovery import _discover_plugins
 from cli._knowledge import _assess_unknown_directives
-from cli._output import _print_result, _to_sarif, warn_if_inside_container
+from cli._output import (_print_result, _to_sarif, warn_if_ephemeral_dir,
+                         warn_if_inside_container)
 
 logger = logging.getLogger("ccss")
 
@@ -235,10 +236,13 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
                 f"cannot create report directory '{od}': {exc.strerror}{hint}"
             ) from exc
 
-        # Only an explicit -o can land outside the bound directories; the two
-        # fallbacks above are the reports volume and a native-install path.
-        if output:
-            warn_if_inside_container(od, what="report")
+        # Two distinct ways a report is written and then lost. An explicit -o
+        # can point at a container directory that was never bound; and the
+        # default /reports is only bound when the run passed -v, so without it
+        # the report lands in the writable layer and --rm deletes it. The
+        # second check covers the default, which is the one that bites.
+        if not (output and warn_if_inside_container(od, what="report")):
+            warn_if_ephemeral_dir(od, what="report")
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         stem = (
             input_path
