@@ -82,7 +82,53 @@ Em câmara ficam duas linhas: `caspar --version` (tomada 1.2) e `caspar init` (5
 chains, 12 alvos, em menos de um segundo). O `preparar.sh` já corre o `init`; para a tomada,
 apaga o `ccss.db` e volta a correr o comando em quadro.
 
-### A VM do apache — o que a demonstração precisa
+### A VM do apache — a via curta (Docker)
+
+É a via recomendada desde 2026-11-15. Numa VM limpa, com Docker instalado, uma linha:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh \
+  | CASPAR_DEMO=1 sh
+```
+
+Puxa a `alfilipe/caspar:demo` (~635 MB) e instala o wrapper `caspar`. **Não há nada a
+compilar, nada a configurar e nada a desfazer no fim**: o Apache 2.4.49 e a configuração
+vulnerável viajam dentro da imagem, e o contentor é `--rm`. Os comandos em câmara são os
+mesmos do roteiro, letra por letra:
+
+```bash
+caspar scan apache2 --live
+caspar scan apache2 --live --report -f dashboard -o reports
+```
+
+Pré-voo, antes de gravar — tem de dar isto:
+
+```
+Service: apache-httpd 2.4.49
+8.5 / 10 HIGH · 23 achados (0/2/19/2) · Chains triggered 8 · pior chain 10.0
+reproducible: caspar 1.0.0 · kb sha256:83b3ee01f415 · 35 rules (apache-httpd)
+```
+
+Não é preciso confiar no pré-voo: a última camada da imagem corre o scan durante o *build* e
+**falha a construção** se o score, a contagem de chains, a versão detectada ou a digest não
+forem estes. Uma imagem que exista é uma imagem que dá os números da dissertação.
+
+Para fixar a imagem exacta na dissertação, usa a tag imutável `alfilipe/caspar:demo-1.0.0`;
+a `:demo` acompanha a última construção.
+
+Duas coisas a saber:
+
+* o wrapper de demonstração **não** monta o `/etc` do anfitrião nem injecta a versão do
+  Apache da máquina. É de propósito: o alvo é o 2.4.49 de dentro da imagem, e numa VM com o
+  apache2 do Ubuntu instalado (2.4.52) a injecção faria o relatório contradizer o ecrã;
+* o 2.4.49 tem um RCE conhecido (`CVE-2021-41773`). A imagem nunca arranca o httpd e não
+  publica porta nenhuma — o scan lê a árvore de configuração em disco. Não lhe faças `-p`.
+
+Se o júri perguntar: o serviço detectado é um Apache 2.4.49 instalado, isolado num contentor.
+O mecanismo é o mesmo que num anfitrião — o `apache2ctl -V` responde, as inclusões são
+atravessadas, a versão cruza com os exploits públicos.
+
+### A VM do apache — a via nativa, se preferires compilar
 
 As cenas 2 a 4 avaliam um serviço instalado, não um ficheiro do corpus. Numa VM descartável
 (Ubuntu 22.04 serve), **sem exposição à rede** e com **snapshot feito antes**:
