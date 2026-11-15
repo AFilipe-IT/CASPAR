@@ -286,24 +286,14 @@ DEMO_RESET_EOF
     echo ""
     echo "✅ CASPAR installed in demo mode."
     echo ""
-    echo "Everything from here on is local — no further docker commands:"
     echo "  caspar about"
     echo "  caspar scan apache2 --live"
     echo "  caspar fix apache2 --live --in-place"
     echo "  apache2ctl configtest"
-    echo "  caspar-report                      # abre o relatório mais recente
-  determinismo.py --runs 10 --db ccss.db --alt-db ccss_alt.db"
+    echo "  caspar-report"
+    echo "  determinismo.py --runs 10 --db ccss.db --alt-db ccss_alt.db"
+    echo "  caspar-demo-reset"
     echo ""
-    echo "The Apache config is a normal directory you can edit:"
-    echo "  $CVM_HOME/apache-conf/"
-    echo "Reports land in $CVM_HOME/reports/."
-    echo "Between takes, 'caspar-demo-reset' restores the vulnerable config."
-    echo ""
-    echo "Expected: apache-httpd 2.4.49 · 8.5 / 10 HIGH · 23 findings ·"
-    echo "          8 chains · worst chain 10.0 · kb sha256:83b3ee01f415"
-    echo ""
-    echo "The 2.4.49 has a known RCE (CVE-2021-41773). The image never starts"
-    echo "httpd and publishes no port — the scan reads the config tree on disk."
     exit 0
 fi
 
