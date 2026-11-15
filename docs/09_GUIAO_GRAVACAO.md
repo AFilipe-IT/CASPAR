@@ -88,12 +88,19 @@ As cenas 2 a 4 avaliam um serviço instalado, não um ficheiro do corpus. Numa V
 (Ubuntu 22.04 serve), **sem exposição à rede** e com **snapshot feito antes**:
 
 ```bash
+git -C ~/caspar pull                              # os scripts vivem no repo
+pip install -e ~/caspar                           # a build tem de incluir o ec42921
+python -c "from config_assessment.core.engines.scoring import _GEL; print(_GEL)"
 sudo bash assets/demo-apache/instalar-2.4.49.sh   # compila o Apache 2.4.49 em /opt/apache249
 sudo useradd -r -s /usr/sbin/nologin apache       # o valor seguro da base é 'User apache'
 sudo bash assets/demo-apache/vulneravel-249.sh    # aplica a configuração vulnerável
 caspar scan apache2 --live                        # pré-voo: 2.4.49 · 8.5 / 10 HIGH · 7 exploits
 sudo bash assets/demo-apache/restaurar-249.sh     # desfaz, no fim
 ```
+
+O `_GEL` tem de imprimir `None: 0.6`. Se imprimir `0.9`, a build é anterior ao `ec42921`
+(alinhamento dos coeficientes GEL/GRL com o NISTIR 7502 §3.2.2) e **todos** os scores saem uns
+décimos acima dos deste guião — o `Header` a 6.0 em vez de 5.5 é o sintoma mais visível.
 
 ### Porque é que a versão tem de ser a 2.4.49
 
