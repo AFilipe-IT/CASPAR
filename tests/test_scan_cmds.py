@@ -256,6 +256,29 @@ class TestReportOutputDirErrors:
         finally:
             ro.chmod(0o700)  # so tmp_path cleanup can remove it
 
+    def test_unwritable_existing_dir_is_a_clean_error(self, tmp_path):
+        """mkdir succeeds on a directory that already exists, so the refusal
+        used to surface as a PermissionError traceback from write_text — after
+        the assessment had already run and printed."""
+        db_path = _seed(tmp_path)
+        f = tmp_path / "sysctl.conf"
+        f.write_text(_SYSCTL_BAD)
+
+        out = tmp_path / "out"
+        out.mkdir()
+        out.chmod(0o500)                     # exists, listable, not writable
+        try:
+            res = CliRunner().invoke(
+                m.cli,
+                ["--db", str(db_path), "scan", str(f),
+                 "--report", "-f", "json", "-o", str(out)],
+            )
+            assert res.exit_code != 0
+            assert "is not writable" in res.output
+            assert "Traceback" not in res.output
+        finally:
+            out.chmod(0o700)
+
     def test_container_path_outside_the_mounts_is_flagged(self, tmp_path, monkeypatch):
         """Writing outside the bound dirs succeeds, then vanishes with --rm."""
         db_path = _seed(tmp_path)

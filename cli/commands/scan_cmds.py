@@ -236,6 +236,18 @@ def scan(ctx, input_path, live, report, fmt, output, threshold,
                 f"cannot create report directory '{od}': {exc.strerror}{hint}"
             ) from exc
 
+        # The directory can exist and still refuse the write: a mount whose
+        # owner is not the container's user is the common case. mkdir above
+        # succeeds (it is a no-op on an existing directory) and the failure
+        # then surfaced as a PermissionError traceback from write_text, after
+        # a completed assessment, in every report format separately. Checking
+        # once here turns it into the same clean message as the mkdir failure.
+        if not os.access(od, os.W_OK):
+            raise click.ClickException(
+                f"report directory '{od}' is not writable.\n"
+                f"  Inside a container this is usually a mount owned by "
+                f"another user: the image runs as uid 1000.")
+
         # Two distinct ways a report is written and then lost. An explicit -o
         # can point at a container directory that was never bound; and the
         # default /reports is only bound when the run passed -v, so without it

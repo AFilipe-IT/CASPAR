@@ -35,6 +35,92 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
+# --- Modo demonstração (CASPAR_DEMO=1) ------------------------------------
+# Para gravar o vídeo-anexo (docs/08_ROTEIRO_VIDEO.md) numa máquina limpa:
+#
+#   curl -fsSL https://raw.githubusercontent.com/AFilipe-IT/CASPAR/master/install.sh \
+#     | CASPAR_DEMO=1 sh
+#
+# Puxa só a imagem :demo (que já traz o Apache 2.4.49 configurado) e instala um
+# wrapper 'caspar' apontado a ela. Não há nada a compilar nem a configurar.
+#
+# O wrapper é deliberadamente SEPARADO do normal, porque três coisas que o
+# normal faz bem destruiriam a demonstração em silêncio:
+#
+#   1. monta /etc do host em --live. O alvo da demonstração é o 2.4.49 de
+#      dentro da imagem, não o apache2 que a máquina por acaso tenha;
+#   2. corre 'apache2 -v' no host e injecta --service-version. Numa máquina com
+#      apache2 instalado, isso passaria a versão do host (2.4.52, por exemplo)
+#      e o relatório contradiria o ecrã;
+#   3. monta o volume caspar_data. Um volume de uma instalação anterior traz a
+#      base antiga, e o refresh de arranque só repõe as regras e as chains dos
+#      alvos nativos — não os alvos nem os exploits. A digest deixaria de ser
+#      83b3ee01f415, que é o número que aparece em ecrã.
+#
+# Sem volume de dados, cada execução semeia a base da imagem: é mais lento por
+# uma fracção de segundo e é sempre o mesmo resultado.
+if [ -n "${CASPAR_DEMO:-}" ]; then
+    echo "📦 Pulling the demo image (Apache 2.4.49 included)..."
+    docker pull alfilipe/caspar:demo \
+      || { echo "❌ Failed to pull alfilipe/caspar:demo."; exit 1; }
+
+    echo "📝 Installing wrapper (demo mode)..."
+    mkdir -p "$INSTALL_DIR"
+    cat > "$WRAPPER" << 'DEMO_WRAPPER_EOF'
+#!/usr/bin/env bash
+# CASPAR wrapper — modo demonstração. O alvo é o Apache 2.4.49 de dentro da
+# imagem: nada do host é montado para dentro, à parte da pasta de trabalho.
+IMAGE="alfilipe/caspar:demo"
+
+# A pasta de trabalho vai como /workspace para que um '-o reports' (relativo ao
+# cwd dentro do container) aterre no disco de quem corre. Sem isto o relatório
+# era escrito na camada de escrita do container e o --rm apagava-o — o scan
+# avisa quando isso acontece, mas durante uma gravação o aviso é um sobressalto
+# a amarelo no meio do ecrã.
+MOUNT_ARGS="-v $(pwd):/workspace"
+
+# Sem -o, o relatório cai no CASPAR_REPORTS_DIR=/reports: montá-lo em ./reports
+# põe o ficheiro ao lado de quem corre, nos dois casos.
+if echo "$*" | grep -q "\-\-report"; then
+    mkdir -p "$(pwd)/reports"
+    MOUNT_ARGS="$MOUNT_ARGS -v $(pwd)/reports:/reports"
+fi
+
+TTY_ARG=""
+if [ -t 1 ]; then
+    TTY_ARG="-t"
+fi
+
+exec docker run --rm --init $TTY_ARG \
+    $MOUNT_ARGS \
+    -w /workspace \
+    "$IMAGE" "$@"
+DEMO_WRAPPER_EOF
+    chmod +x "$WRAPPER"
+
+    if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
+        echo "" >> "$HOME/.bashrc"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+
+    echo ""
+    echo "✅ CASPAR installed in demo mode."
+    echo ""
+    echo "The demo target travels inside the image — nothing to compile:"
+    echo "  caspar about"
+    echo "  caspar targets"
+    echo "  caspar scan apache2 --live"
+    echo "  caspar scan apache2 --live --report -f dashboard -o reports"
+    echo ""
+    echo "Expected: apache-httpd 2.4.49 · 8.5 / 10 HIGH · 23 findings ·"
+    echo "          8 chains · worst chain 10.0 · kb sha256:83b3ee01f415"
+    echo ""
+    echo "The 2.4.49 has a known RCE (CVE-2021-41773). The image never starts"
+    echo "httpd and publishes no port — the scan reads the config tree on disk."
+    exit 0
+fi
+
 echo "📦 Pulling CASPAR images..."
 docker pull alfilipe/caspar:latest || { echo "❌ Failed to pull alfilipe/caspar:latest."; exit 1; }
 docker pull alfilipe/caspar:full   || { echo "❌ Failed to pull alfilipe/caspar:full."; exit 1; }
